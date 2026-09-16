@@ -1,0 +1,85 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B0B0B">
+<title>YETIPSY STAFF — More</title>
+<link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/admin.css">
+</head>
+<body class="admin">
+
+<div class="a-page">
+
+  <div class="card" style="text-align:center;padding:20px">
+    <div class="role-pill" id="staffRole">—</div>
+    <div style="font-size:17px;font-weight:650;margin-top:10px" id="staffName">—</div>
+    <div class="tiny muted-2" id="staffUser">—</div>
+  </div>
+
+  <div class="a-section-title">Operations 运营</div>
+  <div class="a-list">
+    <a class="a-item" href="claim.html">
+      <div class="a-main"><div class="a-title">Create Claim</div><div class="a-sub">建立认领 · QR / Code</div></div>
+      <div class="a-right"><span class="chip gold">GO</span></div>
+    </a>
+    <a class="a-item" href="customers.html">
+      <div class="a-main"><div class="a-title">Members</div><div class="a-sub">查找会员 · 钱包抵扣</div></div>
+      <div class="a-right"><span class="chip gold">GO</span></div>
+    </a>
+    <a class="a-item" href="orders.html">
+      <div class="a-main"><div class="a-title">Orders</div><div class="a-sub">订单 / 消费记录</div></div>
+      <div class="a-right"><span class="chip gold">GO</span></div>
+    </a>
+  </div>
+
+  <div class="a-section-title">Management 管理</div>
+  <div class="a-list">
+    <a class="a-item" href="settings.html">
+      <div class="a-main"><div class="a-title">Settings</div><div class="a-sub">系统设置 · 优惠活动</div></div>
+      <div class="a-right"><span class="chip info">MANAGER</span></div>
+    </a>
+    <a class="a-item" href="audit.html">
+      <div class="a-main"><div class="a-title">Audit Logs</div><div class="a-sub">操作记录</div></div>
+      <div class="a-right"><span class="chip info">MANAGER</span></div>
+    </a>
+    <a class="a-item" href="staff.html">
+      <div class="a-main"><div class="a-title">Staff Accounts</div><div class="a-sub">员工账号</div></div>
+      <div class="a-right"><span class="chip info">OWNER</span></div>
+    </a>
+  </div>
+
+  <button id="logoutBtn" class="btn btn-danger mt-16">
+    SIGN OUT 登出
+  </button>
+
+  <div class="center mt-16">
+    <a href="../index.html" class="tiny muted-2">CUSTOMER APP 会员端</a>
+  </div>
+
+  <div class="footnote">YETIPSY MINI APP 1.1 · FOODCOURT EDITION</div>
+
+</div>
+
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/admin.js"></script>
+<script>
+(function () {
+  if (!ADMIN.requireAuth()) return;
+  ADMIN.renderShell({ title: 'MORE' });
+
+  var s = AUTH.getStaffProfile() || {};
+  document.getElementById('staffRole').textContent  = s.role || '';
+  document.getElementById('staffName').textContent  = s.name || s.username || '';
+  document.getElementById('staffUser').textContent  = '@' + (s.username || '');
+
+  document.getElementById('logoutBtn').addEventListener('click', ADMIN.logout);
+})();
+</script>
+</body>
+</html>

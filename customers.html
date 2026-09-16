@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B0B0B">
+<title>YETIPSY STAFF — Members</title>
+<link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/admin.css">
+</head>
+<body class="admin">
+
+<div class="a-page">
+
+  <!-- SEARCH -->
+  <div class="a-field">
+    <label class="a-label">Search Member 查找会员</label>
+    <input id="searchInput" class="a-input" type="text" autocomplete="off"
+           placeholder="Phone / Customer ID / Name" maxlength="40">
+    <div class="a-note mt-8">输入手机号码、会员编号或名字 · Phone, YT000001, or name</div>
+  </div>
+  <div id="searchResults"></div>
+
+  <!-- DETAIL -->
+  <div id="detailView" style="display:none">
+
+    <div class="card" style="border-color:rgba(229,183,105,.3);background:linear-gradient(180deg,#1B1916,#151412)">
+      <div class="row-between">
+        <div>
+          <div style="font-size:19px;font-weight:650" id="cName">—</div>
+          <div class="tiny muted-2 mt-8" id="cId">—</div>
+          <div class="tiny muted-2" id="cPhone">—</div>
+        </div>
+        <div id="cTier"></div>
+      </div>
+
+      <div class="dash-grid mt-16">
+        <div class="dash-card" style="background:#131313">
+          <div class="dc-label">Points</div>
+          <div class="dc-value gold" id="cPoints">0</div>
+        </div>
+        <div class="dash-card" style="background:#131313">
+          <div class="dc-label">Wallet</div>
+          <div class="dc-value" id="cWallet">RM 0.00</div>
+        </div>
+        <div class="dash-card" style="background:#131313">
+          <div class="dc-label">Total Spend</div>
+          <div class="dc-value" id="cSpend">RM 0.00</div>
+        </div>
+        <div class="dash-card" style="background:#131313">
+          <div class="dc-label">Visits</div>
+          <div class="dc-value" id="cVisits">0</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- REDEEM -->
+    <div class="a-section-title">Redeem Wallet 钱包抵扣</div>
+    <div class="redeem-panel">
+      <div class="a-field" style="margin-bottom:10px">
+        <label class="a-label">Bill Amount 账单金额</label>
+        <div class="amount-wrap">
+          <span class="currency">RM</span>
+          <input id="billInput" class="a-input huge" type="text" inputmode="decimal" placeholder="0.00">
+        </div>
+      </div>
+
+      <div id="calcBox" style="display:none">
+        <div class="rp-row"><span>Bill 账单</span><span id="calcBill">RM 0.00</span></div>
+        <div class="rp-row"><span>Wallet 钱包</span><span id="calcWallet">RM 0.00</span></div>
+        <div class="rp-row">
+          <span>Max Usable 可抵扣上限 <span class="tiny muted-2" id="calcPercent"></span></span>
+          <span id="calcMax">RM 0.00</span>
+        </div>
+        <div class="rp-row total">
+          <span>Customer Pays 应付</span>
+          <span class="rp-total-value" id="calcPay">RM 0.00</span>
+        </div>
+      </div>
+
+      <div id="calcHint" class="a-note mt-8">输入账单金额后自动计算 · Enter bill amount to calculate.</div>
+
+      <button id="redeemBtn" class="btn btn-primary mt-12" style="display:none">
+        CONFIRM REDEEM 确认抵扣
+      </button>
+    </div>
+
+    <!-- HISTORY -->
+    <div class="a-section-title">Recent Visits 最近消费</div>
+    <div id="cHistory"><div class="a-empty">—</div></div>
+
+    <!-- MANAGER ACTIONS -->
+    <div id="managerActions" style="display:none">
+      <div class="a-section-title">Manager / Owner 调整</div>
+      <div class="btn-row">
+        <button id="adjustWalletBtn" class="btn btn-secondary btn-sm">ADJUST WALLET</button>
+        <button id="adjustPointsBtn" class="btn btn-secondary btn-sm">ADJUST POINTS</button>
+      </div>
+      <div class="a-note mt-8">所有调整都会写入 Audit Log。All adjustments are audit-logged.</div>
+    </div>
+
+    <button id="backBtn" class="btn btn-ghost mt-16">BACK TO SEARCH 返回搜索</button>
+  </div>
+
+</div>
+
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/admin.js"></script>
+<script src="../js/admin-customer.js"></script>
+<script>
+  if (ADMIN.requireAuth()) {
+    ADMIN.renderShell({ title: 'MEMBERS' });
+    ADMIN_CUSTOMER.init();
+  }
+</script>
+</body>
+</html>

@@ -1,130 +1,92 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#0D0D0D">
-<title>YETIPSY</title>
-<link rel="manifest" href="manifest.json">
-<link rel="icon" type="image/png" href="assets/icons/icon-192.png">
-<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
-<link rel="stylesheet" href="css/app.css">
+<meta name="theme-color" content="#0B0B0B">
+<title>YETIPSY STAFF — Home</title>
+<link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/admin.css">
 </head>
-<body>
+<body class="admin">
 
-<div class="page">
+<div class="a-page">
 
-  <div class="row-between" style="padding: 6px 2px 14px;">
+  <div class="row-between" style="margin-bottom:14px">
     <div>
-      <div class="brand-mark" style="font-size:19px;letter-spacing:6px;text-indent:6px;">YETIPSY</div>
+      <div class="tiny muted-2" style="letter-spacing:2px" id="todayLabel">TONIGHT</div>
+      <div style="font-size:15px;font-weight:650" id="dateLabel">—</div>
     </div>
-    <div id="langToggle" style="font-size:10px;letter-spacing:1.4px;color:var(--muted-2)"></div>
+    <button id="logoutBtn" class="btn btn-ghost btn-sm" style="width:auto;padding:0 14px">SIGN OUT</button>
   </div>
 
-  <div id="demoBanner"></div>
+  <a class="big-action" href="claim.html">
+    + CREATE CLAIM
+    <span class="ba-sub">建立认领 · 5 秒完成</span>
+  </a>
 
-  <!-- HERO / MEMBERSHIP -->
-  <div class="hero-card" id="heroCard">
-    <div class="hero-top">
-      <div class="hero-greet" id="greeting">—</div>
-      <div id="tierBadge"></div>
-    </div>
-    <div class="hero-points">
-      <div class="hero-points-value" id="pointsValue">0</div>
-      <div class="hero-points-unit">POINTS<br>积分</div>
-    </div>
-    <div class="progress-wrap">
-      <div class="progress-meta">
-        <span id="progressText">—</span>
-        <span id="progressNext">—</span>
-      </div>
-      <div class="progress-track"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
-    </div>
-  </div>
+  <div class="a-section-title">Tonight 今晚</div>
 
-  <!-- STATS -->
-  <div class="stat-grid">
-    <div class="stat">
-      <div class="stat-label">My Wallet 我的钱包</div>
-      <div class="stat-value gold" id="walletValue">RM 0.00</div>
-      <div class="stat-sub" id="walletSub">可在下次消费抵扣</div>
+  <div class="dash-grid">
+    <div class="dash-card wide">
+      <div class="dc-label">Member Sales 会员消费</div>
+      <div class="dc-value gold" id="statMemberSales">RM 0.00</div>
+      <div class="dc-sub" id="statSalesSub">All recorded sales: RM 0.00</div>
     </div>
-    <div class="stat">
-      <div class="stat-label">Total Spend 累计消费</div>
-      <div class="stat-value" id="spendValue">RM 0.00</div>
-      <div class="stat-sub" id="visitsSub">0 visits 到店</div>
+
+    <div class="dash-card">
+      <div class="dc-label">Claims 认领</div>
+      <div class="dc-value" id="statClaims">0</div>
+      <div class="dc-sub" id="statClaimsSub">0 pending</div>
     </div>
-  </div>
 
-  <!-- CLAIM CTA -->
-  <div class="section" style="margin-top:16px">
-    <a class="cta-claim" href="claim.html">
-      <div class="cta-row">
-        <div>
-          <div class="cta-main">认领消费</div>
-          <div class="cta-sub">CLAIM PURCHASE</div>
-        </div>
-        <div style="color:var(--gold)" id="claimIcon"></div>
-      </div>
-    </a>
-  </div>
+    <div class="dash-card">
+      <div class="dc-label">New Members 新会员</div>
+      <div class="dc-value" id="statNewMembers">0</div>
+      <div class="dc-sub">registered today</div>
+    </div>
 
-  <!-- PENDING REWARD -->
-  <div id="pendingRewardBox"></div>
+    <div class="dash-card">
+      <div class="dc-label">Points Issued 发出积分</div>
+      <div class="dc-value" id="statPoints">0</div>
+    </div>
 
-  <!-- QUICK -->
-  <div class="section">
-    <div class="quick-grid">
-      <a class="quick-item" href="claim.html">
-        <span class="qi-icon" id="qiScan"></span>
-        <span class="qi-zh">扫码</span><span class="qi-en">SCAN</span>
-      </a>
-      <a class="quick-item" href="activity.html">
-        <span class="qi-icon" id="qiAct"></span>
-        <span class="qi-zh">记录</span><span class="qi-en">ACTIVITY</span>
-      </a>
-      <a class="quick-item" href="wallet.html">
-        <span class="qi-icon" id="qiWallet"></span>
-        <span class="qi-zh">钱包</span><span class="qi-en">WALLET</span>
-      </a>
-      <a class="quick-item" href="profile.html">
-        <span class="qi-icon" id="qiProfile"></span>
-        <span class="qi-zh">会员</span><span class="qi-en">MEMBER</span>
-      </a>
+    <div class="dash-card">
+      <div class="dc-label">Rewards 奖励</div>
+      <div class="dc-value" id="statRewards">RM 0.00</div>
+      <div class="dc-sub" id="statRewardsSub">budget RM 50.00</div>
+    </div>
+
+    <div class="dash-card wide">
+      <div class="dc-label">Wallet Redeemed 钱包抵扣</div>
+      <div class="dc-value" id="statWalletRedeemed">RM 0.00</div>
     </div>
   </div>
 
-  <!-- TONIGHT / PROMOTIONS -->
-  <div class="section">
-    <div class="section-title">
-      <span class="st-zh">今晚活动</span><span class="st-en">TONIGHT</span>
-    </div>
-    <div id="promoList">
-      <div class="skeleton" style="height:80px"></div>
-    </div>
+  <div class="a-section-title">Recent Claims 最近认领</div>
+  <div id="recentClaims">
+    <div class="skeleton" style="height:56px;margin-bottom:8px"></div>
+    <div class="skeleton" style="height:56px"></div>
   </div>
 
-  <div class="footnote">YETIPSY MINI APP 1.1 · FOODCOURT EDITION</div>
+  <div class="center mt-16">
+    <a href="orders.html" class="tiny muted-2" style="letter-spacing:1.4px">VIEW ALL ORDERS 查看全部订单</a>
+  </div>
+
 </div>
 
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/app.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/admin.js"></script>
+<script src="../js/admin-dashboard.js"></script>
 <script>
-  AUTH.requireCustomer();
-  UI.renderBottomNav('index.html');
-  APP.init();
-</script>
-
-<script>
-/* PWA：註冊 Service Worker（只 Cache App Shell，不 Cache 任何敏感资料） */
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function () {
-    navigator.serviceWorker.register('service-worker.js').catch(function () {});
-  });
-}
+  if (ADMIN.requireAuth()) {
+    ADMIN.renderShell({ title: '' });
+    ADMIN_DASH.init();
+  }
 </script>
 </body>
 </html>

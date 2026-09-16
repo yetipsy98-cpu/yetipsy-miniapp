@@ -1,124 +1,106 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
-<meta name="theme-color" content="#0D0D0D">
-<title>YETIPSY — Claim Purchase</title>
-<link rel="manifest" href="manifest.json">
-<link rel="icon" type="image/png" href="assets/icons/icon-192.png">
-<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
-<link rel="stylesheet" href="css/app.css">
+<meta name="theme-color" content="#0B0B0B">
+<title>YETIPSY STAFF — Create Claim</title>
+<link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/admin.css">
 </head>
-<body>
+<body class="admin">
 
-<div class="page">
+<div class="a-page">
 
-  <div class="row-between" style="padding: 6px 2px 14px;">
-    <a href="index.html" style="color:var(--muted)">
-      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
-    </a>
-    <div class="brand-mark" style="font-size:17px;letter-spacing:5px;text-indent:5px;">YETIPSY</div>
-    <div style="width:20px"></div>
-  </div>
+  <!-- ========== FORM ========== -->
+  <div id="viewForm">
 
-  <!-- STATE: LOADING -->
-  <div id="stateLoading">
-    <div class="skeleton" style="height:200px;border-radius:16px"></div>
-  </div>
-
-  <!-- STATE: ORDER FOUND -->
-  <div id="stateOrder" style="display:none">
-    <div class="card order-card">
-      <div class="tiny muted-2" style="letter-spacing:2px">YOUR ORDER</div>
-      <div class="oc-amount gold" id="orderAmount">RM 0.00</div>
-      <div class="oc-meta" id="orderMeta">—</div>
-      <div class="oc-desc">认领这笔消费到你的 Yetipsy 账户<br>Claim this purchase to your Yetipsy account.</div>
+    <div class="a-field">
+      <label class="a-label">Source 来源</label>
+      <div class="seg" id="sourceSeg">
+        <button class="active" data-source="FOODCOURT">FOODCOURT<br><span class="tiny">食阁</span></button>
+        <button data-source="DIRECT">DIRECT<br><span class="tiny">直接</span></button>
+        <button data-source="MANUAL">MANUAL<br><span class="tiny">手动</span></button>
+      </div>
     </div>
-    <button id="claimBtn" class="btn btn-primary mt-8">
-      <span>认领我的订单<span class="btn-sub-label">CLAIM MY ORDER</span></span>
+
+    <div class="a-field">
+      <label class="a-label">Order No. 订单号码</label>
+      <input id="orderNoInput" class="a-input" type="text" autocomplete="off"
+             autocapitalize="characters" placeholder="FC8231" maxlength="30">
+      <div class="a-note mt-8" id="orderNoHint">输入 Foodcourt 订单号码 · Enter the Foodcourt order number</div>
+    </div>
+
+    <div class="a-field">
+      <label class="a-label">Amount 金额</label>
+      <div class="amount-wrap">
+        <span class="currency">RM</span>
+        <input id="amountInput" class="a-input huge" type="text" inputmode="decimal"
+               autocomplete="off" placeholder="0.00">
+      </div>
+    </div>
+
+    <button id="createBtn" class="btn btn-primary" style="min-height:54px">
+      CREATE CLAIM 建立认领
     </button>
-    <div class="center small muted-2 mt-12">一笔订单只能被认领一次<br>One order can only be claimed once.</div>
   </div>
 
-  <!-- STATE: RESULT -->
-  <div id="stateResult" style="display:none">
-    <div class="card order-card">
-      <div style="font-size:46px;line-height:1">✓</div>
-      <div class="bilingual-zh mt-12" style="font-size:16px">消费已认领</div>
-      <div class="bilingual-en">PURCHASE CLAIMED</div>
-      <div class="oc-amount" id="resultAmount" style="font-size:34px;margin-top:14px">RM 0.00</div>
-      <div style="font-size:20px;font-weight:700;color:var(--gold);margin-top:12px" id="resultPoints">+0 POINTS</div>
-      <div class="oc-desc" id="resultNote">Something is waiting for you tonight.<br>今晚有惊喜等着你。</div>
-    </div>
-    <div id="resultRewardBtn" style="display:none">
-      <a class="btn btn-primary mt-8" id="openRewardLink" href="reward.html">
-        <span>打开奖励<span class="btn-sub-label">OPEN REWARD</span></span>
-      </a>
-    </div>
-    <a class="btn btn-secondary mt-8" href="index.html">
-      <span>返回首页<span class="btn-sub-label">BACK TO HOME</span></span>
-    </a>
-  </div>
+  <!-- ========== RESULT ========== -->
+  <div id="viewResult" style="display:none">
 
-  <!-- STATE: ENTER CODE / SCAN -->
-  <div id="stateEntry" style="display:none">
+    <div class="card center" style="border-color:rgba(229,183,105,.35);background:linear-gradient(180deg,#1E1B15,#151412)">
+      <div class="tiny muted-2" style="letter-spacing:2.4px">CLAIM READY</div>
+      <div style="font-size:38px;font-weight:750;color:var(--a-gold);margin-top:8px" id="resAmount">RM 0.00</div>
+      <div class="a-sub mt-8" id="resOrder">—</div>
 
-    <div class="card" style="margin-bottom:14px">
-      <div class="center">
-        <div class="bilingual-zh">认领你的饮品</div>
-        <div class="bilingual-en">CLAIM YOUR DRINK</div>
+      <div class="qr-box mt-16">
+        <div id="qrContainer"></div>
       </div>
-      <div class="field mt-16">
-        <div class="label">
-          <span>输入 Claim Code</span>
-          <span class="l-en">ENTER CLAIM CODE</span>
-        </div>
-        <input id="codeInput" class="input code-input" type="text" maxlength="6"
-               autocomplete="off" autocapitalize="characters" placeholder="Y7K2">
+
+      <div class="center mt-12">
+        <div class="tiny muted-2" style="letter-spacing:2px">SCAN TO CLAIM</div>
+        <div class="tiny muted-2" style="letter-spacing:1.6px;margin-top:6px">or 或</div>
+        <div style="font-size:34px;font-weight:750;letter-spacing:8px;margin-top:6px;color:var(--a-gold)" id="resCode">Y7K2</div>
+        <div class="tiny muted-2" style="margin-top:6px">CODE</div>
       </div>
-      <button id="codeBtn" class="btn btn-secondary">
-        <span>认领<span class="btn-sub-label">CLAIM</span></span>
-      </button>
+
+      <div class="tiny muted-2 mt-12" id="resExpiry">—</div>
     </div>
 
-    <div class="row-between" style="margin:16px 4px 10px">
-      <div style="height:1px;background:var(--line);flex:1"></div>
-      <div class="tiny muted-2" style="padding:0 12px;letter-spacing:2px">OR 或</div>
-      <div style="height:1px;background:var(--line);flex:1"></div>
+    <div class="btn-row mt-12">
+      <button id="copyBtn" class="btn btn-secondary btn-sm">COPY CODE</button>
+      <button id="cancelBtn" class="btn btn-danger btn-sm">CANCEL</button>
     </div>
 
-    <button id="scanBtn" class="btn btn-primary">
-      <span id="scanIcon" style="display:inline-flex"></span>
-      <span>扫描二维码<span class="btn-sub-label">SCAN QR CODE</span></span>
+    <button id="newClaimBtn" class="btn btn-primary mt-8">
+      + NEW CLAIM 下一笔
     </button>
 
-    <div class="center small muted-2 mt-16">
-      向店员索取 QR 或 Claim Code<br>Ask our staff for the QR or claim code.
+    <div class="a-note center mt-12">
+      把 QR 或 Code 给顾客 · 顾客回家后仍可认领<br>
+      Give the QR or code to the customer.
     </div>
   </div>
 
-  <div class="footnote">YETIPSY MINI APP 1.1 · FOODCOURT EDITION</div>
+  <!-- ========== RECENT ========== -->
+  <div class="a-section-title">Recent Claims 最近建立</div>
+  <div id="recentList"><div class="a-empty">Loading…</div></div>
+
 </div>
 
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/vendor/jsQR.js"></script>
-<script src="js/claim.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/vendor/qrcode.js"></script>
+<script src="../js/admin.js"></script>
+<script src="../js/admin-claim.js"></script>
 <script>
-  UI.renderBottomNav('claim.html');
-  CLAIM.init();
-</script>
-
-<script>
-/* PWA：註冊 Service Worker（只 Cache App Shell，不 Cache 任何敏感资料） */
-if ('serviceWorker' in navigator) {
-  window.addEventListener('load', function () {
-    navigator.serviceWorker.register('service-worker.js').catch(function () {});
-  });
-}
+  if (ADMIN.requireAuth()) {
+    ADMIN.renderShell({ title: 'CREATE CLAIM' });
+    ADMIN_CLAIM.init();
+  }
 </script>
 </body>
 </html>

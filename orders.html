@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B0B0B">
+<title>YETIPSY STAFF — Orders</title>
+<link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/admin.css">
+</head>
+<body class="admin">
+
+<div class="a-page">
+
+  <div class="a-field">
+    <label class="a-label">Filter 筛选</label>
+    <div class="seg" id="filterSeg">
+      <button class="active" data-status="ALL">ALL</button>
+      <button data-status="CLAIMED">CLAIMED</button>
+      <button data-status="PENDING">PENDING</button>
+      <button data-status="CANCELLED">VOID</button>
+    </div>
+  </div>
+
+  <div class="a-field">
+    <input id="keywordInput" class="a-input" type="text" placeholder="Search order no. 搜索订单号" maxlength="30">
+  </div>
+
+  <div id="ordersList">
+    <div class="skeleton" style="height:56px;margin-bottom:8px"></div>
+    <div class="skeleton" style="height:56px"></div>
+  </div>
+
+  <div class="center mt-16">
+    <a href="index.html" class="tiny muted-2">BACK 返回</a>
+  </div>
+
+</div>
+
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/admin.js"></script>
+<script src="../js/admin-orders.js"></script>
+<script>
+  if (ADMIN.requireAuth()) {
+    ADMIN.renderShell({ title: 'ORDERS' });
+    ADMIN_ORDERS.init();
+  }
+</script>
+</body>
+</html>

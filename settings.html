@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B0B0B">
+<title>YETIPSY STAFF — Settings</title>
+<link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/admin.css">
+</head>
+<body class="admin">
+
+<div class="a-page">
+
+  <div class="a-section-title">System Settings 系统设置</div>
+  <div id="settingsBox">
+    <div class="skeleton" style="height:60px;margin-bottom:8px"></div>
+    <div class="skeleton" style="height:60px"></div>
+  </div>
+
+  <div class="a-section-title">Promotions 优惠活动</div>
+  <div id="promoList"><div class="a-empty">Loading…</div></div>
+
+  <div class="card mt-12">
+    <div class="a-label">Add Promotion 新增活动</div>
+    <div class="a-field mt-8">
+      <input id="promoTitle" class="a-input" type="text" placeholder="Title 标题" maxlength="60">
+    </div>
+    <div class="a-field">
+      <input id="promoSubtitle" class="a-input" type="text" placeholder="Subtitle 副标题" maxlength="60">
+    </div>
+    <div class="a-field">
+      <textarea id="promoDesc" class="a-input" placeholder="Description 内容" maxlength="300"></textarea>
+    </div>
+    <div class="btn-row">
+      <div class="a-field" style="flex:1;margin-bottom:0">
+        <input id="promoStart" class="a-input" type="date">
+      </div>
+      <div class="a-field" style="flex:1;margin-bottom:0">
+        <input id="promoEnd" class="a-input" type="date">
+      </div>
+    </div>
+    <button id="addPromoBtn" class="btn btn-secondary mt-8">ADD PROMOTION 新增</button>
+  </div>
+
+  <div class="center mt-16">
+    <a href="more.html" class="tiny muted-2">BACK 返回</a>
+  </div>
+
+</div>
+
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/admin.js"></script>
+<script src="../js/admin-settings.js"></script>
+<script>
+  if (ADMIN.requireManager()) {
+    ADMIN.renderShell({ title: 'SETTINGS' });
+    ADMIN_SETTINGS.init();
+  }
+</script>
+</body>
+</html>

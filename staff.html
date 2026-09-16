@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B0B0B">
+<title>YETIPSY STAFF — Staff Accounts</title>
+<link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/admin.css">
+</head>
+<body class="admin">
+
+<div class="a-page">
+
+  <div class="a-section-title">Staff Accounts 员工账号</div>
+  <div id="staffList"><div class="a-empty">Loading…</div></div>
+
+  <div class="a-section-title">Create Staff 新增员工</div>
+  <div class="card">
+    <div class="a-field">
+      <label class="a-label">Username 账号</label>
+      <input id="newUsername" class="a-input" type="text" autocomplete="off" placeholder="staff2">
+    </div>
+    <div class="a-field">
+      <label class="a-label">Password 密码</label>
+      <input id="newPassword" class="a-input" type="text" autocomplete="off" placeholder="至少 8 位 min 8 chars">
+    </div>
+    <div class="a-field">
+      <label class="a-label">Role 角色</label>
+      <select id="newRole" class="a-select">
+        <option value="STAFF">STAFF 员工</option>
+        <option value="MANAGER">MANAGER 经理</option>
+        <option value="OWNER">OWNER 老板</option>
+      </select>
+    </div>
+    <button id="createStaffBtn" class="btn btn-primary">CREATE 建立</button>
+  </div>
+
+  <div class="a-note mt-12">
+    密码会以 Salted Hash 储存，不会保存明文。<br>
+    Passwords are stored as salted hashes, never in plain text.
+  </div>
+
+  <div class="center mt-16">
+    <a href="more.html" class="tiny muted-2">BACK 返回</a>
+  </div>
+
+</div>
+
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/admin.js"></script>
+<script src="../js/admin-staff.js"></script>
+<script>
+  if (ADMIN.requireAuth()) {
+    if (!ADMIN.isOwner()) {
+      document.body.innerHTML =
+        '<div class="a-page"><div class="a-empty">OWNER ONLY<br>只有老板可以管理员工账号</div>' +
+        '<div class="center mt-16"><a href="index.html" class="tiny muted-2">BACK 返回</a></div></div>';
+      ADMIN.renderShell({ title: 'STAFF' });
+    } else {
+      ADMIN.renderShell({ title: 'STAFF ACCOUNTS' });
+      ADMIN_STAFF.init();
+    }
+  }
+</script>
+</body>
+</html>
