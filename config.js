@@ -16,7 +16,7 @@ var YETIPSY_CONFIG = {
      例如：
      API_URL: 'https://script.google.com/macros/s/AKfycbw2WXwgeHls1AvyAl_dcNW0q2Fd4KOsurqPXky28MqDo6wxMPuVICAhyfr-xex34qgSuw/exec'
      ---------------------------------------------------------- */
-  API_URL: '',
+  API_URL: 'https://script.google.com/macros/s/AKfycbw2WXwgeHls1AvyAl_dcNW0q2Fd4KOsurqPXky28MqDo6wxMPuVICAhyfr-xex34qgSuw/exec',
 
   /* ----------------------------------------------------------
      2) 品牌
