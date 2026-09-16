@@ -244,9 +244,10 @@ suite.group('07 · Service Worker 快取版本（防止旧 JS 复活）', (t) =>
 const server = spawn(process.execPath, [path.join(__dirname, 'server.js'),
   '--port', String(PORT), '--reset'], { cwd: path.join(__dirname, '..') });
 
-suite.run().then((failed) => {
+/* harness 的 run() 回传的是 boolean：true = 全过（跟 tests.js / e2e-ui.js 一样） */
+suite.run().then((pass) => {
   server.kill('SIGKILL');
-  process.exit(failed ? 1 : 0);
+  process.exit(pass ? 0 : 1);
 }).catch((e) => {
   console.error('测试执行失败：', e && e.stack ? e.stack : e);
   server.kill('SIGKILL');

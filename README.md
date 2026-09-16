@@ -124,6 +124,7 @@ yetipsy-miniapp/
 │   ├── smoke-ui.js      前端 ↔ API ↔ 后端契约检查 330 项
 │   ├── e2e-ui.js        端到端 HTTP 测试 52 项
 │   ├── test-login-ui.js 登录页 DOM 测试（jsdom 真的开页面点按钮）27 项
+│   ├── test-copypaste.js 复制贴上文件校验（手动部署用）60 项
 │   └── harness.js       测试框架（零依赖）
 │
 ├── .github/workflows/
@@ -181,13 +182,14 @@ npm run demo          # = node demo/server.js
 ## 4. 测试
 
 ```bash
-npm test                 # 全部 5 套（691 项检查）
+npm test                 # 全部 6 套（751 项检查）
 
 npm run test:backend     # 直接执行 apps-script/*.gs（86 项）
 npm run test:api         # 完整 API 测试 25 组（196 项）
 npm run test:ui          # 前端 ↔ API ↔ 后端契约（330 项）
 npm run test:e2e         # 起 demo server 走完整 HTTP 流程（52 项）
 npm run test:login       # 用 jsdom 打开 login.html 点按钮（27 项，需先 npm install）
+npm run test:copypaste   # APPS-SCRIPT-COPY-PASTE.md 跟 .gs 同步、且贴上去能跑（60 项）
 ```
 
 `demo/google-shim.js` 在 Node 里模拟 `SpreadsheetApp` / `LockService` /
@@ -294,7 +296,7 @@ App 内 `PROFILE` 页面有完整隐私说明。
 4. Deploy → New deployment → Web app → 复制 URL
 5. `js/config.js` 贴上 API URL（`REQUIRE_BACKEND: true`）→ push → 开启 GitHub Pages
 
-> 之后改后端只要 `git push`：CI 会先跑 691 项测试，再用 `clasp` 部署，
+> 之后改后端只要 `git push`：CI 会先跑 751 项测试，再用 `clasp` 部署，
 > Web App URL 不变，前端不用动。设定方法见 `apps-script/README.md`。
 
 ---
