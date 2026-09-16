@@ -1,0 +1,84 @@
+name: Deploy Apps Script
+
+# 程式码留在 GitHub，执行环境是 Google Apps Script。
+# 这个 workflow 在你 push apps-script/ 的时候，用 clasp 把程式码
+# 推上去并建立新版本部署 —— 你不需要打开 Apps Script 编辑器贴程式码。
+#
+# 需要先设定两个 GitHub Secrets（见 apps-script/README.md）：
+#   CLASP_SCRIPT_ID  Apps Script 专案 ID（script.google.com 网址里的 /d/XXXX/）
+#   CLASPRC_JSON     本机 ~/.clasprc.json 的完整内容（clasp login 之后产生）
+#
+# 没设定 secrets 时这个 workflow 会跳过（不会让 CI 变红）。
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'apps-script/**'
+      - '.github/workflows/deploy-apps-script.yml'
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: 先跑测试
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - run: node demo/test-apps-script.js
+      - run: node demo/tests.js
+
+  deploy:
+    name: 推送到 Google Apps Script
+    runs-on: ubuntu-latest
+    needs: test
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: 检查 secrets
+        id: check
+        env:
+          SCRIPT_ID: ${{ secrets.CLASP_SCRIPT_ID }}
+          CLASPRC: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          if [ -z "$SCRIPT_ID" ] || [ -z "$CLASPRC" ]; then
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::没有设定 CLASP_SCRIPT_ID / CLASPRC_JSON，跳过部署。设定方法见 apps-script/README.md"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: actions/setup-node@v4
+        if: steps.check.outputs.ready == 'true'
+        with:
+          node-version: '20'
+
+      - name: 安装 clasp
+        if: steps.check.outputs.ready == 'true'
+        run: npm install --global @google/clasp
+
+      - name: 写入凭证与专案 ID
+        if: steps.check.outputs.ready == 'true'
+        env:
+          SCRIPT_ID: ${{ secrets.CLASP_SCRIPT_ID }}
+          CLASPRC: ${{ secrets.CLASPRC_JSON }}
+        run: |
+          printf '%s' "$CLASPRC" > "$HOME/.clasprc.json"
+          printf '{"scriptId":"%s","rootDir":"."}' "$SCRIPT_ID" > apps-script/.clasp.json
+
+      - name: 推送程式码
+        if: steps.check.outputs.ready == 'true'
+        working-directory: apps-script
+        run: clasp push --force
+
+      - name: 建立新版本部署
+        if: steps.check.outputs.ready == 'true'
+        working-directory: apps-script
+        run: clasp deploy --description "CI ${GITHUB_SHA::7} · $(date -u +%Y-%m-%dT%H:%MZ)"
+
+      - name: 完成
+        run: |
+          echo "后端已部署。前端（GitHub Pages）会在同一次 push 自动更新。"
+          echo "如果 Web App URL 变了，记得更新 js/config.js 的 API_URL。"

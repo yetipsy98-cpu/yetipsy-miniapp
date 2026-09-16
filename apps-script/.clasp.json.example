@@ -1,0 +1,5 @@
+{
+  "_comment": "复制成 .clasp.json 并把 scriptId 换成你的 Apps Script 专案 ID（网址 /d/XXXX/ 那一串）。.clasp.json 已被 .gitignore 排除。",
+  "scriptId": "PASTE_YOUR_APPS_SCRIPT_PROJECT_ID_HERE",
+  "rootDir": "."
+}

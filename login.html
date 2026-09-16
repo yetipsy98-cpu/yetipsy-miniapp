@@ -86,7 +86,13 @@
   var btn        = document.getElementById('continueBtn');
   var otpRequested = false;
 
-  if (YETIPSY_CONFIG.IS_DEMO()) {
+  if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
+    /* 线上版但没填 API_URL —— 明确报错，不让人以为已经注册成功 */
+    document.getElementById('demoBanner').innerHTML =
+      '<div class="demo-banner" style="border-color:#E2696B;color:#E2696B">' +
+      'BACKEND NOT CONFIGURED · 未配置后端<br>' +
+      '<span class="tiny">请在 js/config.js 填入 API_URL（Google Apps Script Web App URL）。</span></div>';
+  } else if (YETIPSY_CONFIG.IS_DEMO()) {
     document.getElementById('demoBanner').innerHTML =
       '<div class="demo-banner">DEMO MODE · 演示模式 · 任意手机号码即可登录<br>' +
       '<a href="#" id="resetDemoBtn" style="color:inherit;text-decoration:underline">重置演示资料 / RESET DEMO DATA</a></div>';
@@ -130,8 +136,9 @@
     document.getElementById('continueLabel').innerHTML = zh + '<span class="btn-sub-label">' + en + '</span>';
   }
 
+  /* 与后端 Utils.gs 使用同一套规则，避免前端放行、后端拒绝 */
   function validPhone() {
-    return UI.normalizePhone(phoneInput.value, countryInput.value).slice(countryInput.value.length).length >= 8;
+    return UI.isValidPhone(phoneInput.value, countryInput.value);
   }
 
   function sendOtp(phone) {

@@ -1,0 +1,317 @@
+/* =============================================================
+   YETIPSY MINI APP 1.1 — Config.gs
+   -------------------------------------------------------------
+   所有「会变的东西」都放这里：Sheet 名称、栏位、默认设置。
+   业务逻辑不应该 hardcode 任何栏位名称。
+
+   这一份档案是前端（js/api.js）与后端唯一的共同契约来源：
+   前端只知道 action 名称与 JSON 栏位，永远不知道 Sheet 结构。
+   ============================================================= */
+
+/** 版本（ping 会回传，方便确认线上跑的是哪一版） */
+var APP_VERSION = '1.1.0';
+
+/**
+ * 资料表定义。
+ * 每张表 = 一张 Sheet；第一列是标题，资料从第 2 列开始。
+ *   key    : JS 物件栏位名称（API 也用这个名称）
+ *   header : Sheet 上的标题
+ *   type   : 's' = 字串, 'n' = 数字（写回 Sheet 前会转成数字，方便你在 Sheet 里加总）
+ *   maxRows: 超过就自动删掉最旧的列（只给 log 类使用，0 = 不限制）
+ */
+var SCHEMA = {
+
+  settings: {
+    sheet: 'Settings',
+    maxRows: 0,
+    columns: [
+      ['key',         'Key',         's'],
+      ['value',       'Value',       's'],
+      ['description', 'Description', 's']
+    ]
+  },
+
+  sequences: {
+    sheet: 'Sequences',
+    maxRows: 0,
+    columns: [
+      ['key',   'Key',   's'],
+      ['value', 'Value', 'n']
+    ]
+  },
+
+  customers: {
+    sheet: 'Customers',
+    maxRows: 0,
+    columns: [
+      ['customerId',     'CustomerID',     's'],
+      ['phone',          'Phone',          's'],   // E.164，唯一（例如 +60123456789）
+      ['name',           'Name',           's'],
+      ['birthday',       'Birthday',       's'],
+      ['currentPoints',  'CurrentPoints',  'n'],
+      ['lifetimePoints', 'LifetimePoints', 'n'],
+      ['walletBalance',  'WalletBalance',  'n'],   // sen
+      ['membershipTier', 'MembershipTier', 's'],
+      ['totalSpend',     'TotalSpend',     'n'],   // sen
+      ['totalVisits',    'TotalVisits',    'n'],
+      ['totalRewards',   'TotalRewards',   'n'],
+      ['status',         'Status',         's'],
+      ['source',         'Source',         's'],   // SELF_REGISTER / IMPORT / MERGED
+      ['lastLoginAt',    'LastLoginAt',    's'],
+      ['createdAt',      'CreatedAt',      's'],
+      ['lastVisitAt',    'LastVisitAt',    's']
+    ]
+  },
+
+  staff: {
+    sheet: 'Staff',
+    maxRows: 0,
+    columns: [
+      ['staffId',      'StaffID',      's'],
+      ['username',     'Username',     's'],
+      ['salt',         'Salt',         's'],
+      ['passwordHash', 'PasswordHash', 's'],
+      ['role',         'Role',         's'],
+      ['status',       'Status',       's'],
+      ['lastLogin',    'LastLogin',    's'],
+      ['createdAt',    'CreatedAt',    's']
+    ]
+  },
+
+  sessions: {
+    sheet: 'Sessions',
+    maxRows: 3000,
+    columns: [
+      ['sessionId',  'SessionID',  's'],
+      ['userType',   'UserType',   's'],
+      ['userId',     'UserID',     's'],
+      ['tokenHash',  'TokenHash',  's'],
+      ['status',     'Status',     's'],
+      ['createdAt',  'CreatedAt',  's'],
+      ['expiresAt',  'ExpiresAt',  's'],
+      ['lastUsedAt', 'LastUsedAt', 's']
+    ]
+  },
+
+  orders: {
+    sheet: 'Orders',
+    maxRows: 0,
+    columns: [
+      ['orderId',         'OrderID',         's'],
+      ['externalOrderId', 'ExternalOrderID', 's'],
+      ['orderSource',     'OrderSource',     's'],
+      ['billAmount',      'BillAmount',      'n'],   // sen
+      ['customerId',      'CustomerID',      's'],
+      ['claimStatus',     'ClaimStatus',     's'],
+      ['pointsEarned',    'PointsEarned',    'n'],
+      ['rewardAmount',    'RewardAmount',    'n'],
+      ['rewardId',        'RewardID',        's'],
+      ['walletUsed',      'WalletUsed',      'n'],
+      ['finalAmount',     'FinalAmount',     'n'],
+      ['orderStatus',     'OrderStatus',     's'],
+      ['createdBy',       'CreatedBy',       's'],
+      ['note',            'Note',            's'],
+      ['createdAt',       'CreatedAt',       's'],
+      ['claimedAt',       'ClaimedAt',       's'],
+      ['completedAt',     'CompletedAt',     's']
+    ]
+  },
+
+  claims: {
+    sheet: 'Claims',
+    maxRows: 0,
+    columns: [
+      ['claimId',        'ClaimID',        's'],
+      ['orderId',        'OrderID',        's'],
+      ['claimTokenHash', 'ClaimTokenHash', 's'],
+      ['claimCode',      'ClaimCode',      's'],
+      ['status',         'Status',         's'],
+      ['customerId',     'CustomerID',     's'],
+      ['expiresAt',      'ExpiresAt',      's'],
+      ['createdAt',      'CreatedAt',      's'],
+      ['claimedAt',      'ClaimedAt',      's'],
+      ['createdBy',      'CreatedBy',      's']
+    ]
+  },
+
+  rewards: {
+    sheet: 'Rewards',
+    maxRows: 0,
+    columns: [
+      ['rewardId',  'RewardID',  's'],
+      ['orderId',   'OrderID',   's'],
+      ['customerId','CustomerID','s'],
+      ['amount',    'Amount',    'n'],   // sen
+      ['status',    'Status',    's'],
+      ['createdAt', 'CreatedAt', 's'],
+      ['expiresAt', 'ExpiresAt', 's'],
+      ['claimedAt', 'ClaimedAt', 's']
+    ]
+  },
+
+  pointTx: {
+    sheet: 'PointTx',
+    maxRows: 0,
+    columns: [
+      ['transactionId', 'TransactionID', 's'],
+      ['customerId',    'CustomerID',    's'],
+      ['orderId',       'OrderID',       's'],
+      ['type',          'Type',          's'],
+      ['points',        'Points',        'n'],
+      ['balanceBefore', 'BalanceBefore', 'n'],
+      ['balanceAfter',  'BalanceAfter',  'n'],
+      ['description',   'Description',   's'],
+      ['createdAt',     'CreatedAt',     's'],
+      ['createdBy',     'CreatedBy',     's']
+    ]
+  },
+
+  walletTx: {
+    sheet: 'WalletTx',
+    maxRows: 0,
+    columns: [
+      ['transactionId', 'TransactionID', 's'],
+      ['customerId',    'CustomerID',    's'],
+      ['orderId',       'OrderID',       's'],
+      ['type',          'Type',          's'],
+      ['amount',        'Amount',        'n'],
+      ['balanceBefore', 'BalanceBefore', 'n'],
+      ['balanceAfter',  'BalanceAfter',  'n'],
+      ['description',   'Description',   's'],
+      ['createdAt',     'CreatedAt',     's'],
+      ['createdBy',     'CreatedBy',     's']
+    ]
+  },
+
+  promotions: {
+    sheet: 'Promotions',
+    maxRows: 0,
+    columns: [
+      ['promotionId', 'PromotionID', 's'],
+      ['title',       'Title',       's'],
+      ['subtitle',    'Subtitle',    's'],
+      ['description', 'Description', 's'],
+      ['imageUrl',    'ImageURL',    's'],
+      ['startDate',   'StartDate',   's'],
+      ['endDate',     'EndDate',     's'],
+      ['minSpend',    'MinSpend',    'n'],
+      ['status',      'Status',      's'],
+      ['sortOrder',   'SortOrder',   'n'],
+      ['createdAt',   'CreatedAt',   's']
+    ]
+  },
+
+  otpCodes: {
+    sheet: 'OtpCodes',
+    maxRows: 2000,
+    columns: [
+      ['otpId',       'OtpID',       's'],
+      ['phone',       'Phone',       's'],
+      ['codeHash',    'CodeHash',    's'],
+      ['channel',     'Channel',     's'],
+      ['status',      'Status',      's'],       // PENDING / VERIFIED / EXPIRED / FAILED
+      ['attempts',    'Attempts',    'n'],
+      ['verificationTokenHash', 'VerificationTokenHash', 's'],
+      ['createdAt',   'CreatedAt',   's'],
+      ['expiresAt',   'ExpiresAt',   's'],
+      ['verifiedAt',  'VerifiedAt',  's'],
+      ['lastSentAt',  'LastSentAt',  's']
+    ]
+  },
+
+  audit: {
+    sheet: 'AuditLogs',
+    maxRows: 5000,
+    columns: [
+      ['logId',      'LogID',      's'],
+      ['userId',     'UserID',     's'],
+      ['userType',   'UserType',   's'],
+      ['action',     'Action',     's'],
+      ['targetType', 'TargetType', 's'],
+      ['targetId',   'TargetID',   's'],
+      ['oldValue',   'OldValue',   's'],
+      ['newValue',   'NewValue',   's'],
+      ['createdAt',  'CreatedAt',  's']
+    ]
+  }
+};
+
+/** 系统默认设置（第一次 setupDatabase() 时写入 Settings Sheet，之后以 Sheet 为准） */
+function defaultSettings() {
+  return {
+    BAR_NAME:                 'Yetipsy',
+    CURRENCY:                 'MYR',
+    TIMEZONE:                 'Asia/Kuala_Lumpur',
+
+    /* 会员身份 */
+    DEFAULT_COUNTRY_CODE:     '60',        // 60 = Malaysia, 65 = Singapore
+    ALLOWED_COUNTRY_CODES:    '60,65',
+    OTP_ENABLED:              'FALSE',     // 启用前必须先在 Script Properties 配置 WhatsApp
+    OTP_CHANNEL:              'WHATSAPP',
+    OTP_TTL_MINUTES:          '10',
+    OTP_RESEND_SECONDS:       '60',
+    OTP_MAX_ATTEMPTS:         '5',
+
+    /* 积分 */
+    POINTS_PER_RM:            '1',
+    POINTS_CALCULATION:       'NET_PAID',  // NET_PAID | GROSS_BILL
+    MEMBER_THRESHOLD:         '0',
+    SILVER_THRESHOLD:         '500',
+    GOLD_THRESHOLD:           '1500',
+
+    /* Claim */
+    CLAIM_EXPIRY_HOURS:       '24',
+
+    /* 奖励 */
+    REWARD_ENABLED:           'TRUE',
+    REWARD_MIN_SPEND:         '30',
+    DAILY_REWARD_BUDGET:      '50',
+    LOW_REWARD_MODE_MAX:      '100',       // sen = RM1.00
+    REWARD_TIERS:             '[{"min":3000,"max":4999,"from":50,"to":200},' +
+                              '{"min":5000,"max":9999,"from":100,"to":500},' +
+                              '{"min":10000,"max":19999,"from":200,"to":1000},' +
+                              '{"min":20000,"max":99999999,"from":300,"to":2000}]',
+    REWARD_WEIGHTS:           '{"small":70,"medium":25,"big":5}',
+    REWARD_EXPIRY_DAYS:       '7',
+
+    /* 钱包 */
+    MAX_WALLET_USAGE_PERCENT: '20',
+    MIN_WALLET_REDEEM_BILL:   '30'
+  };
+}
+
+/** 设置说明（员工端 Settings 页面会显示） */
+var SETTING_DESC = {
+  BAR_NAME:                 'Bar name / 品牌名称',
+  CURRENCY:                 'Currency / 货币',
+  TIMEZONE:                 'Timezone / 时区',
+  DEFAULT_COUNTRY_CODE:     'Default country code / 预设国家码（60=MY, 65=SG）',
+  ALLOWED_COUNTRY_CODES:    'Allowed country codes (comma separated) / 允许的国家码',
+  OTP_ENABLED:              'TRUE = require WhatsApp OTP to log in / 登录需要验证码',
+  OTP_CHANNEL:              'OTP channel / 验证码渠道',
+  OTP_TTL_MINUTES:          'OTP validity minutes / 验证码有效分钟',
+  OTP_RESEND_SECONDS:       'OTP resend cooldown seconds / 重发间隔秒',
+  OTP_MAX_ATTEMPTS:         'OTP max attempts / 验证码最多尝试次数',
+  POINTS_PER_RM:            'Points per RM1 / 每 RM1 获得积分',
+  POINTS_CALCULATION:       'NET_PAID or GROSS_BILL / 积分计算基础',
+  MEMBER_THRESHOLD:         'MEMBER threshold points',
+  SILVER_THRESHOLD:         'SILVER threshold points',
+  GOLD_THRESHOLD:           'GOLD threshold points',
+  CLAIM_EXPIRY_HOURS:       'Claim expiry hours / 认领有效时数',
+  REWARD_ENABLED:           'Enable rewards / 启用奖励',
+  REWARD_MIN_SPEND:         'Min spend for reward (RM) / 奖励最低消费',
+  DAILY_REWARD_BUDGET:      'Daily reward budget (RM) / 每日奖励预算',
+  LOW_REWARD_MODE_MAX:      'Low reward mode max (sen)',
+  REWARD_TIERS:             'Reward bands JSON',
+  REWARD_WEIGHTS:           'Reward probability weights JSON',
+  REWARD_EXPIRY_DAYS:       'Reward validity days / 奖励有效天数',
+  MAX_WALLET_USAGE_PERCENT: 'Max wallet usage % of bill / 钱包最高抵扣比例',
+  MIN_WALLET_REDEEM_BILL:   'Min bill for redemption (RM) / 最低抵扣账单'
+};
+
+/** Session 有效期 */
+var CUSTOMER_SESSION_HOURS = 24 * 30;   // 30 天
+var STAFF_SESSION_HOURS    = 12;        // 当班
+
+/** 允许的订单来源 */
+var ORDER_SOURCES = ['FOODCOURT', 'DIRECT', 'YETIPSY_APP', 'MANUAL', 'FOODCOURT_API', 'IMPORT'];

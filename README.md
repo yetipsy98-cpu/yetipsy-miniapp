@@ -1,9 +1,23 @@
-# YETIPSY MINI APP 1.1 — FOODCOURT EDITION
+# YETIPSY MINI APP 1.2 — FOODCOURT EDITION
 
 > Foodcourt 负责点餐和付款。
 > Yetipsy 负责顾客关系。
 
 Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积分 / 奖励 / 钱包系统。
+
+**程式码全部在 GitHub，资料全部在 Google Sheets，两边都是 RM0。**
+
+| 你要的东西 | 放在哪里 | 费用 |
+|---|---|---|
+| 前端（会员端 / 员工端 HTML+JS） | 这个 repo → GitHub Pages | RM0 |
+| 后端（业务逻辑，16 个 `.gs`） | 这个 repo 的 `apps-script/` → 部署到 Google Apps Script | RM0 |
+| 资料库（13 张表） | Google Sheets | RM0 |
+| 自动部署 | GitHub Actions + `clasp`（push 就上线） | RM0 |
+
+> **1.2 修正了「同一个号码重复注册」**：电话号码一律规范化成 E.164
+> （`0123456789` = `60123456789` = `+60 12-345 6789` = 同一个会员），
+> 前后端使用同一套规则，注册在交易锁内查重；
+> 旧的重复资料用 `dedupeCustomers()` 合并。详见 §5 与 DEPLOYMENT.md PART I。
 
 ---
 
@@ -57,7 +71,8 @@ Yetipsy Mini App         Yetipsy Staff Admin
 ```
 yetipsy-miniapp/
 │
-├── index.html           会员首页（积分 · 等级 · 钱包 · 今晚活动）
+├── index.html           会员首页（积分 · 等级 · 钱包 · 今晚活动）← 线上版入口
+├── preview.html         单档离线预览（DEMO 用，不参与线上流程）
 ├── login.html           手机登录 / 注册
 ├── claim.html           扫码或输入 Code 认领消费
 ├── reward.html          打开奖励（动画）
@@ -86,24 +101,38 @@ yetipsy-miniapp/
 │   ├── admin*.js        员工端各页面逻辑
 │   └── vendor/          qrcode.js（MIT）· jsQR.js（Apache-2.0）
 │
-├── apps-script/         ★ 生产后端（Google Apps Script）
-│   ├── Code.gs          Web App 入口（doPost）
-│   ├── Config.gs        Sheet 名称 / 栏位 / 默认设置
-│   ├── Utils.gs         时间 · 金额(SEN) · Hash · Error
-│   ├── Database.gs      Sheets 存取层 + setupDatabase()
-│   ├── Security.gs      交易锁 · Session · 角色 · Rate limit
-│   ├── Auth.gs          会员 / 员工登录
-│   ├── Customers.gs Orders.gs Claims.gs Points.gs Rewards.gs Wallet.gs
-│   ├── Promotions.gs Admin.gs Audit.gs
+├── apps-script/         ★ 生产后端（Google Apps Script，16 个档案）
+│   ├── Code.gs          Web App 入口（doPost / doGet · action 分派 · 交易锁）
+│   ├── Config.gs        13 张 Sheet 的栏位定义 · 默认设置 · 错误讯息
+│   ├── Utils.gs         时间 · 金额(SEN) · SHA-256 · ★ 电话 E.164 规范化
+│   ├── Database.gs      Sheets 存取层 · setupDatabase() · dedupeCustomers()
+│   ├── Security.gs      Session（只存 hash）· 角色 · Rate limit
+│   ├── Auth.gs          ping · 员工登录（失败 6 次锁 5 分钟）
+│   ├── Customers.gs     ★ 会员注册/登录（同一个号码只有一笔）
+│   ├── Orders.gs Claims.gs Points.gs Rewards.gs Wallet.gs
+│   ├── Promotions.gs Admin.gs Audit.gs Otp.gs（WhatsApp OTP）
+│   ├── appsscript.json  Apps Script manifest（V8 · 时区 · 权限）
+│   ├── .clasp.json.example  部署设定范本
+│   └── README.md        部署 / 自动推送 / 维护工具
 │
-├── demo/                本地演示后端（不需要 Google 账号即可试用）
-│   ├── server.js        模拟 GAS 的 API 服务器
-│   ├── tests.js         22 组测试（78 项检查）
-│   └── test-apps-script.js  直接执行 apps-script/*.gs（88 项检查）
+├── demo/                本机测试与演示（不需要 Google 账号）
+│   ├── google-shim.js   在 Node 里模拟 Sheets / Lock / Properties / UrlFetch
+│   ├── load-backend.js  把 apps-script/*.gs 载入 Node（测的是真实后端）
+│   ├── server.js        本机 demo 服务器（npm run demo）
+│   ├── tests.js         API 测试 25 组 / 163 项
+│   ├── test-apps-script.js  后端单元测试 82 项
+│   ├── smoke-ui.js      前端 ↔ API ↔ 后端契约检查 318 项
+│   ├── e2e-ui.js        端到端 HTTP 测试 44 项
+│   └── harness.js       测试框架（零依赖）
+│
+├── .github/workflows/
+│   ├── ci.yml                 每次 push / PR 跑全部测试
+│   └── deploy-apps-script.yml push 后用 clasp 自动部署后端
 │
 ├── manifest.json         PWA（可加到手机主画面）
 ├── service-worker.js     只 Cache App Shell，不 Cache 任何敏感资料
-└── DEPLOYMENT.md         零基础部署教学
+├── DEPLOYMENT.md         零基础部署教学
+└── apps-script/README.md 后端部署与自动推送
 ```
 
 ---
@@ -112,8 +141,14 @@ yetipsy-miniapp/
 
 ```bash
 cd yetipsy-miniapp
-node demo/server.js
+npm run demo          # = node demo/server.js
 ```
+
+> DEMO 服务器会把 `js/config.js` 的 `API_URL` 换成空字串再伺服出去，
+> 所以 repo 里的 `config.js` 可以一直保持线上 URL，不用为了试用改来改去。
+> 线上版的页面（`index.html` 等）在 `REQUIRE_BACKEND: true` 时
+> **不会**偷偷退回 DEMO —— 没连上后端就直接显示错误，避免「以为在线上版，
+> 其实资料只存在自己手机」。
 
 | | 网址 |
 |---|---|
@@ -145,20 +180,24 @@ node demo/server.js
 ## 4. 测试
 
 ```bash
-# 1) DEMO 后端测试（22 组 / 78 项）
-node demo/server.js &
-node demo/tests.js
+npm test                 # 全部 4 套（607 项检查）
 
-# 2) 生产后端测试（在 Node 里模拟 Google 服务，直接跑 apps-script/*.gs，88 项）
-node demo/test-apps-script.js
+npm run test:backend     # 直接执行 apps-script/*.gs（82 项）
+npm run test:api         # 完整 API 测试 25 组（163 项）
+npm run test:ui          # 前端 ↔ API ↔ 后端契约（318 项）
+npm run test:e2e         # 起 demo server 走完整 HTTP 流程（44 项）
 ```
 
-覆盖项目（企划书 §69）：
+`demo/google-shim.js` 在 Node 里模拟 `SpreadsheetApp` / `LockService` /
+`PropertiesService` / `CacheService` / `Utilities.computeDigest` / `UrlFetchApp`，
+所以测试执行的是 **`apps-script/` 里真实的后端程式码**，不是另一份复制品。
+
+覆盖项目（企划书 §69 + 防重复注册）：
 
 | # | 测试 | # | 测试 |
 |---|---|---|---|
 | 01 | 新会员注册 | 12 | 会员等级更新 |
-| 02 | 旧会员登录 | 13 | 奖励产生 |
+| 02 | ★ 旧会员登录（同一号码不重复注册） | 13 | 奖励产生 |
 | 03 | 员工登录 | 14 | 打开奖励 |
 | 04 | 建立 Foodcourt Claim | 15 | 重复打开奖励 → 拒绝 |
 | 05 | 重复订单号 → 拒绝 | 16 | 钱包余额 |
@@ -178,6 +217,7 @@ Dashboard 统计、密码以 Salted Hash 储存且每人 Salt 不同。
 
 | 主题 | 规则 |
 |---|---|
+| 会员身份 | **E.164 电话号码**（`+60123456789`）。`0123456789` / `60123456789` / `+60 12-345 6789` 都是同一个人，前后端用同一套规则；注册在 `LockService` 内查重，同一个号码只会有一列 |
 | 金额 | 后端一律 SEN 整数（RM8.68 = 868），前端最后才格式化 |
 | 积分 | RM1 = 1 Point；只能来自已认领的 Verified Transaction |
 | 积分基础 | `POINTS_CALCULATION = NET_PAID`（钱包抵扣不重复产生积分） |
@@ -244,11 +284,14 @@ App 内 `PROFILE` 页面有完整隐私说明。
 
 简述：
 
-1. 建立 Google Sheet → 开启 Apps Script
-2. 贴上 `apps-script/*.gs` → 执行 `setupDatabase()`
-3. Deploy → New deployment → Web app → 复制 URL
-4. 建立 GitHub Repo → 上传档案 → 开启 GitHub Pages
-5. `js/config.js` 贴上 API URL → 完成
+1. 建立 Google Sheet → 扩充功能 → Apps Script
+2. 把 `apps-script/*.gs` 推上去（`clasp push`，或设定 GitHub Actions 之后 `git push` 自动推）
+3. 执行 `setupDatabase()` 与 `bootstrapOwner('owner','你的密码')`
+4. Deploy → New deployment → Web app → 复制 URL
+5. `js/config.js` 贴上 API URL（`REQUIRE_BACKEND: true`）→ push → 开启 GitHub Pages
+
+> 之后改后端只要 `git push`：CI 会先跑 607 项测试，再用 `clasp` 部署，
+> Web App URL 不变，前端不用动。设定方法见 `apps-script/README.md`。
 
 ---
 
@@ -275,13 +318,25 @@ Simple before complex. Secure before fancy.
 Fast for staff. Fun for customers.
 ```
 
-### 6.4 会员身份与 WhatsApp OTP（更新）
+### 6.4 会员身份与 WhatsApp OTP（本版已实作）
 
-仅用电话号码登录无法证明号码属于当前顾客；任何人输入别人的号码都可能看到该会员资料。生产环境应开启 `js/config.js` 的 `OTP_ENABLED`，并在后端完成以下流程，**不要在前端生成或返回验证码**：
+仅用电话号码登录无法证明号码属于当前顾客；任何人输入别人的号码都可能看到该会员资料。
+后端 `apps-script/Otp.gs` 已实作完整流程，**验证码绝不在前端产生或回传**：
 
-1. `requestCustomerOtp`：后端把 6 位随机码的 hash、`phone`（E.164）、过期时间和尝试次数写入 OTP 表，并通过 WhatsApp Business Cloud API 或 BSP 发送模板消息；同一号码每 60 秒最多发送一次。
-2. `verifyCustomerOtp`：后端检查 hash、有效期和失败次数，成功后签发一次性短期 verification proof。
-3. `customerLogin`：必须验证该 proof，才创建或返回会员 session；没有 proof 时拒绝登录。`Customers.phone` 必须以 E.164 格式建立唯一约束（例如 `+60123456789`、`+6581234567`），并在写入时再次检查，不能只靠前端防重复。
-4. 生产环境还应限制 OTP 重试、IP/号码频率，日志中不要保存验证码明文。WhatsApp Cloud API token 只能放在 Apps Script Properties，不可放入这个前端仓库。
+1. `requestCustomerOtp`：后端产生 6 位码，只把 **hash** + `phone`（E.164）+ 过期时间 + 尝试次数
+   写入 `OtpCodes` 表，并通过 WhatsApp Business Cloud API 发送；同一号码 60 秒内只能发一次。
+2. `verifyCustomerOtp`：检查 hash、有效期与失败次数（默认最多 5 次），
+   成功后签发一次性、5 分钟有效的 verification proof。
+3. `customerLogin`：`OTP_ENABLED = TRUE` 时必须带这个 proof，否则回 `OTP_REQUIRED`；
+   proof 用一次即失效（重放会被拒绝）。
+4. `Customers.Phone` 一律 E.164，登录/注册在 `LockService` 交易锁内查重；
+   另有 `customerRegister`：号码已存在直接回 `PHONE_ALREADY_REGISTERED`。
+   日志与 AuditLog 都不写验证码明文。
 
-本版本登录页已支持马来西亚 `+60` 与新加坡 `+65`，并加入请求超时，网络/GAS 无响应时会在 15 秒后结束 loading。由于当前仓库不包含 Apps Script 后端源码，`OTP_ENABLED` 默认保持 `false`；部署上述后端端点并测试 WhatsApp 模板后再改为 `true`。否则直接开启会正确显示“OTP 未配置”，不会悄悄允许无验证登录。
+开启方式：Apps Script **Script Properties** 填 `WHATSAPP_TOKEN` 与
+`WHATSAPP_PHONE_NUMBER_ID` → 员工端 SETTINGS 把 `OTP_ENABLED` 改成 `TRUE`
+（没配置 WhatsApp 时系统会拒绝开启）→ `js/config.js` 的 `OTP_ENABLED` 改成 `true`。
+详细步骤见 DEPLOYMENT.md。
+
+登录页支持马来西亚 `+60` 与新加坡 `+65`；所有 API 请求有 15 秒超时，
+网络 / GAS 无响应时不会无限转圈。

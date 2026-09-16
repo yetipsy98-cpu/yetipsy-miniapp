@@ -22,7 +22,14 @@ var APP = (function () {
   }
 
   function init() {
-    if (YETIPSY_CONFIG.IS_DEMO()) {
+    if (!AUTH.isCustomerLoggedIn()) { AUTH.requireCustomer(); return; }
+
+    if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
+      document.getElementById('demoBanner').innerHTML =
+        '<div class="demo-banner" style="border-color:#E2696B;color:#E2696B">' +
+        'BACKEND NOT CONFIGURED · 未配置后端<br>' +
+        '<span class="tiny">请在 js/config.js 填入 API_URL（Google Apps Script Web App）</span></div>';
+    } else if (YETIPSY_CONFIG.IS_DEMO()) {
       document.getElementById('demoBanner').innerHTML =
         '<div class="demo-banner">DEMO MODE · 演示模式 · 数据保存在本地</div>';
     }
@@ -35,10 +42,34 @@ var APP = (function () {
     document.getElementById('qiProfile').innerHTML = UI.icon('profile', 20);
 
     var g = greeting();
-    document.getElementById('greeting').innerHTML =
-      g.zh + '，<b>' + UI.esc(state.profileName || '') + '</b> · ' + g.en;
+    document.getElementById('greeting').innerHTML = g.zh + ' · ' + g.en;
 
+    checkBackend();
     load();
+  }
+
+  /** 显示目前连的是线上后端还是连不上（避免「以为在线上版，其实是 demo」） */
+  function checkBackend() {
+    var box = document.getElementById('connectionStatus');
+    if (!box) return;
+    if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
+      box.textContent = '● NO BACKEND';
+      box.style.color = '#E2696B';
+      return;
+    }
+    box.textContent = '● …';
+    API.system.ping().then(function (res) {
+      if (res.success && res.data && res.data.mode === 'PRODUCTION') {
+        box.textContent = '● LIVE';
+        box.style.color = 'var(--ok)';
+      } else if (res.success) {
+        box.textContent = '● ' + (res.data.mode || 'ONLINE');
+        box.style.color = 'var(--muted-2)';
+      } else {
+        box.textContent = '● OFFLINE';
+        box.style.color = '#E2696B';
+      }
+    });
   }
 
   function load() {

@@ -56,42 +56,39 @@ YETIPSY MINI APP DATABASE
    **扩充功能（Extensions）→ Apps Script**
 2. 会开启一个新分页，里面有一个 `Code.gs` 档案
 
-## B2. 建立所有后端档案
+## B2. 把后端程式码放进 Apps Script
 
-左边有个「档案」区域：
+后端程式码全部在这个 GitHub repo 的 **`apps-script/`** 资料夹（16 个档案）。
+有两种方式，选一种就好：
 
-1. 先把预设的 `Code.gs` **删掉**
-   （点 `Code.gs` 右边的三个点 → 删除）
-2. 然后依照下表，一个一个新增档案：
-   点 **+ → 指令码（Script）**，输入档案名称（**不要**输入 `.gs`，系统会自动加）
+### 方式一（推荐）：GitHub Actions 自动推送
 
-| 顺序 | 档案名称 |
-|---|---|
-| 1 | `Config` |
-| 2 | `Utils` |
-| 3 | `Audit` |
-| 4 | `Database` |
-| 5 | `Security` |
-| 6 | `Auth` |
-| 7 | `Customers` |
-| 8 | `Orders` |
-| 9 | `Claims` |
-| 10 | `Points` |
-| 11 | `Rewards` |
-| 12 | `Wallet` |
-| 13 | `Promotions` |
-| 14 | `Admin` |
-| 15 | `Code` |
+程式码留在 GitHub，push 之后自动推到 Google Apps Script，不需要手动贴。
+设定方法见 **[`apps-script/README.md`](apps-script/README.md)**，
+设定完成后每次改后端只要 `git push`，1–2 分钟后线上就更新了。
 
-3. 打开专案里的 `apps-script/` 资料夹，里面每个 `.gs` 档案：
-   - 用记事本打开该档案
-   - 全选复制（Ctrl+A → Ctrl+C）
-   - 贴到 Apps Script 对应的档案里（覆盖原本的内容）
+### 方式二：手动贴（第一次部署、或不想设定 GitHub Secrets）
 
-4. 每贴完一个档案按 **💾 储存**（或 Ctrl+S）
+1. 先把预设的 `Code.gs` **删掉**（点 `Code.gs` 右边的三个点 → 删除）
+2. 依照下表新增档案：点 **+ → 指令码（Script）**，输入名称（**不要**输入 `.gs`）
 
-> ⚠️ 15 个档案全部贴完再继续。
-> 少一个档案系统会出错。
+| 顺序 | 档案名称 | 顺序 | 档案名称 |
+|---|---|---|---|
+| 1 | `Config` | 9 | `Wallet` |
+| 2 | `Utils` | 10 | `Customers` |
+| 3 | `Database` | 11 | `Orders` |
+| 4 | `Security` | 12 | `Claims` |
+| 5 | `Audit` | 13 | `Promotions` |
+| 6 | `Points` | 14 | `Admin` |
+| 7 | `Rewards` | 15 | `Auth` |
+| 8 | `Otp` | 16 | `Code` |
+
+3. 打开专案里的 `apps-script/` 资料夹，每个 `.gs` 档案：
+   - 用记事本打开 → 全选复制（Ctrl+A → Ctrl+C）
+   - 贴到 Apps Script 对应名称的档案里（覆盖原内容）
+4. 每贴完一个档案按 **💾 储存**（Ctrl+S）
+
+> ⚠️ 16 个档案全部贴完再继续，少一个系统会出错。
 
 ## B3. 建立资料库
 
@@ -109,86 +106,70 @@ YETIPSY MINI APP DATABASE
 7. 点 **记录（Logs）** 会看到类似：
 
 ```
-SETUP OK
-Settings ready (17 keys)
-Owner account created: username=owner
-!! Generated owner password: a3f9c2 （请修改）
-Demo promotions created
+setupDatabase() done. created sheets: Settings, Sequences, Customers, ...
+下一步：执行 bootstrapOwner("owner", "你的密码") 建立第一个老板账号。
 ```
 
-> **⚠️ 请把那组随机密码抄下来！** 这是老板账号的初始密码。
-> 如果没看到，往下看 PART C，我们会直接重设密码。
+> `setupDatabase()` 只建立资料表与预设设置，**不会**帮你建立账号，
+> 也不会产生随机密码。老板账号在 PART C 用 `bootstrapOwner()` 建立。
 
 ## B4. 确认资料库建立成功
 
-回到 Google Sheet，下方应该会出现这些分页：
+回到 Google Sheet，下方应该会出现这 **13** 个分页：
 
 ```
-Customers  Orders  Claims  Rewards  PointTransactions
-WalletTransactions  Promotions  Staff  Sessions  Settings  AuditLogs
+Settings   Sequences  Customers  Staff     Sessions
+Orders     Claims     Rewards    PointTx   WalletTx
+Promotions OtpCodes   AuditLogs
 ```
 
-看到这 11 个分页 = 资料库成功。
+看到 13 个分页 = 资料库成功。
+
+| 分页 | 内容 |
+|---|---|
+| `Customers` | 会员（`Phone` 是 E.164，例如 `+60123456789`，同一个号码只会有 **一列**） |
+| `Orders` | 每一笔已验证消费（金额一律 sen：RM86.00 = 8600） |
+| `Claims` | QR / 4 位 Code（只存 token 的 hash） |
+| `Rewards` | 奖励（后端产生） |
+| `PointTx` / `WalletTx` | 积分与钱包的每一笔明细（可追溯） |
+| `Settings` | 所有可调规则（积分比例、等级门槛、钱包上限…） |
+| `AuditLogs` | 操作记录（最多保留 5000 条） |
+| `OtpCodes` | WhatsApp 验证码（只存 hash） |
 
 ---
 
 <a name="part-c"></a>
 # PART C — 建立账号
 
-## C1. 设定老板密码（重要）
+## C1. 建立老板账号（重要）
 
-回到 Apps Script 编辑器，**在程式码最下方**（或任何一个档案的最下面）加入这段：
-
-```javascript
-function setMyOwnerPassword() {
-  changeStaffPassword('owner', '这里改成你的密码');
-}
-```
-
-例如：
+回到 Apps Script 编辑器，**在任何一个档案的最下面**临时加入这段：
 
 ```javascript
-function setMyOwnerPassword() {
-  changeStaffPassword('owner', 'Yetipsy@2026');
+function makeMyOwner() {
+  bootstrapOwner('owner', '这里改成你的密码');
 }
 ```
 
 然后：
 
 1. 储存
-2. 上方函式选单选择 **`setMyOwnerPassword`**
-3. 按 **执行**
-4. 看到「执行完毕」后，**把这段程式删掉**（避免密码留在程式码里）
+2. 上方函式选单选择 **`makeMyOwner`** → 按 **执行**
+3. 看到「执行完毕」后，**把这段程式删掉**（避免密码留在程式码里）
 
-> 密码规则：至少 8 个字符。不要用 `123456`。
+> - 密码至少 8 个字符，不要用 `123456`。
+> - `bootstrapOwner()` 只在 `Staff` 分页还是空的时候能执行。
+>   已经有老板账号之后它会直接拒绝，避免任何人从外部再建立一个老板。
+> - 密码以 **Salted SHA-256** 储存，Sheet 里看不到明文，每个账号的 salt 不同。
 
 ## C2. 建立员工账号
 
-用同样方式，加入并执行：
+老板账号建好之后，**不需要再写程式**：
 
-```javascript
-function createMyStaff() {
-  createAdditionalStaff();
-}
-```
-
-这会建立：
-
-| 账号 | 密码 | 角色 |
-|---|---|---|
-| `manager` | `ChangeMe123` | 经理 |
-| `staff` | `ChangeMe123` | 员工 |
-
-**建立后立刻改密码**，用这段：
-
-```javascript
-function fixPasswords() {
-  changeStaffPassword('manager', '经理的新密码');
-  changeStaffPassword('staff',   '员工的新密码');
-}
-```
-
-执行完一样把程式删掉。
+1. 打开 `你的网址/admin/login.html`，用老板账号登录
+2. 进 **MORE → STAFF ACCOUNTS**
+3. 新增 `manager`（经理）与 `staff`（员工），各自设定密码
+4. 忘记密码也可以在同一个页面重设
 
 ### 角色说明
 
@@ -436,9 +417,15 @@ https://你的账号.github.io/yetipsy-miniapp/
 → 直接上传到 GitHub，1–2 分钟后生效。**不需要**重新部署 Apps Script。
 
 **改后端（apps-script/*.gs）：**
-→ 在 Apps Script 改完后，必须：
-**部署 → 管理部署 → 编辑（✏️）→ 版本：建立新版本 → 部署**
-→ API URL 不会变，前端不用改。
+
+- 有设定 GitHub Actions（推荐）：`git push` 之后自动 `clasp push` + `clasp deploy`，
+  1–2 分钟完成，**API URL 不会变**。
+- 手动方式：在 GitHub 改完档案后重新贴到 Apps Script，然后
+  **部署 → 管理部署 → 编辑（✏️）→ 版本：建立新版本 → 部署**
+  → API URL 不会变，前端不用改。
+
+> ⚠️ 只有在 Apps Script 里直接改程式码，GitHub 上的版本就会跟线上不同步。
+> 建议一律「改 GitHub → push」，让 GitHub 永远是唯一来源。
 
 ---
 
@@ -466,6 +453,21 @@ https://你的账号.github.io/yetipsy-miniapp/
 → 积分只在顾客 **认领** 之后才产生。
 到 Orders 看 `ClaimStatus` 是否 = `CLAIMED`。
 
+**Q：同一个号码出现两笔会员（重复注册）？**
+→ 新版后端已经把电话号码统一成 E.164（`0123456789` / `60123456789` /
+`+60 12-345 6789` 都视为同一个人），并且在同一把交易锁内查重，
+**新的注册不会再产生重复**。
+旧的重复资料请在 Apps Script 执行：
+
+```javascript
+reportDuplicatePhones();     // 先看有哪些重复（不会改资料）
+dedupeCustomers(true);       // dry run：看看会怎么合并
+dedupeCustomers(false);      // 真的合并
+```
+
+合并规则：保留最早注册的那一列，其余列的消费 / 积分 / 钱包明细全部转过来，
+再用明细重算积分与余额（不会重复加），重复列标记 `Status = MERGED` 保留下来当证据。
+
 **Q：Google Sheet 会不会很慢？**
 → 几千笔资料内都没问题。
 超过几万笔再考虑升级到 Supabase / PostgreSQL
@@ -491,11 +493,11 @@ Phase 2 建议加 WhatsApp OTP。
 
 ## 完成检查表
 
-- [ ] Google Sheet 出现 11 个分页
-- [ ] Apps Script 15 个档案都贴上
+- [ ] Google Sheet 出现 13 个分页
+- [ ] Apps Script 16 个档案都到位（或用 GitHub Actions 推送）
 - [ ] `setupDatabase()` 执行成功
-- [ ] 老板密码已改成自己的
-- [ ] 员工账号已建立并改密码
+- [ ] `bootstrapOwner()` 建立老板账号，程式码已删除
+- [ ] 员工账号已在 STAFF ACCOUNTS 建立
 - [ ] Web App 已部署，URL 已复制
 - [ ] GitHub Pages 网址可以打开
 - [ ] `js/config.js` 已填入 API URL
@@ -507,8 +509,34 @@ YETIPSY MINI APP 1.1 · FOODCOURT EDITION
 Validate the business model before scaling the technology.
 ```
 
-## WhatsApp OTP 与重复会员（生产上线前）
+## 重复注册与 WhatsApp OTP（本版已实作）
 
-目前前端已准备 `requestCustomerOtp` / `verifyCustomerOtp` API，并支持 `+60`、`+65`。真正上线前必须在 Apps Script 后端接入 WhatsApp Business Cloud API 或 BSP：验证码只能由后端产生、储存 hash、限时、限次数，并在 `customerLogin` 强制检查一次性 verification proof。WhatsApp access token 请放在 Script Properties。
+### 1. 同一个号码只会有一笔会员
 
-同时把会员电话号码统一为 E.164 并设唯一约束，注册/登录时在 LockService 内再次查重；例如 `+60123456789` 与 `012-3456789` 必须视为同一个会员。完成后把 `YETIPSY_CONFIG.OTP_ENABLED` 改为 `true`，并用马来西亚及新加坡号码各完成一次真实 WhatsApp 测试。前端 API 设有 15 秒 timeout，可避免登录按钮无限卡住。
+- 后端 `Utils.gs → normalizePhoneE164()` 把所有写法统一成 E.164
+  （`+60123456789`、`+6581234567`），前端 `js/ui.js → normalizePhone()` 使用同一套规则。
+- `Customers.gs → customerLogin()` 先查后建，整段在 `LockService` 交易锁内执行；
+  另有 `customerRegister()`：号码已存在直接回 `PHONE_ALREADY_REGISTERED`。
+- 历史脏资料用 `dedupeCustomers()` 合并（见 PART I）。
+- 测试覆盖：`node demo/tests.js`（第 02–06 组）、`node demo/test-apps-script.js`（第 01、05 组）。
+
+### 2. 开启 WhatsApp OTP（选用）
+
+1. 在 Apps Script **专案设定 → Script Properties** 加入：
+
+   | 属性 | 内容 |
+   |---|---|
+   | `WHATSAPP_TOKEN` | WhatsApp Business Cloud API 永久 token |
+   | `WHATSAPP_PHONE_NUMBER_ID` | 电话号码 ID（不含 `+`） |
+   | `WHATSAPP_TEMPLATE_NAME` | （可选）已核准的验证码模板名称 |
+   | `WHATSAPP_TEMPLATE_LANG` | （可选）预设 `en_US` |
+
+2. 员工端 **SETTINGS** 把 `OTP_ENABLED` 改成 `TRUE`
+   （没配置 WhatsApp 时系统会拒绝开启，不会静默放行）。
+3. 把 `js/config.js` 的 `OTP_ENABLED` 改成 `true`，push 到 GitHub。
+4. 用马来西亚与**新加坡**号码各做一次真实测试。
+
+规则：验证码只存 hash、10 分钟有效、60 秒内不能重发、最多尝试 5 次；
+验证成功后签发一次性 proof，`customerLogin` 必须带回这个 proof 才发 session。
+
+前端所有 API 请求有 15 秒 timeout，避免登录按钮无限卡住。

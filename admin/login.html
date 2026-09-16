@@ -54,7 +54,12 @@
   var u   = document.getElementById('usernameInput');
   var p   = document.getElementById('passwordInput');
 
-  if (YETIPSY_CONFIG.IS_DEMO()) {
+  if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
+    document.getElementById('demoBanner').innerHTML =
+      '<div class="demo-banner" style="border-color:#E2696B;color:#E2696B">' +
+      'BACKEND NOT CONFIGURED · 未配置后端<br>' +
+      '<span class="tiny">请在 js/config.js 填入 API_URL（Google Apps Script Web App URL）。</span></div>';
+  } else if (YETIPSY_CONFIG.IS_DEMO()) {
     document.getElementById('demoBanner').innerHTML =
       '<div class="demo-banner">DEMO MODE · owner / manager / staff<br>password: yetipsy123</div>';
   }

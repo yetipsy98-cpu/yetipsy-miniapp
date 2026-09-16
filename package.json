@@ -1,16 +1,18 @@
 {
   "name": "yetipsy-miniapp",
-  "version": "1.1.0",
-  "description": "YETIPSY MINI APP 1.1 — FOODCOURT EDITION. Membership / Points / Reward / Wallet on Google Sheets + Apps Script + GitHub Pages (RM0).",
+  "version": "1.2.0",
+  "description": "YETIPSY MINI APP 1.2 — FOODCOURT EDITION. Membership / Points / Reward / Wallet on Google Sheets + Google Apps Script + GitHub Pages (RM0). 前端在 GitHub Pages，后端程式码在 repo 的 apps-script/，资料在 Google Sheets。",
   "private": true,
   "scripts": {
     "demo": "node demo/server.js",
-    "test": "node demo/tests.js && node demo/test-apps-script.js",
+    "demo:reset": "node demo/server.js --reset",
+    "test": "node demo/test-apps-script.js && node demo/tests.js && node demo/smoke-ui.js && node demo/e2e-ui.js",
     "test:api": "node demo/tests.js",
     "test:backend": "node demo/test-apps-script.js",
     "test:ui": "node demo/smoke-ui.js",
-    "test:e2e": "node demo/e2e-ui.js"
+    "test:e2e": "node demo/e2e-ui.js",
+    "deploy:backend": "cd apps-script && clasp push --force && clasp deploy"
   },
-  "keywords": ["yetipsy", "loyalty", "membership", "pwa", "google-apps-script"],
+  "keywords": ["yetipsy", "loyalty", "membership", "pwa", "google-apps-script", "google-sheets"],
   "license": "MIT"
 }

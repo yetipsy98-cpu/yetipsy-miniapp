@@ -1,0 +1,36 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: 测试（前端契约 + Apps Script 后端 + 端到端）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 后端测试（直接执行 apps-script/*.gs）
+        run: node demo/test-apps-script.js
+
+      - name: API 测试（25 组 / 163 项）
+        run: node demo/tests.js
+
+      - name: 前端健全性检查（页面 ↔ API ↔ 后端契约）
+        run: node demo/smoke-ui.js
+
+      - name: 端到端 HTTP 测试（demo server + apps-script）
+        run: node demo/e2e-ui.js
+
+      - name: 确认没有把 demo 资料档提交进来
+        run: |
+          if [ -f demo/demo-data.json ]; then
+            echo "demo/demo-data.json 不应该被提交（里面有测试资料）"
+            exit 1
+          fi

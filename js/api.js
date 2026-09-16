@@ -16,7 +16,14 @@ var API = (function () {
 
   var NETWORK_ERROR = {
     code: 'NETWORK_ERROR',
-    message: 'Network error. Please try again. / 网络错误，请重试。'
+    message: 'Cannot reach the server. Please check your connection. / 无法连接后端，请检查网络或 API URL。'
+  };
+
+  /* 线上版没有填 API_URL：不允许静默使用本机演示资料 */
+  var NOT_CONFIGURED = {
+    code: 'BACKEND_NOT_CONFIGURED',
+    message: 'Backend API URL is not configured. Set API_URL in js/config.js. / ' +
+             '尚未配置后端 API 地址，请在 js/config.js 填入 API_URL。'
   };
 
   function log() {
@@ -34,6 +41,12 @@ var API = (function () {
   function call(action, data, options) {
     options = options || {};
     var sessionType = options.sessionType || 'auto';
+
+    /* 线上版（REQUIRE_BACKEND）却没有 API_URL → 立刻报错，不假装成功 */
+    if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
+      log('[API] backend not configured');
+      return Promise.resolve({ success: false, data: null, error: NOT_CONFIGURED });
+    }
 
     var payload = {
       action: action,
@@ -118,6 +131,10 @@ var API = (function () {
   var customer = {
     login: function (phone, name, otp) {
       return call('customerLogin', { phone: phone, name: name, verificationToken: otp || '' }, { sessionType: null });
+    },
+    /* 明确注册：号码已存在会回 PHONE_ALREADY_REGISTERED（不会建立第二个会员） */
+    register: function (phone, name, otp) {
+      return call('customerRegister', { phone: phone, name: name, verificationToken: otp || '' }, { sessionType: null });
     },
     requestOtp: function (phone) {
       return call('requestCustomerOtp', { phone: phone, channel: YETIPSY_CONFIG.OTP_CHANNEL || 'WHATSAPP' }, { sessionType: null });
