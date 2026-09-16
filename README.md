@@ -101,16 +101,16 @@ yetipsy-miniapp/
 │   ├── admin*.js        员工端各页面逻辑
 │   └── vendor/          qrcode.js（MIT）· jsQR.js（Apache-2.0）
 │
-├── apps-script/         ★ 生产后端（Google Apps Script，16 个档案）
+├── apps-script/         ★ 生产后端（Google Apps Script，15 个档案）
 │   ├── Code.gs          Web App 入口（doPost / doGet · action 分派 · 交易锁）
 │   ├── Config.gs        13 张 Sheet 的栏位定义 · 默认设置 · 错误讯息
 │   ├── Utils.gs         时间 · 金额(SEN) · SHA-256 · ★ 电话 E.164 规范化
 │   ├── Database.gs      Sheets 存取层 · setupDatabase() · dedupeCustomers()
 │   ├── Security.gs      Session（只存 hash）· 角色 · Rate limit
 │   ├── Auth.gs          ping · 员工登录（失败 6 次锁 5 分钟）
-│   ├── Customers.gs     ★ 会员注册/登录（同一个号码只有一笔）
+│   ├── Customers.gs     ★ 查号码/注册/密码登录（同一个号码只有一笔）
 │   ├── Orders.gs Claims.gs Points.gs Rewards.gs Wallet.gs
-│   ├── Promotions.gs Admin.gs Audit.gs Otp.gs（WhatsApp OTP）
+│   ├── Promotions.gs Admin.gs Audit.gs
 │   ├── appsscript.json  Apps Script manifest（V8 · 时区 · 权限）
 │   ├── .clasp.json.example  部署设定范本
 │   └── README.md        部署 / 自动推送 / 维护工具
@@ -119,9 +119,9 @@ yetipsy-miniapp/
 │   ├── google-shim.js   在 Node 里模拟 Sheets / Lock / Properties / UrlFetch
 │   ├── load-backend.js  把 apps-script/*.gs 载入 Node（测的是真实后端）
 │   ├── server.js        本机 demo 服务器（npm run demo）
-│   ├── tests.js         API 测试 25 组 / 163 项
-│   ├── test-apps-script.js  后端单元测试 82 项
-│   ├── smoke-ui.js      前端 ↔ API ↔ 后端契约检查 318 项
+│   ├── tests.js         API 测试 25 组 / 196 项
+│   ├── test-apps-script.js  后端单元测试 86 项
+│   ├── smoke-ui.js      前端 ↔ API ↔ 后端契约检查 330 项
 │   ├── e2e-ui.js        端到端 HTTP 测试 44 项
 │   └── harness.js       测试框架（零依赖）
 │
@@ -180,12 +180,12 @@ npm run demo          # = node demo/server.js
 ## 4. 测试
 
 ```bash
-npm test                 # 全部 4 套（607 项检查）
+npm test                 # 全部 4 套（664 项检查）
 
-npm run test:backend     # 直接执行 apps-script/*.gs（82 项）
-npm run test:api         # 完整 API 测试 25 组（163 项）
-npm run test:ui          # 前端 ↔ API ↔ 后端契约（318 项）
-npm run test:e2e         # 起 demo server 走完整 HTTP 流程（44 项）
+npm run test:backend     # 直接执行 apps-script/*.gs（86 项）
+npm run test:api         # 完整 API 测试 25 组（196 项）
+npm run test:ui          # 前端 ↔ API ↔ 后端契约（330 项）
+npm run test:e2e         # 起 demo server 走完整 HTTP 流程（52 项）
 ```
 
 `demo/google-shim.js` 在 Node 里模拟 `SpreadsheetApp` / `LockService` /
@@ -237,7 +237,9 @@ Dashboard 统计、密码以 Salted Hash 储存且每人 Salt 不同。
 
 ### 6.1 手机号码登录不是强身份验证（企划书 §15）
 
-第一版为了 RM0 成本，会员端使用「手机号码 + Session Token」登录，**没有 OTP**。
+会员端使用「**手机号码 + 密码**」登录（不使用 WhatsApp / SMS OTP，RM0）。
+密码以每个会员独立 salt 的 SHA-256 储存，Sheet 里看不到明文；
+连续输错 6 次锁定 5 分钟。
 
 因此系统 **不允许** 仅凭会员登录执行：
 
@@ -245,7 +247,7 @@ Dashboard 统计、密码以 Salted Hash 储存且每人 Salt 不同。
 - 敏感资料修改
 - 任何 Admin 功能
 
-Phase 2 建议补上：WhatsApp OTP / SMS OTP / Email OTP。
+会员忘记密码时由 Manager / Owner 在员工端 `MEMBERS → RESET PASSWORD` 重设。
 
 ### 6.2 已实作的保护
 
@@ -290,7 +292,7 @@ App 内 `PROFILE` 页面有完整隐私说明。
 4. Deploy → New deployment → Web app → 复制 URL
 5. `js/config.js` 贴上 API URL（`REQUIRE_BACKEND: true`）→ push → 开启 GitHub Pages
 
-> 之后改后端只要 `git push`：CI 会先跑 607 项测试，再用 `clasp` 部署，
+> 之后改后端只要 `git push`：CI 会先跑 664 项测试，再用 `clasp` 部署，
 > Web App URL 不变，前端不用动。设定方法见 `apps-script/README.md`。
 
 ---
@@ -318,25 +320,39 @@ Simple before complex. Secure before fancy.
 Fast for staff. Fun for customers.
 ```
 
-### 6.4 会员身份与 WhatsApp OTP（本版已实作）
+### 6.4 会员登录：手机号码 + 密码（不使用 WhatsApp / SMS OTP）
 
-仅用电话号码登录无法证明号码属于当前顾客；任何人输入别人的号码都可能看到该会员资料。
-后端 `apps-script/Otp.gs` 已实作完整流程，**验证码绝不在前端产生或回传**：
+登录流程（`login.html` 三步）：
 
-1. `requestCustomerOtp`：后端产生 6 位码，只把 **hash** + `phone`（E.164）+ 过期时间 + 尝试次数
-   写入 `OtpCodes` 表，并通过 WhatsApp Business Cloud API 发送；同一号码 60 秒内只能发一次。
-2. `verifyCustomerOtp`：检查 hash、有效期与失败次数（默认最多 5 次），
-   成功后签发一次性、5 分钟有效的 verification proof。
-3. `customerLogin`：`OTP_ENABLED = TRUE` 时必须带这个 proof，否则回 `OTP_REQUIRED`；
-   proof 用一次即失效（重放会被拒绝）。
-4. `Customers.Phone` 一律 E.164，登录/注册在 `LockService` 交易锁内查重；
-   另有 `customerRegister`：号码已存在直接回 `PHONE_ALREADY_REGISTERED`。
-   日志与 AuditLog 都不写验证码明文。
+```
+① 输入手机号码  →  checkCustomerPhone
+      │
+      ├── exists = false（没重复）→ ② 设密码注册 customerRegister
+      │
+      └── exists = true （重复了）→ ③ 输入密码 customerLogin
+                                     └ 若该帐号还没有密码（旧资料）
+                                       → ③' 第一次设密码 customerSetFirstPassword
+```
 
-开启方式：Apps Script **Script Properties** 填 `WHATSAPP_TOKEN` 与
-`WHATSAPP_PHONE_NUMBER_ID` → 员工端 SETTINGS 把 `OTP_ENABLED` 改成 `TRUE`
-（没配置 WhatsApp 时系统会拒绝开启）→ `js/config.js` 的 `OTP_ENABLED` 改成 `true`。
-详细步骤见 DEPLOYMENT.md。
+后端 `apps-script/Customers.gs`：
+
+| Action | 行为 |
+|---|---|
+| `checkCustomerPhone` | 只回 `exists` / `needsPasswordSetup` / 遮罩名字，不回任何会员资料；有 rate limit |
+| `customerRegister` | 号码已存在 → `PHONE_ALREADY_REGISTERED`（**绝不建立第二笔**）；密码存 Salted SHA-256 |
+| `customerLogin` | 号码不存在 → `CUSTOMER_NOT_FOUND`（不会偷偷建帐号）；密码错 → `WRONG_PASSWORD`；连续 6 次 → 锁 5 分钟 |
+| `customerSetFirstPassword` | 只有「还没有密码」的旧会员可用；设完即失效，之后必须用密码登录 |
+| `changeCustomerPassword` | 需要当前密码 + 有效 session；改完其他装置的 session 全部失效 |
+| `resetCustomerPassword` | Manager / Owner 在员工端重设（会员忘记密码的解方） |
+
+可调规则都在 Settings：`CUSTOMER_PASSWORD_MIN`（预设 8）、`LOGIN_MAX_ATTEMPTS`（6）、
+`LOGIN_LOCK_MINUTES`（5）、`PASSWORD_SELFSERVICE_SETUP`（预设 TRUE；
+等旧会员都补设完密码后建议改成 FALSE，之后只能由店员重设）。
+
+> 为什么不用 WhatsApp OTP：OTP 要走 BSP / Cloud API，会有费用与审核流程。
+> 密码方案 RM0，而且「号码 + 密码」比「只填号码」安全得多 ——
+> 别人知道你的号码也进不去。
 
 登录页支持马来西亚 `+60` 与新加坡 `+65`；所有 API 请求有 15 秒超时，
 网络 / GAS 无响应时不会无限转圈。
+

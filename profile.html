@@ -79,6 +79,35 @@
     </div>
   </div>
 
+  <!-- PASSWORD -->
+  <div class="section">
+    <div class="section-title">
+      <span class="st-zh">登录密码</span><span class="st-en">PASSWORD</span>
+    </div>
+    <div class="card">
+      <div class="field">
+        <div class="label"><span>目前的密码</span><span class="l-en">CURRENT PASSWORD</span></div>
+        <input id="currentPwInput" class="input" type="password" autocomplete="current-password" maxlength="60">
+      </div>
+      <div class="field">
+        <div class="label"><span>新密码</span><span class="l-en">NEW PASSWORD</span></div>
+        <input id="newPwInput" class="input" type="password" autocomplete="new-password" maxlength="60">
+        <div class="tiny muted-2 mt-8" id="pwRuleHint"></div>
+      </div>
+      <div class="field">
+        <div class="label"><span>确认新密码</span><span class="l-en">CONFIRM NEW PASSWORD</span></div>
+        <input id="newPw2Input" class="input" type="password" autocomplete="new-password" maxlength="60">
+      </div>
+      <button id="changePwBtn" class="btn btn-primary">
+        <span>修改密码<span class="btn-sub-label">CHANGE PASSWORD</span></span>
+      </button>
+      <div class="tiny muted-2 mt-8">
+        修改之后，其他装置的登录会失效，需要重新登录。<br>
+        Other devices will be signed out.
+      </div>
+    </div>
+  </div>
+
   <!-- PRIVACY -->
   <div class="section">
     <div class="section-title">
@@ -108,7 +137,7 @@
     <a href="admin/login.html" class="tiny muted-2" style="letter-spacing:1.4px">STAFF LOGIN 员工登录</a>
   </div>
 
-  <div class="footnote">YETIPSY MINI APP 1.1 · FOODCOURT EDITION</div>
+  <div class="footnote">YETIPSY MINI APP 1.2 · FOODCOURT EDITION</div>
 </div>
 
 <script src="js/config.js"></script>

@@ -1,7 +1,7 @@
 /* =============================================================
    demo/tests.js
    -------------------------------------------------------------
-   完整 API 测试（对应企划书 §69 的 22 组 + 防重复注册 + OTP）。
+   完整 API 测试（对应企划书 §69 的 22 组 + 防重复注册 + 密码登录）。
    跑的是 apps-script/*.gs 本体，不是复制品。
 
    执行： node demo/tests.js
@@ -13,7 +13,7 @@ const { Suite } = require('./harness');
 const { loadBackend } = require('./load-backend');
 
 const OWNER = { username: 'owner', password: 'owner-pass-123' };
-const suite = new Suite('YETIPSY · API 测试（22 组 + 防重复注册 + OTP）');
+const suite = new Suite('YETIPSY · API 测试（25 组 + 防重复注册 + 密码登录）');
 
 /* -------------------------------------------------------------
    工具
@@ -37,9 +37,24 @@ function call(world, action, data, token) {
   return world.api.doPost({ action: action, data: data || {}, token: token || '' });
 }
 
-function register(world, phone, name, extra) {
-  return call(world, 'customerLogin',
-    Object.assign({ phone: phone, name: name || '' }, extra || {}));
+const DEFAULT_PASSWORD = 'test-pass-123';
+
+/**
+ * 模拟真实前端流程：先查号码 →
+ *   没注册过  → customerRegister（设密码）
+ *   已注册    → customerLogin（验密码）
+ */
+function register(world, phone, name, password) {
+  const pwd = password || DEFAULT_PASSWORD;
+  const check = call(world, 'checkCustomerPhone', { phone: phone });
+  if (check.success && check.data.exists) {
+    if (check.data.needsPasswordSetup) {
+      return call(world, 'customerSetFirstPassword', { phone: phone, password: pwd });
+    }
+    return call(world, 'customerLogin', { phone: phone, password: pwd });
+  }
+  return call(world, 'customerRegister',
+    { phone: phone, name: name || '', password: pwd });
 }
 
 function customersInSheet(world) {
@@ -49,10 +64,22 @@ function customersInSheet(world) {
 /* -------------------------------------------------------------
    01 · 新会员注册
    ------------------------------------------------------------- */
-suite.group('01 · 新会员注册', (t) => {
+suite.group('01 · 新会员注册（号码 + 密码）', (t) => {
   const w = newWorld();
-  const res = register(w, '123456789', 'Jason');
 
+  const check = call(w, 'checkCustomerPhone', { phone: '0123456789' });
+  t.okIs(check, '查号码成功');
+  t.equal('还没注册 → exists = false', check.data.exists, false);
+  t.equal('回传 E.164', check.data.phone, '+60123456789');
+  t.equal('密码长度规则 = 8', check.data.passwordMinLength, 8);
+
+  t.errorIs(call(w, 'customerRegister', { phone: '0123456789', password: '123' }),
+    'PASSWORD_TOO_SHORT', '密码太短 → 拒绝');
+  t.errorIs(call(w, 'customerRegister', { phone: '0123456789' }),
+    'PASSWORD_REQUIRED', '没填密码 → 拒绝');
+  t.equal('失败的注册不会留下会员', customersInSheet(w), 0);
+
+  const res = register(w, '123456789', 'Jason');
   t.okIs(res, '注册成功');
   t.equal('isNewCustomer = true', res.data.isNewCustomer, true);
   t.equal('电话以 E.164 储存', res.data.customer.phone, '+60123456789');
@@ -71,6 +98,9 @@ suite.group('02 · 同一个号码重复登录 → 同一个会员', (t) => {
   const first = register(w, '123456789', 'Jason');
   const second = register(w, '123456789', 'Jason');
   const third = register(w, '123456789', '');
+
+  t.equal('第二次是「已注册」不是新会员',
+    call(w, 'checkCustomerPhone', { phone: '123456789' }).data.exists, true);
 
   t.equal('第二次不是新会员', second.data.isNewCustomer, false);
   t.equal('第三次不是新会员', third.data.isNewCustomer, false);
@@ -109,9 +139,12 @@ suite.group('04 · +60 与 +65 是两个不同的人', (t) => {
   t.check('两个号码是不同会员', my.data.customer.customerId !== sg.data.customer.customerId);
   t.equal('Customers Sheet 有 2 列', customersInSheet(w), 2);
 
-  const sgLocal = register(w, '81234567', 'Ah Sg', { countryCode: '65' });
+  /* 6581234567（不带 +）也必须被认成同一个新加坡会员 */
+  const sgLocal = register(w, '6581234567', 'Ah Sg');
   t.equal('本地写法也能找到同一个新加坡会员',
     sgLocal.data.customer.customerId, sg.data.customer.customerId);
+  t.equal('新加坡号码仍然只有 1 列',
+    w.api.inspect((DB) => DB.customers.filter((c) => c.phone === '+6581234567').length), 1);
 });
 
 suite.group('05 · 无效号码', (t) => {
@@ -127,12 +160,16 @@ suite.group('05 · 无效号码', (t) => {
    ------------------------------------------------------------- */
 suite.group('06 · customerRegister：号码已存在就拒绝', (t) => {
   const w = newWorld();
-  const first = call(w, 'customerRegister', { phone: '123456789', name: 'Jason' });
+  const first = call(w, 'customerRegister',
+    { phone: '123456789', name: 'Jason', password: 'pass-word-1' });
   t.okIs(first, '第一次注册成功');
 
-  const again = call(w, 'customerRegister', { phone: '0123456789' });
+  const again = call(w, 'customerRegister',
+    { phone: '0123456789', password: 'another-pass-1' });
   t.errorIs(again, 'PHONE_ALREADY_REGISTERED', '同一个号码（不同写法）→ 拒绝');
   t.equal('Customers Sheet 只有 1 列 ★', customersInSheet(w), 1);
+  t.equal('密码没有被改掉',
+    call(w, 'customerLogin', { phone: '123456789', password: 'pass-word-1' }).success, true);
 });
 
 /* -------------------------------------------------------------
@@ -504,8 +541,11 @@ suite.group('21 · 设置与 Audit Log', (t) => {
     'INVALID_INPUT', '数字设置不接受文字');
   t.errorIs(call(w, 'updateSetting', { key: 'NOT_A_SETTING', value: '1' }, w.ownerToken),
     'INVALID_INPUT', '未知设置 → 拒绝');
-  t.errorIs(call(w, 'updateSetting', { key: 'OTP_ENABLED', value: 'TRUE' }, w.ownerToken),
-    'OTP_NOT_CONFIGURED', '没配置 WhatsApp 不能开 OTP');
+  t.okIs(call(w, 'updateSetting', { key: 'CUSTOMER_PASSWORD_MIN', value: '10' }, w.ownerToken),
+    '可以改密码长度规则');
+  const shortPwd = call(w, 'customerRegister',
+    { phone: '0123456789', password: '123456789' });
+  t.errorIs(shortPwd, 'PASSWORD_TOO_SHORT', '新的密码长度规则立刻生效');
 
   const logs = call(w, 'getAuditLogs', { limit: 100 }, w.ownerToken);
   t.okIs(logs, '读取 Audit Log');
@@ -543,54 +583,132 @@ suite.group('22 · Dashboard 统计', (t) => {
 });
 
 /* -------------------------------------------------------------
-   23 · WhatsApp OTP（README §6.4）
+   23 · 密码登录（取代 WhatsApp OTP）
    ------------------------------------------------------------- */
-suite.group('23 · WhatsApp OTP 流程', (t) => {
+suite.group('23 · 密码登录与安全', (t) => {
   const w = newWorld();
-  w.api.setProperty('WHATSAPP_TOKEN', 'EAAG-test-token');
-  w.api.setProperty('WHATSAPP_PHONE_NUMBER_ID', '1234567890');
-  t.okIs(call(w, 'updateSetting', { key: 'OTP_ENABLED', value: 'TRUE' }, w.ownerToken),
-    '配置好 WhatsApp 后可以开 OTP');
 
-  /* 没有 proof 不能登录 */
-  t.errorIs(register(w, '123456789', 'Jason'), 'OTP_REQUIRED', '没有验证码不能登录');
+  const check = call(w, 'checkCustomerPhone', { phone: '0123456789' });
+  t.equal('新号码 → 前端会跳到注册', check.data.exists, false);
 
-  const req = call(w, 'requestCustomerOtp', { phone: '0123456789' });
-  t.okIs(req, '发送验证码');
-  t.equal('发送 1 次 WhatsApp API', w.shim.urlFetchCalls.length, 1);
+  const reg = call(w, 'customerRegister',
+    { phone: '0123456789', name: 'Jason', password: 'pass-word-1' });
+  t.okIs(reg, '注册成功并直接登录');
+  t.check('拿到 session token', !!reg.data.token);
 
-  const payload = JSON.parse(w.shim.urlFetchCalls[0].params.payload);
-  const code = (payload.text.body.match(/(\d{6})/) || [])[1];
-  t.check('拿到 6 位验证码', /^\d{6}$/.test(code), payload.text.body);
+  /* 已注册 → 前端改问密码 */
+  const check2 = call(w, 'checkCustomerPhone', { phone: '+60 12-345 6789' });
+  t.equal('同一个号码（另一种写法）→ exists = true', check2.data.exists, true);
+  t.equal('已经有密码 → 不用再设', check2.data.needsPasswordSetup, false);
+  t.equal('显示名称遮罩', check2.data.displayName, 'J***');
 
-  const stored = w.api.inspect((DB) => DB.otpCodes[0]);
-  t.check('资料库只存 hash，不存明文验证码',
-    stored.codeHash !== code && stored.codeHash.length === 64);
+  t.errorIs(call(w, 'customerLogin', { phone: '0123456789', password: 'wrong-pass-1' }),
+    'WRONG_PASSWORD', '密码错误 → 拒绝');
+  t.errorIs(call(w, 'customerLogin', { phone: '0123456789' }),
+    'PASSWORD_REQUIRED', '没填密码 → 拒绝');
+  t.errorIs(call(w, 'customerLogin', { phone: '0198765432', password: 'pass-word-1' }),
+    'CUSTOMER_NOT_FOUND', '没注册的号码不会偷偷建帐号');
+  t.equal('失败的登录不会多建会员', customersInSheet(w), 1);
 
-  t.errorIs(call(w, 'verifyCustomerOtp', { phone: '0123456789', code: '000000' }),
-    'OTP_INVALID', '错误验证码 → 拒绝');
+  const okLogin = call(w, 'customerLogin', { phone: '0123456789', password: 'pass-word-1' });
+  t.okIs(okLogin, '密码正确 → 登录成功');
+  t.equal('拿到同一个 CustomerID', okLogin.data.customer.customerId, reg.data.customer.customerId);
 
-  const verified = call(w, 'verifyCustomerOtp', { phone: '0123456789', code: code });
-  t.okIs(verified, '正确验证码通过');
-  t.check('签发一次性 proof', !!verified.data.verificationToken);
+  /* 连续失败 → 锁定 */
+  for (let i = 0; i < 6; i++) {
+    call(w, 'customerLogin', { phone: '0123456789', password: 'bad' });
+  }
+  t.errorIs(call(w, 'customerLogin', { phone: '0123456789', password: 'pass-word-1' }),
+    'RATE_LIMITED', '失败 6 次后锁定 5 分钟');
 
-  const login = register(w, '123456789', 'Jason', { verificationToken: verified.data.verificationToken });
-  t.okIs(login, '带 proof 登录成功');
-  t.equal('只建立 1 个会员', customersInSheet(w), 1);
+  /* 密码以 salted hash 储存 */
+  const row = w.api.inspect((DB) => DB.customers[0]);
+  t.check('Sheet 里没有明文密码', String(row.passwordHash).indexOf('pass-word-1') === -1);
+  t.equal('hash 是 64 hex', row.passwordHash.length, 64);
+  t.equal('每个会员有独立 salt', row.salt.length, 16);
 
-  const replay = register(w, '123456789', 'Jason', { verificationToken: verified.data.verificationToken });
-  t.errorIs(replay, 'OTP_REQUIRED', 'proof 用一次就失效');
-
-  t.errorIs(call(w, 'requestCustomerOtp', { phone: '0123456789' }),
-    'RATE_LIMITED', '60 秒内不能重发');
+  /* 锁定只锁这个号码，不影响其他会员 */
+  const other = call(w, 'customerRegister',
+    { phone: '0198765432', name: 'Other', password: 'other-pass-1' });
+  t.okIs(other, '其他号码不受影响');
+  t.okIs(call(w, 'customerLogin', { phone: '0198765432', password: 'other-pass-1' }),
+    '其他号码仍可正常登录');
+  t.equal('两个号码 = 两个会员', customersInSheet(w), 2);
 });
 
-suite.group('24 · OTP 未配置时的行为', (t) => {
+suite.group('24 · 会员自己改密码', (t) => {
   const w = newWorld();
-  w.api.mutate((DB, sb) => { sb.setSetting('OTP_ENABLED', 'TRUE'); });
-  t.errorIs(call(w, 'requestCustomerOtp', { phone: '0123456789' }), 'OTP_NOT_CONFIGURED',
-    '没配置 WhatsApp → 明确报错（不会静默放行）');
-  t.errorIs(register(w, '123456789'), 'OTP_REQUIRED', '没有 proof 不能登录');
+  const reg = call(w, 'customerRegister',
+    { phone: '0123456789', name: 'Jason', password: 'pass-word-1' });
+  const token = reg.data.token;
+
+  t.errorIs(call(w, 'changeCustomerPassword',
+    { currentPassword: 'nope', newPassword: 'brand-new-1' }, token),
+    'WRONG_PASSWORD', '当前密码错 → 拒绝');
+  t.errorIs(call(w, 'changeCustomerPassword',
+    { currentPassword: 'pass-word-1', newPassword: '123' }, token),
+    'PASSWORD_TOO_SHORT', '新密码太短 → 拒绝');
+
+  const changed = call(w, 'changeCustomerPassword',
+    { currentPassword: 'pass-word-1', newPassword: 'brand-new-1' }, token);
+  t.okIs(changed, '改密码成功');
+
+  t.errorIs(call(w, 'customerLogin', { phone: '0123456789', password: 'pass-word-1' }),
+    'WRONG_PASSWORD', '旧密码失效');
+  t.okIs(call(w, 'customerLogin', { phone: '0123456789', password: 'brand-new-1' }),
+    '新密码可以登录');
+
+  /* 员工重设密码（会员忘记密码时的解方） */
+  const byStaff = call(w, 'resetCustomerPassword',
+    { customerId: reg.data.customer.customerId, password: 'staff-set-1' }, w.ownerToken);
+  t.okIs(byStaff, 'Manager/Owner 可以重设会员密码');
+  t.okIs(call(w, 'customerLogin', { phone: '0123456789', password: 'staff-set-1' }),
+    '重设后的密码可以登录');
+  t.errorIs(call(w, 'resetCustomerPassword',
+    { customerId: reg.data.customer.customerId, password: 'x' }, w.ownerToken),
+    'PASSWORD_TOO_SHORT', '员工重设也要符合密码规则');
+});
+
+suite.group('24b · 旧会员（无密码）第一次设密码', (t) => {
+  const w = newWorld();
+  /* 模拟旧版无密码时期留下的会员（有积分，没有 passwordHash） */
+  w.api.mutate((DB) => {
+    DB.customers.push({
+      customerId: 'YT000009', phone: '+60123456789', name: 'Old Member', birthday: '',
+      currentPoints: 120, lifetimePoints: 120, walletBalance: 0, membershipTier: 'MEMBER',
+      totalSpend: 12000, totalVisits: 2, totalRewards: 0, status: 'ACTIVE',
+      source: 'IMPORT', salt: '', passwordHash: '', passwordSetAt: '',
+      lastLoginAt: '', createdAt: '2026-01-01T00:00:00.000Z', lastVisitAt: ''
+    });
+    DB.seq.customer = 9;
+  });
+
+  const check = call(w, 'checkCustomerPhone', { phone: '0123456789' });
+  t.equal('号码已存在', check.data.exists, true);
+  t.equal('但还没有密码 → needsPasswordSetup', check.data.needsPasswordSetup, true);
+
+  t.errorIs(call(w, 'customerLogin', { phone: '0123456789', password: 'anything1' }),
+    'PASSWORD_SETUP_REQUIRED', '没密码的帐号不能用密码登录');
+
+  const setup = call(w, 'customerSetFirstPassword',
+    { phone: '0123456789', password: 'my-first-pass' });
+  t.okIs(setup, '补设密码成功（迁移期）');
+  t.equal('保留原本的积分', setup.data.customer.currentPoints, 120);
+  t.equal('还是同一个 CustomerID', setup.data.customer.customerId, 'YT000009');
+  t.equal('Customers Sheet 没有多出一列 ★', customersInSheet(w), 1);
+
+  t.errorIs(call(w, 'customerSetFirstPassword',
+    { phone: '0123456789', password: 'second-pass-1' }),
+    'PHONE_ALREADY_REGISTERED', '已经有密码就不能再重设（要用旧密码或找店员）');
+
+  /* 关掉迁移开关后，有资料的帐号只能由店员重设 */
+  w.api.mutate((DB, sb) => { sb.setSetting('PASSWORD_SELFSERVICE_SETUP', 'FALSE'); });
+  w.api.mutate((DB) => {
+    DB.customers[0].salt = ''; DB.customers[0].passwordHash = ''; DB.customers[0].passwordSetAt = '';
+  });
+  t.errorIs(call(w, 'customerSetFirstPassword',
+    { phone: '0123456789', password: 'another-pass1' }),
+    'PASSWORD_CHANGE_STAFF', '迁移期结束后 → 请找店员');
 });
 
 /* -------------------------------------------------------------
@@ -603,6 +721,7 @@ suite.group('25 · ping / 公开设置', (t) => {
   t.equal('模式是 PRODUCTION（不是 DEMO）', ping.data.mode, 'PRODUCTION');
   t.equal('储存是 GOOGLE_SHEETS', ping.data.storage, 'GOOGLE_SHEETS');
   t.equal('时区', ping.data.timezone, 'Asia/Kuala_Lumpur');
+  t.equal('登录方式是手机号码 + 密码', ping.data.auth, 'PHONE_PASSWORD');
 
   const pub = w.api.doGet();
   t.okIs(pub, '浏览器直接打开 Web App URL 会回系统状态');

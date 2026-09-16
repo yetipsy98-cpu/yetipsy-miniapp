@@ -187,7 +187,12 @@ var ERR = {
   INVALID_SESSION:         ['INVALID_SESSION', 'Session expired. Please log in again. / 请重新登录。'],
   UNAUTHORIZED:            ['UNAUTHORIZED', 'You do not have permission. / 权限不足。'],
   INVALID_PHONE:           ['INVALID_PHONE', 'Invalid mobile number. / 手机号码无效。'],
-  PHONE_ALREADY_REGISTERED:['PHONE_ALREADY_REGISTERED', 'This number is already registered. / 此号码已注册。'],
+  PHONE_ALREADY_REGISTERED:['PHONE_ALREADY_REGISTERED', 'This number is already registered. / 此号码已注册，请直接登录。'],
+  WRONG_PASSWORD:          ['WRONG_PASSWORD', 'Wrong password. / 密码错误。'],
+  PASSWORD_REQUIRED:       ['PASSWORD_REQUIRED', 'Password required. / 请输入密码。'],
+  PASSWORD_TOO_SHORT:      ['PASSWORD_TOO_SHORT', 'Password is too short. / 密码太短。'],
+  PASSWORD_SETUP_REQUIRED: ['PASSWORD_SETUP_REQUIRED', 'Please set your password first. / 请先设定密码。'],
+  PASSWORD_CHANGE_STAFF:   ['PASSWORD_CHANGE_STAFF', 'Please ask our staff to reset your password. / 请联系店员重设密码。'],
   INVALID_AMOUNT:          ['INVALID_AMOUNT', 'Invalid amount. / 金额无效。'],
   INVALID_INPUT:           ['INVALID_INPUT', 'Invalid input. / 输入无效。'],
   ORDER_NOT_FOUND:         ['ORDER_NOT_FOUND', 'Order not found. / 找不到订单。'],
@@ -205,9 +210,6 @@ var ERR = {
   RATE_LIMITED:            ['RATE_LIMITED', 'Too many attempts. Please wait. / 尝试次数过多，请稍后再试。'],
   STAFF_NOT_FOUND:         ['STAFF_NOT_FOUND', 'Staff account not found. / 找不到员工账号。'],
   USERNAME_TAKEN:          ['USERNAME_TAKEN', 'Username already exists. / 账号已存在。'],
-  OTP_NOT_CONFIGURED:      ['OTP_NOT_CONFIGURED', 'OTP is not configured on the server. / 后端尚未配置验证码。'],
-  OTP_REQUIRED:            ['OTP_REQUIRED', 'Verification code required. / 需要验证码。'],
-  OTP_INVALID:             ['OTP_INVALID', 'Invalid or expired code. / 验证码错误或已过期。'],
   SETUP_REQUIRED:          ['SETUP_REQUIRED', 'Database is not set up yet. Run setupDatabase() first. / 资料库尚未初始化。'],
   UNKNOWN_ACTION:          ['UNKNOWN_ACTION', 'Unknown action. / 未知的 API 动作。']
 };

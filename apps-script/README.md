@@ -2,11 +2,13 @@
 
 这一层是「线上版」的后端：
 
+登录方式：**手机号码 + 密码**（不使用 WhatsApp / SMS OTP）。
+
 ```
 GitHub Pages（前端 HTML/JS）  ──POST──▶  Google Apps Script Web App（这个资料夹）
                                                     │
                                                     ▼
-                                             Google Sheets（资料库，13 张表）
+                                             Google Sheets（资料库，12 张表）
 ```
 
 - **程式码**：全部在这个 GitHub repo（`apps-script/*.gs`）
@@ -31,13 +33,12 @@ GitHub Pages（前端 HTML/JS）  ──POST──▶  Google Apps Script Web Ap
 | `Points.gs` | 积分与等级（门槛读 Settings） |
 | `Rewards.gs` | 奖励产生（后端随机 + 每日预算） |
 | `Wallet.gs` | 钱包明细、抵扣上限、员工确认抵扣 |
-| `Customers.gs` | 会员注册 / 登录（**同一个号码只有一笔**） |
+| `Customers.gs` | 会员查号码 / 注册 / 密码登录 / 改密码（**同一个号码只有一笔**） |
 | `Orders.gs` | 已验证消费记录、取消订单（撤销积分与奖励） |
 | `Claims.gs` | Claim QR / Code、认领、Dashboard |
 | `Promotions.gs` | 今晚活动 |
 | `Admin.gs` | 设置、积分调整、Audit Log、员工账号 |
 | `Auth.gs` | `ping`、员工登录（失败 6 次锁 5 分钟） |
-| `Otp.gs` | WhatsApp OTP（验证码只存 hash，一次性 proof） |
 | `appsscript.json` | Apps Script manifest（V8 runtime、时区、权限范围） |
 
 ---
@@ -106,7 +107,7 @@ bootstrapOwner('owner', '你的密码');    // 建立第一个老板账号（只
 
 ```bash
 node demo/test-apps-script.js   # 直接执行这些 .gs（在 Node 里模拟 Google 服务）
-node demo/tests.js              # 完整 API 测试（25 组 / 163 项）
+node demo/tests.js              # 完整 API 测试（25 组 / 196 项）
 node demo/server.js             # 本机 demo 服务器 http://localhost:3000/
 ```
 
@@ -120,11 +121,11 @@ node demo/server.js             # 本机 demo 服务器 http://localhost:3000/
 
 | 函式 | 用途 |
 |---|---|
-| `setupDatabase()` | 建立 / 补齐 13 张 Sheet 与预设设置（可重复执行，不会清资料） |
+| `setupDatabase()` | 建立 / 补齐 12 张 Sheet 与预设设置（可重复执行，不会清资料） |
 | `bootstrapOwner(user, pass)` | 建立第一个 OWNER（只在 Staff 表是空的时候可用） |
 | `reportDuplicatePhones()` | 列出重复的电话号码（只读） |
 | `dedupeCustomers(true)` | dry run：看看会怎么合并重复会员 |
-| `dedupeCustomers(false)` | 真的合并（保留最早注册的帐号，明细转帐后重算积分/钱包） |
+| `dedupeCustomers(false)` | 真的合并（保留最早注册的帐号、沿用其密码，明细转帐后重算积分/钱包） |
 | `migratePhonesToE164(false)` | 把 `Customers.Phone` 全部改成 E.164 |
 
 ---
@@ -134,9 +135,6 @@ node demo/server.js             # 本机 demo 服务器 http://localhost:3000/
 | 属性 | 用途 |
 |---|---|
 | `SPREADSHEET_ID` | 指定资料库 Sheet（没有设定时用绑定的 Sheet） |
-| `WHATSAPP_TOKEN` | WhatsApp Cloud API token（启用 OTP 才需要） |
-| `WHATSAPP_PHONE_NUMBER_ID` | WhatsApp 电话号码 ID |
-| `WHATSAPP_TEMPLATE_NAME` / `WHATSAPP_TEMPLATE_LANG` | 验证码模板（选用） |
 
 > 任何 token / 密码都只能放在 Script Properties 或 GitHub Secrets，
 > **绝不要**写进这个 repo 的任何档案。

@@ -62,6 +62,9 @@ function setupDatabase() {
     first.setBackground('#171717');
     first.setFontColor('#F4F1EA');
     sh.setFrozenRows(1);
+    if (sh.getMaxColumns() < headers.length) {
+      sh.insertColumnsAfter(sh.getMaxColumns(), headers.length - sh.getMaxColumns());
+    }
     if (sh.getMaxColumns() > headers.length) {
       sh.deleteColumns(headers.length + 1, sh.getMaxColumns() - headers.length);
     }
@@ -81,7 +84,7 @@ function setupDatabase() {
   var seqSheet = ss.getSheetByName(SCHEMA.sequences.sheet);
   if (seqSheet.getLastRow() < 2) {
     var seqRows = ['customer', 'staff', 'session', 'order', 'claim', 'reward',
-                   'point', 'wallet', 'promo', 'audit', 'otp'].map(function (k) { return [k, 0]; });
+                   'point', 'wallet', 'promo', 'audit'].map(function (k) { return [k, 0]; });
     seqSheet.getRange(2, 1, seqRows.length, 2).setValues(seqRows);
   }
 
@@ -409,6 +412,12 @@ function dedupeCustomers(dryRun) {
         DB.walletTx.forEach(function (t) {
           if (t.customerId === dup.customerId) { t.customerId = keep.customerId; moved.walletTx++; }
         });
+        /* 密码：正式帐号还没设密码时，沿用重复列的密码 */
+        if (!keep.passwordHash && dup.passwordHash) {
+          keep.salt = dup.salt;
+          keep.passwordHash = dup.passwordHash;
+          keep.passwordSetAt = dup.passwordSetAt || nowISO();
+        }
         dup.status = 'MERGED';
       });
 

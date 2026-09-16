@@ -129,18 +129,28 @@ var API = (function () {
      CUSTOMER API
      ======================================================== */
   var customer = {
-    login: function (phone, name, otp) {
-      return call('customerLogin', { phone: phone, name: name, verificationToken: otp || '' }, { sessionType: null });
+    /* ① 先查号码：exists = false → 跳注册；exists = true → 问密码 */
+    checkPhone: function (phone) {
+      return call('checkCustomerPhone', { phone: phone }, { sessionType: null });
     },
-    /* 明确注册：号码已存在会回 PHONE_ALREADY_REGISTERED（不会建立第二个会员） */
-    register: function (phone, name, otp) {
-      return call('customerRegister', { phone: phone, name: name, verificationToken: otp || '' }, { sessionType: null });
+    /* ② 注册（号码还没被用过） */
+    register: function (phone, name, password) {
+      return call('customerRegister',
+        { phone: phone, name: name || '', password: password }, { sessionType: null });
     },
-    requestOtp: function (phone) {
-      return call('requestCustomerOtp', { phone: phone, channel: YETIPSY_CONFIG.OTP_CHANNEL || 'WHATSAPP' }, { sessionType: null });
+    /* ③ 登录（号码已存在 → 必须密码正确） */
+    login: function (phone, password) {
+      return call('customerLogin', { phone: phone, password: password }, { sessionType: null });
     },
-    verifyOtp: function (phone, code) {
-      return call('verifyCustomerOtp', { phone: phone, code: code }, { sessionType: null });
+    /* ④ 旧会员（还没有密码）第一次设密码 */
+    setFirstPassword: function (phone, password, name) {
+      return call('customerSetFirstPassword',
+        { phone: phone, password: password, name: name || '' }, { sessionType: null });
+    },
+    /* ⑤ 会员自己改密码 */
+    changePassword: function (currentPassword, newPassword) {
+      return call('changeCustomerPassword',
+        { currentPassword: currentPassword, newPassword: newPassword }, { sessionType: 'customer' });
     },
     logout: function () {
       return call('customerLogout', {}, { sessionType: 'customer' });
@@ -323,6 +333,11 @@ var API = (function () {
     },
     resetStaffPassword: function (staffId, password) {
       return call('resetStaffPassword', { staffId: staffId, password: password }, { sessionType: 'staff' });
+    },
+    /* 会员忘记密码 / 号码被抢注 → Manager+ 在这里重设 */
+    resetCustomerPassword: function (customerId, password) {
+      return call('resetCustomerPassword',
+        { customerId: customerId, password: password }, { sessionType: 'staff' });
     }
   };
 

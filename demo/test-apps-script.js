@@ -15,6 +15,10 @@ const { loadBackend } = require('./load-backend');
 
 const suite = new Suite('YETIPSY · Apps Script 后端测试（apps-script/*.gs）');
 
+function customersActiveCount(api) {
+  return api.inspect((DB) => DB.customers.filter((c) => c.status !== 'MERGED').length);
+}
+
 /* -------------------------------------------------------------
    01 电话号码规范化 —— 防「同一个号码重复注册」的第一道防线
    ------------------------------------------------------------- */
@@ -58,12 +62,12 @@ suite.group('01 · 电话号码规范化（E.164）', (t) => {
 /* -------------------------------------------------------------
    02 初始化资料库
    ------------------------------------------------------------- */
-suite.group('02 · setupDatabase() 建立 13 张 Sheet', (t) => {
+suite.group('02 · setupDatabase() 建立 12 张 Sheet', (t) => {
   const { api, shim } = loadBackend();
   api.setupDatabase();
 
   const expected = ['Settings', 'Sequences', 'Customers', 'Staff', 'Sessions', 'Orders',
-    'Claims', 'Rewards', 'PointTx', 'WalletTx', 'Promotions', 'OtpCodes', 'AuditLogs'];
+    'Claims', 'Rewards', 'PointTx', 'WalletTx', 'Promotions', 'AuditLogs'];
   expected.forEach((name) => {
     const sh = shim.spreadsheet.getSheetByName(name);
     t.check('Sheet「' + name + '」存在', !!sh);
@@ -222,9 +226,26 @@ suite.group('05 · dedupeCustomers() 合并重复号码', (t) => {
   const dupes = api.reportDuplicatePhones();
   t.equal('合并后没有重复号码', dupes.length, 0);
 
-  /* 合并过的帐号不能再登录（session 直接失效） */
-  const login = api.doPost({ action: 'customerLogin', data: { phone: '0123456789' }, token: '' });
-  t.equal('同一个号码再登录只会拿到那一个帐号', login.data.customer.customerId, 'YT000001');
+  /* 同一个号码再进来，拿到的还是那一个帐号（不会又建一笔） */
+  const check = api.doPost({ action: 'checkCustomerPhone', data: { phone: '0123456789' }, token: '' });
+  t.equal('查询结果：号码已存在', check.data.exists, true);
+  t.equal('旧资料没有密码 → 要求先设密码', check.data.needsPasswordSetup, true);
+
+  const setup = api.doPost({
+    action: 'customerSetFirstPassword',
+    data: { phone: '0123456789', password: 'my-new-pass-1' }, token: ''
+  });
+  t.equal('补设密码后拿到同一个 CustomerID', setup.data.customer.customerId, 'YT000001');
+  t.equal('积分还是合并后的 100', setup.data.customer.currentPoints, 100);
+  t.equal('Customers Sheet 仍然只有 1 列 ★', customersActiveCount(api), 1);
+
+  const login = api.doPost({
+    action: 'customerLogin',
+    data: { phone: '60123456789', password: 'my-new-pass-1' }, token: ''
+  });
+  t.equal('用另一种写法 + 密码登录成功', login.data.customer.customerId, 'YT000001');
+  t.errorIs(api.doPost({ action: 'customerLogin', data: { phone: '0123456789', password: 'wrong' }, token: '' }),
+    'WRONG_PASSWORD', '密码错误 → 拒绝');
 });
 
 /* -------------------------------------------------------------

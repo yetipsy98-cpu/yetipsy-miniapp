@@ -31,7 +31,6 @@ const FILE_ORDER = [
   'Promotions.gs',
   'Admin.gs',
   'Auth.gs',
-  'Otp.gs',
   'Code.gs'
 ];
 
@@ -72,6 +71,7 @@ function loadBackend(options) {
     bootstrapOwner: (u, p) => sandbox.bootstrapOwner(u, p),
     dedupeCustomers: (dryRun) => sandbox.dedupeCustomers(dryRun),
     migratePhonesToE164: (dryRun) => sandbox.migratePhonesToE164(dryRun),
+    setPassword: (c, pwd) => sandbox.setPassword(c, pwd),
     reportDuplicatePhones: () => sandbox.reportDuplicatePhones(),
     recalcCustomerTotals: (c) => sandbox.recalcCustomerTotals(c),
 

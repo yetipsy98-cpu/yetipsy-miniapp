@@ -14,7 +14,7 @@ function ping() {
     storage: 'GOOGLE_SHEETS',
     serverTime: nowISO(),
     timezone: timezone(),
-    otpEnabled: boolSetting('OTP_ENABLED', false)
+    auth: 'PHONE_PASSWORD'
   });
 }
 
@@ -23,9 +23,8 @@ function getPublicSettings() {
     barName: setting('BAR_NAME', 'Yetipsy'),
     currency: setting('CURRENCY', 'MYR'),
     timezone: timezone(),
-    otpEnabled: boolSetting('OTP_ENABLED', false),
-    otpChannel: setting('OTP_CHANNEL', 'WHATSAPP'),
-    otpResendSeconds: numSetting('OTP_RESEND_SECONDS', 60),
+    auth: 'PHONE_PASSWORD',
+    passwordMinLength: numSetting('CUSTOMER_PASSWORD_MIN', 8),
     allowedCountryCodes: String(setting('ALLOWED_COUNTRY_CODES', '60,65'))
       .split(',').map(function (c) { return '+' + c.trim(); })
   });

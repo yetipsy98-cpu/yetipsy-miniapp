@@ -47,11 +47,11 @@ var YETIPSY_CONFIG = {
   COUNTRY_CODE: '+60',
   COUNTRY_CODES: ['+60', '+65'],
 
-  /* WhatsApp OTP：后端先配置好 WHATSAPP_TOKEN 并把 Settings 的
-     OTP_ENABLED 设为 TRUE 之后，这里才改成 true。 */
-  OTP_ENABLED: false,
-  OTP_CHANNEL: 'WHATSAPP',
-  OTP_RESEND_SECONDS: 60,
+  /* 登录方式：手机号码 + 密码（不使用 WhatsApp / SMS OTP）。
+     密码长度以后端 Settings.CUSTOMER_PASSWORD_MIN 为准，
+     这里只是前端提示用（getPublicSettings 会回传真实值）。 */
+  AUTH_MODE: 'PHONE_PASSWORD',
+  PASSWORD_MIN_LENGTH: 8,
 
   API_TIMEOUT_MS: 15000,
   TIMEZONE: 'Asia/Kuala_Lumpur',

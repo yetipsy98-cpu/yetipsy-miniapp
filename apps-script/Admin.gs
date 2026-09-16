@@ -42,7 +42,7 @@ function getSettings(data, token) {
 var NUMERIC_SETTINGS = ['POINTS_PER_RM', 'CLAIM_EXPIRY_HOURS', 'REWARD_MIN_SPEND',
   'DAILY_REWARD_BUDGET', 'MAX_WALLET_USAGE_PERCENT', 'MIN_WALLET_REDEEM_BILL',
   'MEMBER_THRESHOLD', 'SILVER_THRESHOLD', 'GOLD_THRESHOLD', 'LOW_REWARD_MODE_MAX',
-  'OTP_TTL_MINUTES', 'OTP_RESEND_SECONDS', 'OTP_MAX_ATTEMPTS', 'REWARD_EXPIRY_DAYS'];
+  'REWARD_EXPIRY_DAYS', 'CUSTOMER_PASSWORD_MIN', 'LOGIN_MAX_ATTEMPTS', 'LOGIN_LOCK_MINUTES'];
 
 function updateSetting(data, token) {
   var ctx = requireStaff(token, ['MANAGER', 'OWNER']);
@@ -60,14 +60,8 @@ function updateSetting(data, token) {
       return err('INVALID_INPUT', 'Must be a number. / 必须是数字。');
     }
   }
-  if (['REWARD_ENABLED', 'OTP_ENABLED'].indexOf(key) !== -1 &&
-      ['TRUE', 'FALSE'].indexOf(value.toUpperCase()) === -1) {
+  if (key === 'REWARD_ENABLED' && ['TRUE', 'FALSE'].indexOf(value.toUpperCase()) === -1) {
     return err('INVALID_INPUT', 'Must be TRUE or FALSE.');
-  }
-  if (key === 'OTP_ENABLED' && value.toUpperCase() === 'TRUE' && !otpConfigured()) {
-    return err('OTP_NOT_CONFIGURED',
-      'Configure WHATSAPP_TOKEN / WHATSAPP_PHONE_NUMBER_ID in Script Properties first. / ' +
-      '请先在 Script Properties 配置 WhatsApp。');
   }
   if (key === 'ALLOWED_COUNTRY_CODES') {
     var codes = value.split(',').map(function (c) { return c.replace(/[^0-9]/g, ''); })
@@ -182,4 +176,34 @@ function resetStaffPassword(data, token) {
     .forEach(function (x) { x.status = 'LOGGED_OUT'; });
   audit(ctx.staff.staffId, 'STAFF', 'RESET_PASSWORD', 'STAFF', s.staffId, '', '');
   return ok({ staffId: s.staffId });
+}
+
+/* -------------------------------------------------------------
+   会员密码（员工协助重设）
+   -------------------------------------------------------------
+   会员忘记密码、或号码被别人先注册时，由 Manager / Owner 在这里重设。
+   重设之后该会员的所有 session 会立刻失效，必须用新密码重新登录。
+   ------------------------------------------------------------- */
+
+function resetCustomerPassword(data, token) {
+  var ctx = requireStaff(token, ['MANAGER', 'OWNER']);
+  if (ctx.error) return ctx.error;
+
+  var c = dbById('customers', String(data.customerId || ''));
+  if (!c) return err('CUSTOMER_NOT_FOUND');
+
+  var password = String(data.password || '');
+  var minLen = numSetting('CUSTOMER_PASSWORD_MIN', 8);
+  if (password.length < minLen) {
+    return err('PASSWORD_TOO_SHORT',
+      'Password min ' + minLen + ' chars. / 密码至少 ' + minLen + ' 位。');
+  }
+
+  setPassword(c, password);
+  dbFilter('sessions', function (x) {
+    return x.userId === c.customerId && x.userType === 'CUSTOMER' && x.status === 'ACTIVE';
+  }).forEach(function (x) { x.status = 'LOGGED_OUT'; });
+
+  audit(ctx.staff.staffId, 'STAFF', 'RESET_CUSTOMER_PASSWORD', 'CUSTOMER', c.customerId, '', '');
+  return ok({ customerId: c.customerId, passwordReset: true });
 }

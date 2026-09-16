@@ -321,6 +321,11 @@ var UI = (function () {
      10. 其他
      ========================================================= */
 
+  /** 页面跳转（login.html 等共用；抽出来方便测试与日后改 base path） */
+  function go(url) {
+    location.assign(url || 'index.html');
+  }
+
   function getParam(name) {
     var m = location.search.match(new RegExp('[?&]' + name + '=([^&]*)'));
     return m ? decodeURIComponent(m[1]) : '';
@@ -482,6 +487,7 @@ var UI = (function () {
     renderQR: renderQR,
     qrDataUrl: qrDataUrl,
     emptyState: emptyState,
+    go: go,
     getParam: getParam,
     copyToClipboard: copyToClipboard,
     normalizePhone: normalizePhone,

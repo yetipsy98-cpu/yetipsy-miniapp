@@ -74,21 +74,21 @@ YETIPSY MINI APP DATABASE
 
 | 顺序 | 档案名称 | 顺序 | 档案名称 |
 |---|---|---|---|
-| 1 | `Config` | 9 | `Wallet` |
-| 2 | `Utils` | 10 | `Customers` |
-| 3 | `Database` | 11 | `Orders` |
-| 4 | `Security` | 12 | `Claims` |
-| 5 | `Audit` | 13 | `Promotions` |
-| 6 | `Points` | 14 | `Admin` |
-| 7 | `Rewards` | 15 | `Auth` |
-| 8 | `Otp` | 16 | `Code` |
+| 1 | `Config` | 9 | `Customers` |
+| 2 | `Utils` | 10 | `Orders` |
+| 3 | `Database` | 11 | `Claims` |
+| 4 | `Security` | 12 | `Promotions` |
+| 5 | `Audit` | 13 | `Admin` |
+| 6 | `Points` | 14 | `Auth` |
+| 7 | `Rewards` | 15 | `Code` |
+| 8 | `Wallet` | | |
 
 3. 打开专案里的 `apps-script/` 资料夹，每个 `.gs` 档案：
    - 用记事本打开 → 全选复制（Ctrl+A → Ctrl+C）
    - 贴到 Apps Script 对应名称的档案里（覆盖原内容）
 4. 每贴完一个档案按 **💾 储存**（Ctrl+S）
 
-> ⚠️ 16 个档案全部贴完再继续，少一个系统会出错。
+> ⚠️ 15 个档案全部贴完再继续，少一个系统会出错。
 
 ## B3. 建立资料库
 
@@ -115,26 +115,25 @@ setupDatabase() done. created sheets: Settings, Sequences, Customers, ...
 
 ## B4. 确认资料库建立成功
 
-回到 Google Sheet，下方应该会出现这 **13** 个分页：
+回到 Google Sheet，下方应该会出现这 **12** 个分页：
 
 ```
 Settings   Sequences  Customers  Staff     Sessions
 Orders     Claims     Rewards    PointTx   WalletTx
-Promotions OtpCodes   AuditLogs
+Promotions AuditLogs
 ```
 
-看到 13 个分页 = 资料库成功。
+看到 12 个分页 = 资料库成功。
 
 | 分页 | 内容 |
 |---|---|
-| `Customers` | 会员（`Phone` 是 E.164，例如 `+60123456789`，同一个号码只会有 **一列**） |
+| `Customers` | 会员（`Phone` 是 E.164，例如 `+60123456789`，同一个号码只会有 **一列**；密码是 Salted SHA-256，看不到明文） |
 | `Orders` | 每一笔已验证消费（金额一律 sen：RM86.00 = 8600） |
 | `Claims` | QR / 4 位 Code（只存 token 的 hash） |
 | `Rewards` | 奖励（后端产生） |
 | `PointTx` / `WalletTx` | 积分与钱包的每一笔明细（可追溯） |
 | `Settings` | 所有可调规则（积分比例、等级门槛、钱包上限…） |
 | `AuditLogs` | 操作记录（最多保留 5000 条） |
-| `OtpCodes` | WhatsApp 验证码（只存 hash） |
 
 ---
 
@@ -483,18 +482,28 @@ Android：设定 → 清除浏览器快取，或重新加入主画面。
 每一支员工 API 都会验证登录状态与角色。
 所有操作都写在 `AuditLogs`，出问题可以追。
 
-**Q：会员登录没有 OTP，会不会被冒用？**
-→ 这是第一版为了 RM0 做的取舍（见 README §6.1）。
-风险有限：冒用者只能看到积分与钱包，
-**不能**自行转账、不能改敏感资料、不能进员工端。
-Phase 2 建议加 WhatsApp OTP。
+**Q：会员忘记密码怎么办？**
+→ 请他找店员。Manager / Owner 进 `MEMBERS → 找到会员 → RESET PASSWORD`，
+设一组新密码给他（会写入 Audit Log，他所有装置的登录会失效）。
+会员自己也可以在 `我的 → 登录密码` 改密码（需要输入目前的密码）。
+
+**Q：会员的密码安全吗？**
+→ Sheet 里只存 `sha256(salt|密码|salt)`，每个会员的 salt 不同，看不到明文。
+连续输错 6 次会锁定 5 分钟（`LOGIN_MAX_ATTEMPTS` / `LOGIN_LOCK_MINUTES` 可调）。
+会员端 session **不能**自行转账钱包、不能改设置、不能进员工端。
+
+**Q：有人抢先用我的号码注册怎么办？**
+→ 号码已存在时系统会要求输入密码，他进不去你的帐号。
+如果你自己的帐号还没设过密码（旧资料），第一次进入时系统会让你设密码；
+迁移完成后建议把 Settings 的 `PASSWORD_SELFSERVICE_SETUP` 改成 `FALSE`，
+之后就只有店员能重设密码。
 
 ---
 
 ## 完成检查表
 
-- [ ] Google Sheet 出现 13 个分页
-- [ ] Apps Script 16 个档案都到位（或用 GitHub Actions 推送）
+- [ ] Google Sheet 出现 12 个分页
+- [ ] Apps Script 15 个档案都到位（或用 GitHub Actions 推送）
 - [ ] `setupDatabase()` 执行成功
 - [ ] `bootstrapOwner()` 建立老板账号，程式码已删除
 - [ ] 员工账号已在 STAFF ACCOUNTS 建立
@@ -505,11 +514,11 @@ Phase 2 建议加 WhatsApp OTP。
 - [ ] 两个 QR（会员端 / 员工端）贴在吧台
 
 ```
-YETIPSY MINI APP 1.1 · FOODCOURT EDITION
+YETIPSY MINI APP 1.2 · FOODCOURT EDITION
 Validate the business model before scaling the technology.
 ```
 
-## 重复注册与 WhatsApp OTP（本版已实作）
+## 重复注册与会员密码（本版规则）
 
 ### 1. 同一个号码只会有一笔会员
 
@@ -520,23 +529,29 @@ Validate the business model before scaling the technology.
 - 历史脏资料用 `dedupeCustomers()` 合并（见 PART I）。
 - 测试覆盖：`node demo/tests.js`（第 02–06 组）、`node demo/test-apps-script.js`（第 01、05 组）。
 
-### 2. 开启 WhatsApp OTP（选用）
+### 2. 会员登录 = 手机号码 + 密码（不用 WhatsApp OTP）
 
-1. 在 Apps Script **专案设定 → Script Properties** 加入：
+顾客在登录页的动作：
 
-   | 属性 | 内容 |
-   |---|---|
-   | `WHATSAPP_TOKEN` | WhatsApp Business Cloud API 永久 token |
-   | `WHATSAPP_PHONE_NUMBER_ID` | 电话号码 ID（不含 `+`） |
-   | `WHATSAPP_TEMPLATE_NAME` | （可选）已核准的验证码模板名称 |
-   | `WHATSAPP_TEMPLATE_LANG` | （可选）预设 `en_US` |
+```
+① 输入手机号码 → 继续
+      │
+      ├── 这个号码还没注册 → ② 设密码（两次）→ 注册并进入
+      │
+      └── 这个号码已注册   → ③ 输入密码 → 登录
+                              └ 旧会员还没设过密码 → 第一次设密码
+```
 
-2. 员工端 **SETTINGS** 把 `OTP_ENABLED` 改成 `TRUE`
-   （没配置 WhatsApp 时系统会拒绝开启，不会静默放行）。
-3. 把 `js/config.js` 的 `OTP_ENABLED` 改成 `true`，push 到 GitHub。
-4. 用马来西亚与**新加坡**号码各做一次真实测试。
+| Settings | 预设 | 说明 |
+|---|---|---|
+| `CUSTOMER_PASSWORD_MIN` | `8` | 会员密码最少字符 |
+| `LOGIN_MAX_ATTEMPTS` | `6` | 连续输错几次就锁定 |
+| `LOGIN_LOCK_MINUTES` | `5` | 锁定几分钟 |
+| `PASSWORD_SELFSERVICE_SETUP` | `TRUE` | 旧会员（无密码）可否自己补设密码；**迁移完成后建议改成 `FALSE`** |
 
-规则：验证码只存 hash、10 分钟有效、60 秒内不能重发、最多尝试 5 次；
-验证成功后签发一次性 proof，`customerLogin` 必须带回这个 proof 才发 session。
+- 密码以每个会员独立 salt 的 SHA-256 储存，Sheet 里看不到明文。
+- 会员自己改密码：`我的 → 登录密码`（需要目前的密码；改完其他装置登出）。
+- 会员忘记密码：店员 `MEMBERS → RESET PASSWORD`（Manager / Owner）。
+- 号码已存在时注册会被拒绝（`PHONE_ALREADY_REGISTERED`），不会多出一笔会员。
 
-前端所有 API 请求有 15 秒 timeout，避免登录按钮无限卡住。
+前端所有 API 请求有 15 秒 timeout，避免按钮无限卡住。

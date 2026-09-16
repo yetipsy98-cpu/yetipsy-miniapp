@@ -57,6 +57,9 @@ var SCHEMA = {
       ['totalRewards',   'TotalRewards',   'n'],
       ['status',         'Status',         's'],
       ['source',         'Source',         's'],   // SELF_REGISTER / IMPORT / MERGED
+      ['salt',           'Salt',           's'],   // 每个会员独立的 salt
+      ['passwordHash',   'PasswordHash',   's'],   // sha256(salt|password|salt)，不存明文
+      ['passwordSetAt',  'PasswordSetAt',  's'],
       ['lastLoginAt',    'LastLoginAt',    's'],
       ['createdAt',      'CreatedAt',      's'],
       ['lastVisitAt',    'LastVisitAt',    's']
@@ -201,24 +204,6 @@ var SCHEMA = {
     ]
   },
 
-  otpCodes: {
-    sheet: 'OtpCodes',
-    maxRows: 2000,
-    columns: [
-      ['otpId',       'OtpID',       's'],
-      ['phone',       'Phone',       's'],
-      ['codeHash',    'CodeHash',    's'],
-      ['channel',     'Channel',     's'],
-      ['status',      'Status',      's'],       // PENDING / VERIFIED / EXPIRED / FAILED
-      ['attempts',    'Attempts',    'n'],
-      ['verificationTokenHash', 'VerificationTokenHash', 's'],
-      ['createdAt',   'CreatedAt',   's'],
-      ['expiresAt',   'ExpiresAt',   's'],
-      ['verifiedAt',  'VerifiedAt',  's'],
-      ['lastSentAt',  'LastSentAt',  's']
-    ]
-  },
-
   audit: {
     sheet: 'AuditLogs',
     maxRows: 5000,
@@ -243,14 +228,15 @@ function defaultSettings() {
     CURRENCY:                 'MYR',
     TIMEZONE:                 'Asia/Kuala_Lumpur',
 
-    /* 会员身份 */
+    /* 会员身份（手机号码 + 密码登录，不使用 WhatsApp / SMS OTP） */
     DEFAULT_COUNTRY_CODE:     '60',        // 60 = Malaysia, 65 = Singapore
     ALLOWED_COUNTRY_CODES:    '60,65',
-    OTP_ENABLED:              'FALSE',     // 启用前必须先在 Script Properties 配置 WhatsApp
-    OTP_CHANNEL:              'WHATSAPP',
-    OTP_TTL_MINUTES:          '10',
-    OTP_RESEND_SECONDS:       '60',
-    OTP_MAX_ATTEMPTS:         '5',
+    CUSTOMER_PASSWORD_MIN:    '8',         // 会员密码最少字符
+    /* 迁移期开关：TRUE = 还没有密码的旧会员可以自己补设密码。
+       等旧会员都补设完成后，建议改成 FALSE（之后只能由店员重设）。 */
+    PASSWORD_SELFSERVICE_SETUP: 'TRUE',
+    LOGIN_MAX_ATTEMPTS:       '6',         // 连续失败几次就锁定
+    LOGIN_LOCK_MINUTES:       '5',         // 锁定几分钟
 
     /* 积分 */
     POINTS_PER_RM:            '1',
@@ -287,11 +273,10 @@ var SETTING_DESC = {
   TIMEZONE:                 'Timezone / 时区',
   DEFAULT_COUNTRY_CODE:     'Default country code / 预设国家码（60=MY, 65=SG）',
   ALLOWED_COUNTRY_CODES:    'Allowed country codes (comma separated) / 允许的国家码',
-  OTP_ENABLED:              'TRUE = require WhatsApp OTP to log in / 登录需要验证码',
-  OTP_CHANNEL:              'OTP channel / 验证码渠道',
-  OTP_TTL_MINUTES:          'OTP validity minutes / 验证码有效分钟',
-  OTP_RESEND_SECONDS:       'OTP resend cooldown seconds / 重发间隔秒',
-  OTP_MAX_ATTEMPTS:         'OTP max attempts / 验证码最多尝试次数',
+  CUSTOMER_PASSWORD_MIN:    'Member password min length / 会员密码最少字符',
+  PASSWORD_SELFSERVICE_SETUP: 'TRUE = members without a password can set one themselves (migration)',
+  LOGIN_MAX_ATTEMPTS:       'Login failures before lock / 登录失败几次后锁定',
+  LOGIN_LOCK_MINUTES:       'Login lock minutes / 登录锁定分钟',
   POINTS_PER_RM:            'Points per RM1 / 每 RM1 获得积分',
   POINTS_CALCULATION:       'NET_PAID or GROSS_BILL / 积分计算基础',
   MEMBER_THRESHOLD:         'MEMBER threshold points',

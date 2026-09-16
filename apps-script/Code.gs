@@ -15,8 +15,8 @@
 /** 不需要 session 的 action（其余一律要 token） */
 var PUBLIC_ACTIONS = [
   'ping', 'getPublicSettings',
-  'customerLogin', 'customerRegister', 'customerLogout',
-  'requestCustomerOtp', 'verifyCustomerOtp',
+  'checkCustomerPhone', 'customerRegister', 'customerLogin',
+  'customerSetFirstPassword', 'customerLogout',
   'staffLogin'
 ];
 
@@ -27,12 +27,13 @@ function getHandlers() {
     ping: ping,
     getPublicSettings: getPublicSettings,
 
-    /* 会员 */
-    customerLogin: customerLogin,
+    /* 会员（手机号码 + 密码） */
+    checkCustomerPhone: checkCustomerPhone,
     customerRegister: customerRegister,
+    customerLogin: customerLogin,
+    customerSetFirstPassword: customerSetFirstPassword,
+    changeCustomerPassword: changeCustomerPassword,
     customerLogout: customerLogout,
-    requestCustomerOtp: requestCustomerOtp,
-    verifyCustomerOtp: verifyCustomerOtp,
     getProfile: getProfile,
     updateProfile: updateProfile,
     getMembership: getMembership,
@@ -68,6 +69,7 @@ function getHandlers() {
     /* Manager / Owner */
     manualWalletAdjustment: manualWalletAdjustment,
     manualPointAdjustment: manualPointAdjustment,
+    resetCustomerPassword: resetCustomerPassword,
     getSettings: getSettings,
     updateSetting: updateSetting,
     getPromotionsAdmin: getPromotionsAdmin,

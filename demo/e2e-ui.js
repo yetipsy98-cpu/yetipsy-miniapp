@@ -104,17 +104,40 @@ async function waitForServer(timeoutMs) {
     });
 
     /* --------------------------------------------------------- */
-    suite.group('04 · ★ 顾客注册（同一个号码不会重复注册）', async (t) => {
-      const a = await post('customerLogin', { phone: '0123456789', name: 'Jason' });
-      const b = await post('customerLogin', { phone: '+60 12-345 6789' });
-      const c = await post('customerLogin', { phone: '60123456789' });
+    suite.group('04 · ★ 查号码 → 注册 → 密码登录（同一个号码不会重复注册）', async (t) => {
+      const PWD = 'e2e-pass-123';
 
-      t.okIs(a, '第一次注册');
+      /* ① 没注册过 → exists = false → 前端跳注册 */
+      const check1 = await post('checkCustomerPhone', { phone: '0123456789' });
+      t.okIs(check1, '查号码');
+      t.equal('还没注册', check1.data.exists, false);
+
+      const a = await post('customerRegister',
+        { phone: '0123456789', name: 'Jason', password: PWD });
+      t.okIs(a, '注册成功');
       t.equal('isNewCustomer = true', a.data.isNewCustomer, true);
-      t.equal('第二次是旧会员', b.data.isNewCustomer, false);
+      t.equal('电话统一为 E.164', a.data.customer.phone, '+60123456789');
+
+      /* ② 已注册（换一种写法也认得）→ exists = true → 前端问密码 */
+      const check2 = await post('checkCustomerPhone', { phone: '+60 12-345 6789' });
+      t.equal('同一个号码 → exists = true', check2.data.exists, true);
+      t.equal('已经有密码', check2.data.needsPasswordSetup, false);
+
+      const b = await post('customerLogin', { phone: '+60 12-345 6789', password: PWD });
+      const c = await post('customerLogin', { phone: '60123456789', password: PWD });
+      t.okIs(b, '密码登录成功');
+      t.equal('登录不是新会员', b.data.isNewCustomer, false);
       t.equal('三次都是同一个 CustomerID ★',
         [a, b, c].map((r) => r.data.customer.customerId).filter((v, i, arr) => arr.indexOf(v) === i).length, 1);
-      t.equal('电话统一为 E.164', a.data.customer.phone, '+60123456789');
+
+      /* ③ 密码错误 / 没注册的号码 */
+      t.errorIs(await post('customerLogin', { phone: '0123456789', password: 'wrong-pass-1' }),
+        'WRONG_PASSWORD', '密码错误 → 拒绝');
+      t.errorIs(await post('customerRegister', { phone: '0123456789', password: 'another-pass' }),
+        'PHONE_ALREADY_REGISTERED', '同一个号码不能注册第二次 ★');
+      t.errorIs(await post('customerLogin', { phone: '0198765432', password: PWD }),
+        'CUSTOMER_NOT_FOUND', '没注册的号码不会偷偷建帐号');
+
       global.__customerToken = a.data.token;
       global.__customerId = a.data.customer.customerId;
     });

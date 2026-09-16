@@ -31,6 +31,7 @@ var ADMIN_CUSTOMER = (function () {
     document.getElementById('backBtn').addEventListener('click', backToSearch);
     document.getElementById('adjustWalletBtn').addEventListener('click', function () { adjust('wallet'); });
     document.getElementById('adjustPointsBtn').addEventListener('click', function () { adjust('points'); });
+    document.getElementById('resetPwBtn').addEventListener('click', resetCustomerPassword);
 
     el.search.focus();
   }
@@ -273,6 +274,31 @@ var ADMIN_CUSTOMER = (function () {
       UI.toast('Adjusted / 已调整', 'success');
       state.customer = res.data.customer;
       renderDetail();
+    });
+  }
+
+  /* 会员忘记密码 / 号码被抢注 → 由 Manager+ 重设（会写入 Audit Log） */
+  function resetCustomerPassword() {
+    if (!ADMIN.isManager()) { ADMIN.deny(); return; }
+    var c = state.customer;
+    if (!c) return;
+
+    var password = window.prompt(
+      'Set a new password for ' + (c.name || c.phone) + '（至少 8 位）\n' +
+      '重设后会员的所有装置都必须用新密码重新登录。',
+      ''
+    );
+    if (password === null) return;
+    if (String(password).length < 8) {
+      UI.toast('Password min 8 chars / 密码至少 8 位', 'error');
+      return;
+    }
+
+    UI.showLoading('PROCESSING');
+    API.admin.resetCustomerPassword(c.customerId, password).then(function (res) {
+      UI.hideLoading();
+      if (!res.success) { ADMIN.handleError(res.error); return; }
+      UI.toast('Password reset / 密码已重设', 'success');
     });
   }
 
