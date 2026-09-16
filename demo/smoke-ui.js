@@ -217,4 +217,59 @@ suite.group('06 · 前端 UI.normalizePhone ↔ 后端 normalizePhoneE164', (t) 
       .map((p) => sandbox.UI.normalizePhone(p, '+60'))).size, 1);
 });
 
+/* -------------------------------------------------------------
+   08 · 版本一致 + 档案齐全（手动体检过的项目，改成自动挡）
+   ------------------------------------------------------------- */
+suite.group('08 · 版本一致 / 断链 / 快取清单', (t) => {
+  const pkg = JSON.parse(read('package.json'));
+  const short = pkg.version.split('.').slice(0, 2).join('.');   // '1.3.0' → '1.3'
+
+  /* 后端 APP_VERSION 要跟 package.json 一样，否则 ping 回报的版本会骗人 */
+  const cfg = read('apps-script/Config.gs');
+  const m = cfg.match(/var APP_VERSION = '([^']+)'/);
+  t.check('Config.gs 有 APP_VERSION', !!m);
+  t.equal('APP_VERSION = package.json 版本', m && m[1], pkg.version);
+
+  /* 页面脚注版本（preview.html 是离线快照，刻意停在旧版，不检查） */
+  PRODUCTION_PAGES.forEach((page) => {
+    const mm = read(page).match(/YETIPSY MINI APP ([0-9]+\.[0-9]+)/);
+    if (mm) t.equal(page + ' 脚注版本', mm[1], short);
+  });
+  t.equal('service-worker CACHE_NAME 跟版本一致',
+    (read('service-worker.js').match(/CACHE_NAME = '([^']+)'/) || [])[1],
+    'yetipsy-v' + pkg.version);
+
+  /* 每个页面引用的 src / href 都要真的存在（断链在 GitHub Pages 上就是白页）
+     只看写死的属性值：preview.html 是单档离线包，里面有 JS 字串拼接，
+     用这个规则去扫会误判（'+ item.page +'），所以排除。 */
+  const missing = [];
+  PRODUCTION_PAGES.forEach((page) => {
+    const base = path.dirname(page);
+    const re = /(?:src|href)="([^"#?][^"]*)"/g;
+    let x;
+    while ((x = re.exec(read(page)))) {
+      const ref = x[1];
+      if (/[\s'+]|\$\{/.test(ref)) continue;            // 拼接出来的，跳过
+      if (/^(https?:)?\/\//.test(ref) || /^(mailto:|tel:|data:)/.test(ref)) continue;
+      const target = path.normalize(path.join(ROOT, base, ref));
+      if (!fs.existsSync(target)) missing.push(page + ' → ' + ref);
+    }
+  });
+  t.check('页面引用的档案都存在（没有断链）', missing.length === 0, missing.join(' | '));
+
+  /* service-worker 预先快取的清单不能列到不存在的档案 */
+  const shellSrc = read('service-worker.js').match(/var SHELL = \[([\s\S]*?)\];/)[1];
+  const shell = (shellSrc.match(/'([^']+)'/g) || []).map((x) => x.slice(1, -1));
+  t.check('SHELL 清单有内容', shell.length > 20, shell.length);
+  const badShell = shell.filter((u) => u !== './' && !fs.existsSync(path.join(ROOT, u.replace(/^\.\//, ''))));
+  t.check('SHELL 里的档案都存在', badShell.length === 0, badShell.join(' | '));
+
+  /* manifest 的图标与 start_url */
+  const manifest = JSON.parse(read('manifest.json'));
+  t.check('manifest start_url 存在', fs.existsSync(path.join(ROOT, manifest.start_url)));
+  manifest.icons.forEach((icon) => {
+    t.check('manifest 图标存在：' + icon.src, fs.existsSync(path.join(ROOT, icon.src)));
+  });
+});
+
 suite.run().then((pass) => process.exit(pass ? 0 : 1));

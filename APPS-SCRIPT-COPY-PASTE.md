@@ -2,6 +2,9 @@
 
 **15 个档案 · 版本 1.3.0 · 会员登录 = 手机号码 + 密码（不用 WhatsApp OTP）**
 
+> 这份文件由 `node demo/build-copypaste.js` 从 `apps-script/*.gs` 产生。
+> 改了后端记得重跑，`npm test` 会检查两者是否同步。
+
 ---
 
 ## 怎么用这个档案
@@ -10,14 +13,14 @@
 2. 预设会有一个 `Code.gs` → 点它右边三个点 → **删除**（下面第 15 个会取代它）。
 3. 依照下表顺序新增 15 个档案：点 **+ → 指令码（Script）**，
    输入名称时**不要**打 `.gs`（例如输入 `Config`，不是 `Config.gs`）。
-4. 在下面的每一节里，复制那个灰色代码框里的**全部内容**，贴到对应的档案里
-   （如果档案里已经有内容，全选 Ctrl+A 删掉再贴）。
+4. 在下面的每一节里，复制那个代码框里的**全部内容**，贴到对应的档案里
+   （档案里已经有内容的话，先 Ctrl+A 全选删掉再贴）。
 5. 每个档案贴完按 **💾 储存**（Ctrl+S）。
-6. 15 个都贴完 → 选 `Database` 档案 → 执行 `setupDatabase()`
+6. 全部贴完 → 选 `Database` 档案 → 执行 `setupDatabase()`
    → 授权（进阶 → 前往专案 → 允许）→ 再执行一次 `bootstrapOwner()`。
-7. 回 Google Sheet 看是否出现 **12 个分页**（`Settings` `Sequences` `Customers`
+7. 回 Google Sheet 看是否出现 **12 个分页**：`Settings` `Sequences` `Customers`
    `Staff` `Sessions` `Orders` `Claims` `Rewards` `PointTx` `WalletTx`
-   `Promotions` `AuditLogs`）。
+   `Promotions` `AuditLogs`。
 
 | 顺序 | Apps Script 里的档案名 | 行数 | 内容 |
 |---|---|---|---|
@@ -41,15 +44,14 @@
 
 ---
 
-
 ## 1. Config.gs
 
 > Apps Script 里的档案名称：**`Config`**（不要打 .gs）
-> 所有设定与 12 张表的栏位定义（要改规则就改这里） · 302 行 · SHA-256 `43ff5ff3dd4c9eb1`
+> 所有设定与 12 张表的栏位定义（要改规则就改这里） · 302 行 · SHA-256 `879dc0738ad2a615`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Config.gs
+   YETIPSY MINI APP 1.3 — Config.gs
    -------------------------------------------------------------
    所有「会变的东西」都放这里：Sheet 名称、栏位、默认设置。
    业务逻辑不应该 hardcode 任何栏位名称。
@@ -59,7 +61,7 @@
    ============================================================= */
 
 /** 版本（ping 会回传，方便确认线上跑的是哪一版） */
-var APP_VERSION = '1.1.0';
+var APP_VERSION = '1.3.0';
 
 /**
  * 资料表定义。
@@ -357,11 +359,11 @@ var ORDER_SOURCES = ['FOODCOURT', 'DIRECT', 'YETIPSY_APP', 'MANUAL', 'FOODCOURT_
 ## 2. Utils.gs
 
 > Apps Script 里的档案名称：**`Utils`**（不要打 .gs）
-> 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 · 220 行 · SHA-256 `cf71242f22026d81`
+> 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 · 220 行 · SHA-256 `b11b215333cd457a`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Utils.gs
+   YETIPSY MINI APP 1.3 — Utils.gs
    -------------------------------------------------------------
    时间 · 金额(SEN) · Hash · ID · 电话号码规范化 · 错误讯息
    ============================================================= */
@@ -587,11 +589,11 @@ function err(key, customMessage) {
 ## 3. Database.gs
 
 > Apps Script 里的档案名称：**`Database`**（不要打 .gs）
-> setupDatabase()、补栏位、防重复注册工具、dedupeCustomers() · 567 行 · SHA-256 `244533cbd25d20f1`
+> setupDatabase()、补栏位、防重复注册工具、dedupeCustomers() · 567 行 · SHA-256 `f1d3c15495800d63`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Database.gs
+   YETIPSY MINI APP 1.3 — Database.gs
    -------------------------------------------------------------
    Google Sheets 存取层。
 
@@ -1164,11 +1166,11 @@ function daysFromNow(days) {
 ## 4. Security.gs
 
 > Apps Script 里的档案名称：**`Security`**（不要打 .gs）
-> Session Token、权限（STAFF/MANAGER/OWNER）、Rate Limit、登入锁定 · 108 行 · SHA-256 `932916d3ce99ddc8`
+> Session Token、权限（STAFF/MANAGER/OWNER）、Rate Limit、登入锁定 · 108 行 · SHA-256 `3e43f9f65e3fac45`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Security.gs
+   YETIPSY MINI APP 1.3 — Security.gs
    -------------------------------------------------------------
    Session · 角色权限 · Rate limit
    （Token 一律只存 SHA-256 hash，资料库里没有明文 token）
@@ -1282,11 +1284,11 @@ function rateLimitLocked(key) {
 ## 5. Audit.gs
 
 > Apps Script 里的档案名称：**`Audit`**（不要打 .gs）
-> Audit Log 写入与查询（最多保留 5000 条） · 18 行 · SHA-256 `547a38d96e322c97`
+> Audit Log 写入与查询（最多保留 5000 条） · 18 行 · SHA-256 `597494d0bfe7915e`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Audit.gs
+   YETIPSY MINI APP 1.3 — Audit.gs
    所有重要动作都写一条记录（AuditLogs Sheet，最多保留 5000 条）
    ============================================================= */
 
@@ -1310,11 +1312,11 @@ function audit(userId, userType, action, targetType, targetId, oldValue, newValu
 ## 6. Points.gs
 
 > Apps Script 里的档案名称：**`Points`**（不要打 .gs）
-> 积分累计 / 等级门槛计算 · 83 行 · SHA-256 `678ea4aa7e21e1b9`
+> 积分累计 / 等级门槛计算 · 83 行 · SHA-256 `87b01ea7e9deedb2`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Points.gs
+   YETIPSY MINI APP 1.3 — Points.gs
    积分 / 等级（Threshold 全部读 Settings，不 hardcode）
    ============================================================= */
 
@@ -1403,11 +1405,11 @@ function pointsForAmount(billAmount, walletUsed) {
 ## 7. Rewards.gs
 
 > Apps Script 里的档案名称：**`Rewards`**（不要打 .gs）
-> 奖励产生与状态流转 · 70 行 · SHA-256 `9efea90bb302d379`
+> 奖励产生与状态流转 · 70 行 · SHA-256 `6002b37eed17c0e4`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Rewards.gs
+   YETIPSY MINI APP 1.3 — Rewards.gs
    奖励只能由后端产生（前端不允许 Math.random）
    每日预算用完 → 停止发放；接近上限 → LOW_REWARD_MODE
    ============================================================= */
@@ -1483,11 +1485,11 @@ function generateReward(customer, order, amountSen) {
 ## 8. Wallet.gs
 
 > Apps Script 里的档案名称：**`Wallet`**（不要打 .gs）
-> 钱包储值 / 抵扣 / 上限（金额一律 sen） · 180 行 · SHA-256 `d08a09757eb25625`
+> 钱包储值 / 抵扣 / 上限（金额一律 sen） · 180 行 · SHA-256 `aa13c4fabbe0a7fd`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Wallet.gs
+   YETIPSY MINI APP 1.3 — Wallet.gs
    钱包余额只由后端改动，每一笔都留 WalletTx 明细。
    ============================================================= */
 
@@ -1673,11 +1675,11 @@ function manualWalletAdjustment(data, token) {
 ## 9. Customers.gs
 
 > Apps Script 里的档案名称：**`Customers`**（不要打 .gs）
-> ★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料 · 488 行 · SHA-256 `340e87771212016f`
+> ★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料 · 488 行 · SHA-256 `5ce70aedc330eb44`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Customers.gs
+   YETIPSY MINI APP 1.3 — Customers.gs
    -------------------------------------------------------------
    会员注册 / 登录 / 资料
 
@@ -2171,11 +2173,11 @@ function getCustomerHistory(data, token) {
 ## 10. Orders.gs
 
 > Apps Script 里的档案名称：**`Orders`**（不要打 .gs）
-> 消费纪录与统计 · 134 行 · SHA-256 `d271353e85456ddb`
+> 消费纪录与统计 · 134 行 · SHA-256 `91582268a0a873fe`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Orders.gs
+   YETIPSY MINI APP 1.3 — Orders.gs
    -------------------------------------------------------------
    「已验证会员消费记录」= 积分的唯一来源。
    未来接 Foodcourt API / Webhook / CSV 汇入，也走 createMemberTransaction()。
@@ -2315,11 +2317,11 @@ function cancelOrder(data, token) {
 ## 11. Claims.gs
 
 > Apps Script 里的档案名称：**`Claims`**（不要打 .gs）
-> QR / 4 位 Code 认领（只存 token 的 hash） · 395 行 · SHA-256 `9b8b50b5f844c79d`
+> QR / 4 位 Code 认领（只存 token 的 hash） · 395 行 · SHA-256 `86d5ad15a7718205`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Claims.gs
+   YETIPSY MINI APP 1.3 — Claims.gs
    -------------------------------------------------------------
    一笔消费 → 一个 Claim（QR + 4 位 Code）→ 顾客认领 → 积分 + 奖励
 
@@ -2720,11 +2722,11 @@ function claimReward(data, token) {
 ## 12. Promotions.gs
 
 > Apps Script 里的档案名称：**`Promotions`**（不要打 .gs）
-> 优惠规则 · 72 行 · SHA-256 `cef62a3403bf76ae`
+> 优惠规则 · 72 行 · SHA-256 `5034d8b7f55edcfb`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Promotions.gs
+   YETIPSY MINI APP 1.3 — Promotions.gs
    ============================================================= */
 
 /** 会员端：只回传今天有效的活动 */
@@ -2802,11 +2804,11 @@ function updatePromotion(data, token) {
 ## 13. Admin.gs
 
 > Apps Script 里的档案名称：**`Admin`**（不要打 .gs）
-> 员工端：Dashboard、会员查询、手动调整、重设会员密码、设置 · 209 行 · SHA-256 `1ef246fda0992fe0`
+> 员工端：Dashboard、会员查询、手动调整、重设会员密码、设置 · 209 行 · SHA-256 `668612dea354d975`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Admin.gs
+   YETIPSY MINI APP 1.3 — Admin.gs
    设置 · 积分调整 · Audit Log · 员工账号（Manager / Owner）
    ============================================================= */
 
@@ -3021,11 +3023,11 @@ function resetCustomerPassword(data, token) {
 ## 14. Auth.gs
 
 > Apps Script 里的档案名称：**`Auth`**（不要打 .gs）
-> ping / getPublicSettings / staffLogin / staffLogout · 89 行 · SHA-256 `ef6bc07a4626c5fa`
+> ping / getPublicSettings / staffLogin / staffLogout · 89 行 · SHA-256 `02c0d70a4595e296`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Auth.gs
+   YETIPSY MINI APP 1.3 — Auth.gs
    -------------------------------------------------------------
    系统 ping · 员工登录（Salted Hash + 失败锁定）
    会员登录在 Customers.gs（因为要处理「同一个号码只注册一次」）
@@ -3120,11 +3122,11 @@ function getStaffSession(data, token) {
 ## 15. Code.gs
 
 > Apps Script 里的档案名称：**`Code`**（不要打 .gs）
-> ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 · 190 行 · SHA-256 `a29441a3826688d4`
+> ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 · 190 行 · SHA-256 `1ade1f1cf422135d`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Code.gs
+   YETIPSY MINI APP 1.3 — Code.gs
    -------------------------------------------------------------
    Web App 入口。
 
@@ -3351,5 +3353,5 @@ function logError(where, error) {
 
 ### 忘记贴了哪一个？
 
-执行任何一个功能时报 `ReferenceError: xxx is not defined`，
+执行任何功能时报 `ReferenceError: xxx is not defined`，
 `xxx` 就是少贴的那个档案里的函数名 —— 对照上面的表补上即可。

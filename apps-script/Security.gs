@@ -1,5 +1,5 @@
 /* =============================================================
-   YETIPSY MINI APP 1.1 — Security.gs
+   YETIPSY MINI APP 1.3 — Security.gs
    -------------------------------------------------------------
    Session · 角色权限 · Rate limit
    （Token 一律只存 SHA-256 hash，资料库里没有明文 token）
