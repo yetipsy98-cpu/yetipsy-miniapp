@@ -99,10 +99,16 @@ var APP = (function () {
       }
 
       // promotions
+      /* ★ 成功但清单是空的 ≠ 请求失败。
+         以前两种情况都画「暂无活动」，结果后端出问题（例如线上还是旧版、
+         没有 getPromotions 这个 action）时，顾客看到的是「没有活动」，
+         根本无从发现故障。现在失败要大声讲出来，并给重试钮。 */
       var promoRes = results[2];
-      if (promoRes.success) renderPromotions(promoRes.data.promotions || []);
-      else document.getElementById('promoList').innerHTML =
-        UI.emptyState('暂无活动', 'NO PROMOTION RIGHT NOW', 'activity');
+      if (promoRes.success) {
+        renderPromotions(promoRes.data.promotions || []);
+      } else {
+        renderPromotionsError(promoRes.error || {});
+      }
     });
   }
 
@@ -153,10 +159,38 @@ var APP = (function () {
       '</div>';
   }
 
+  /** 活动载入失败 —— 要跟「真的没有活动」长得完全不一样 */
+  function renderPromotionsError(error) {
+    var box = document.getElementById('promoList');
+    var code = error.code || 'ERROR';
+    box.innerHTML =
+      '<div class="empty-state" style="border:1px solid #E2696B;border-radius:14px;padding:16px 14px">' +
+        '<div class="empty-zh" style="color:#E2696B">活动载入失败</div>' +
+        '<div class="empty-en">PROMOTIONS FAILED TO LOAD</div>' +
+        '<div class="tiny muted-2" style="margin-top:10px;line-height:1.7">' +
+          UI.esc(code) + '<br>' + UI.esc(error.message || '') +
+        '</div>' +
+        '<button id="promoRetryBtn" class="btn btn-secondary btn-sm" style="margin-top:12px">' +
+          '<span>重试<span class="btn-sub-label">RETRY</span></span>' +
+        '</button>' +
+      '</div>';
+
+    var retry = document.getElementById('promoRetryBtn');
+    if (retry) retry.addEventListener('click', function () { load(); });
+
+    /* 给开发者/店员看的线索：把错误码留在 console */
+    if (window.console && console.warn) {
+      console.warn('[YETIPSY] getPromotions 失败：' + code + ' · ' + (error.message || ''));
+    }
+  }
+
   function renderPromotions(list) {
     var box = document.getElementById('promoList');
     if (!list.length) {
-      box.innerHTML = UI.emptyState('暂无活动', 'NO PROMOTION RIGHT NOW', 'activity');
+      box.innerHTML = UI.emptyState('暂无活动', 'NO PROMOTION RIGHT NOW', 'activity') +
+        '<div class="tiny muted-2 center" style="margin-top:8px">' +
+        '员工端 SETTINGS → Promotions 可以新增活动' +
+        '</div>';
       return;
     }
     box.innerHTML = list.map(function (p) {

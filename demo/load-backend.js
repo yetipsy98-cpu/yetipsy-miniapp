@@ -73,6 +73,7 @@ function loadBackend(options) {
     migratePhonesToE164: (dryRun) => sandbox.migratePhonesToE164(dryRun),
     setPassword: (c, pwd) => sandbox.setPassword(c, pwd),
     reportDuplicatePhones: () => sandbox.reportDuplicatePhones(),
+    reportPromotions: () => sandbox.reportPromotions(),
     recalcCustomerTotals: (c) => sandbox.recalcCustomerTotals(c),
 
     /* 直接测内部函数 */

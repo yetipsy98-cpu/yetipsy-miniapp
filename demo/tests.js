@@ -859,6 +859,15 @@ suite.group('27 · Promotion 可见性诊断', (t) => {
   t.equal('员工端标成看不到', row.visibleToday, false);
   t.check('回传今天日期', /^\d{4}-\d{2}-\d{2}$/.test(admin.data.today), admin.data.today);
 
+  /* 诊断工具（Apps Script 编辑器里手动执行）：一眼看出为什么客户端没活动 */
+  const report = w.api.reportPromotions();
+  t.check('reportPromotions 回传文字', typeof report === 'string' && report.length > 50);
+  t.check('诊断里有今天日期', report.indexOf(admin.data.today) !== -1);
+  t.check('诊断里标出 EXPIRED 那一条', report.indexOf('EXPIRED') !== -1);
+  t.check('诊断里讲出会员端会显示几条', /会员端现在会显示 \d+ 条活动/.test(report),
+    (report.match(/会员端现在会显示 \d+ 条活动/) || [])[0]);
+  t.check('诊断里有修法提示', report.indexOf('改日期') !== -1 || report.indexOf('ACTIVE') !== -1);
+
   /* 改日期 → 立刻出现 */
   const future = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
   t.okIs(call(w, 'updatePromotion',
@@ -884,6 +893,8 @@ suite.group('27 · Promotion 可见性诊断', (t) => {
   const admin3 = call(w, 'getPromotionsAdmin', {}, w.ownerToken);
   const row3 = admin3.data.promotions.filter((p) => p.promotionId === soon.data.promotion.promotionId)[0];
   t.equal('未来的活动标成 NOT_STARTED', row3.visibilityReason, 'NOT_STARTED');
+  t.check('诊断也会标出 NOT_STARTED',
+    w.api.reportPromotions().indexOf('NOT_STARTED') !== -1);
 
   /* STAFF 不能建活动（要 Manager / Owner） */
   w.api.mutate((DB) => {

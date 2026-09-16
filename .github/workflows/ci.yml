@@ -40,6 +40,9 @@ jobs:
       - name: 条码 / 扫码抵扣 DOM 测试（jsdom 真的开页面 · 56 项）
         run: node demo/test-scan-ui.js
 
+      - name: 首页活动区块 DOM 测试（失败不能伪装成「暂无活动」· 12 项）
+        run: node demo/test-home-ui.js
+
       - name: 确认没有把 demo 资料档提交进来
         run: |
           if [ -f demo/demo-data.json ]; then

@@ -92,3 +92,63 @@ function updatePromotion(data, token) {
   audit(ctx.staff.staffId, 'STAFF', 'UPDATE_PROMOTION', 'PROMOTION', p.promotionId, old, p.status);
   return ok({ promotion: p });
 }
+
+/* =============================================================
+   诊断工具（在 Apps Script 编辑器里手动执行）
+   -------------------------------------------------------------
+   顾客说「客户端看不到活动」时跑这个，10 秒就知道原因：
+     · 表是空的        → 会员端当然没有活动
+     · 全部过期/未开始 → 改日期
+     · 全部 INACTIVE   → 切回 ACTIVE
+     · 有 VISIBLE 的   → 后端没问题，是前端/后端版本或连线的问题
+   ============================================================= */
+function reportPromotions() {
+  dbLoad();
+  try {
+    var today = todayKey();
+    var all = dbFilter('promotions', function () { return true; });
+    var lines = [];
+    var visible = 0;
+
+    lines.push('════ YETIPSY · Promotions 诊断 ════');
+    lines.push('今天（后端时区）= ' + today);
+    lines.push('Promotions 表共 ' + all.length + ' 条');
+
+    if (!all.length) {
+      lines.push('');
+      lines.push('→ 这张表是空的，所以会员端「暂无活动」是正常的。');
+      lines.push('  请在员工端 SETTINGS → Promotions 新增一条活动。');
+    }
+
+    all.forEach(function (p) {
+      var v = promotionVisibility(p, today);
+      if (v.visible) visible++;
+      lines.push('  ' + (v.visible ? '✓' : '✗') + ' ' + p.promotionId +
+        ' | ' + p.title +
+        ' | status=' + p.status +
+        ' | ' + (p.startDate || '(不限)') + ' → ' + (p.endDate || '(不限)') +
+        ' | ' + v.reason);
+    });
+
+    lines.push('');
+    lines.push('会员端现在会显示 ' + visible + ' 条活动。');
+    if (all.length && !visible) {
+      lines.push('→ 有活动但一条都看不到：');
+      lines.push('  EXPIRED      = 结束日早于今天 → 员工端「改日期」');
+      lines.push('  NOT_STARTED  = 开始日晚于今天 → 改开始日');
+      lines.push('  INACTIVE     = 已停用 → 员工端切回 ACTIVE');
+    }
+    if (visible) {
+      lines.push('→ 后端有活动可回传。若会员端还是看不到：');
+      lines.push('  1) 会员端首页现在会显示「活动载入失败 + 错误码」，把错误码记下来');
+      lines.push('  2) UNKNOWN_ACTION = 线上 Apps Script 还是旧版 → 重新贴 Code.gs 并重新部署');
+      lines.push('  3) 部署后记得在「管理部署」选新版本，旧 /exec 网址会继续跑旧代码');
+    }
+
+    var text = lines.join('\n');
+    Logger.log(text);
+    return text;
+  } finally {
+    dbRelease();
+  }
+}

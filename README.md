@@ -127,6 +127,7 @@ yetipsy-miniapp/
 │   ├── build-copypaste.js 产生复制贴上文件（手动部署用）
 │   ├── test-copypaste.js 复制贴上文件校验（跟 .gs 同步 + 可执行）60 项
 │   ├── test-scan-ui.js  条码 / 扫码抵扣 DOM 测试 56 项
+│   ├── test-home-ui.js  首页活动区块 DOM 测试 12 项
 │   └── harness.js       测试框架（零依赖）
 │
 ├── .github/workflows/
@@ -184,7 +185,7 @@ npm run demo          # = node demo/server.js
 ## 4. 测试
 
 ```bash
-npm test                 # 全部 7 套（875 项检查）
+npm test                 # 全部 8 套（894 项检查）
 
 npm run test:backend     # 直接执行 apps-script/*.gs（86 项）
 npm run test:api         # 完整 API 测试 25 组（196 项）
@@ -193,6 +194,7 @@ npm run test:e2e         # 起 demo server 走完整 HTTP 流程（52 项）
 npm run test:login       # 用 jsdom 打开 login.html 点按钮（27 项，需先 npm install）
 npm run test:copypaste   # APPS-SCRIPT-COPY-PASTE.md 跟 .gs 同步、且贴上去能跑（60 项）
 npm run test:scan        # 用 jsdom 跑会员条码页与员工扫码抵扣页（56 项）
+npm run test:home        # 首页活动：后端失败时不能伪装成「暂无活动」（12 项）
 npm run build:copypaste  # 改完 .gs 之后重新产生那份复制贴上文件
 ```
 
@@ -300,7 +302,7 @@ App 内 `PROFILE` 页面有完整隐私说明。
 4. Deploy → New deployment → Web app → 复制 URL
 5. `js/config.js` 贴上 API URL（`REQUIRE_BACKEND: true`）→ push → 开启 GitHub Pages
 
-> 之后改后端只要 `git push`：CI 会先跑 875 项测试，再用 `clasp` 部署，
+> 之后改后端只要 `git push`：CI 会先跑 894 项测试，再用 `clasp` 部署，
 > Web App URL 不变，前端不用动。设定方法见 `apps-script/README.md`。
 
 ---
@@ -356,6 +358,31 @@ Fast for staff. Fun for customers.
 没有相机或非 HTTPS 环境时，页面会提示改用「手动输入」，不会报错。
 
 ### 6.6 活动（Promotions）为什么客户端看不到
+
+会员端看不到活动有**两种完全不同的原因**，画面上必须分得出来：
+
+| 你看到 | 意思 | 怎么办 |
+|---|---|---|
+| 暂无活动 NO PROMOTION RIGHT NOW | 后端正常，只是没有符合今天日期的活动 | 员工端新增或改日期 |
+| **活动载入失败 + 错误码** | 后端请求失败 | 看错误码（见下） |
+
+> 以前这两种情况都画「暂无活动」，所以后端出问题（例如线上还是旧版、
+> 没有 `getPromotions` 这个 action → `UNKNOWN_ACTION`）时，
+> 顾客看到的是「没有活动」，根本无从发现故障。现在失败会显示错误码 + 重试钮。
+>
+> `UNKNOWN_ACTION` = 线上 Apps Script 还是旧版 → 重新贴 `Code.gs` 并重新部署
+> （**「管理部署」要选新版本**，旧 `/exec` 网址会继续跑旧代码）。
+
+要一眼看出原因，在 Apps Script 编辑器执行 **`reportPromotions()`**：
+
+```
+════ YETIPSY · Promotions 诊断 ════
+今天（后端时区）= 2026-09-16
+Promotions 表共 4 条
+  ✓ PRM0001 | Cocktail Night | status=ACTIVE | 2026-08-17 → 2026-11-15 | VISIBLE
+  ✗ PRM0003 | Expired Demo  | status=ACTIVE | 2020-01-01 → 2020-12-31 | EXPIRED
+会员端现在会显示 2 条活动。
+```
 
 `getPromotions` 只回传**今天在有效期内且 ACTIVE** 的活动。
 员工端 **SETTINGS → Promotions** 每一条都会直接标出原因：
