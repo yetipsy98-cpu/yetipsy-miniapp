@@ -64,15 +64,9 @@
           <input id="phoneInput" class="input big" type="tel" inputmode="numeric"
                  autocomplete="tel" placeholder="12 345 6789" maxlength="14">
         </div>
-        <div class="tiny muted-2 mt-8">支持马来西亚与新加坡号码 · Malaysia &amp; Singapore numbers</div>
-      </div>
-
-      <div class="field">
-        <div class="label">
-          <span>名字（可不填）</span>
-          <span class="l-en">NAME — OPTIONAL</span>
+        <div class="tiny muted-2 mt-8">
+          我们会先检查这个号码有没有注册过 · We’ll check if this number is registered
         </div>
-        <input id="nameInput" class="input" type="text" autocomplete="name" placeholder="Jason" maxlength="40">
       </div>
 
       <button id="continueBtn" class="btn btn-primary">
@@ -86,6 +80,11 @@
         <div class="step-title">这个号码还没注册</div>
         <div class="step-sub">CREATE YOUR ACCOUNT</div>
         <div class="step-phone" id="registerPhone"></div>
+      </div>
+
+      <div class="field">
+        <div class="label"><span>名字（可不填）</span><span class="l-en">NAME — OPTIONAL</span></div>
+        <input id="nameInput" class="input" type="text" autocomplete="name" placeholder="Jason" maxlength="40">
       </div>
 
       <div class="field">
@@ -141,6 +140,11 @@
         <div class="step-phone" id="setupPhone"></div>
       </div>
 
+      <div class="field">
+        <div class="label"><span>名字（可不填）</span><span class="l-en">NAME — OPTIONAL</span></div>
+        <input id="setupNameInput" class="input" type="text" autocomplete="name" placeholder="Jason" maxlength="40">
+      </div>
+
       <div class="pw-hint" style="margin-bottom:16px">
         我们找到你的会员资料了。为了安全，请先设定一组密码，之后用
         「手机号码 + 密码」登录。<br>
@@ -192,7 +196,6 @@
 
   var STEPS = ['phoneStep', 'registerStep', 'passwordStep', 'setupStep'];
   var phoneInput    = document.getElementById('phoneInput');
-  var nameInput     = document.getElementById('nameInput');
   var countryInput  = document.getElementById('countryInput');
   var passwordMin   = YETIPSY_CONFIG.PASSWORD_MIN_LENGTH || 8;
 
@@ -258,7 +261,7 @@
     STEPS.forEach(function (s) { document.getElementById(s).hidden = (s !== id); });
     var focusMap = {
       phoneStep: phoneInput,
-      registerStep: document.getElementById('newPwInput'),
+      registerStep: document.getElementById('nameInput'),
       passwordStep: document.getElementById('pwInput'),
       setupStep: document.getElementById('setupPwInput')
     };
@@ -327,7 +330,6 @@
       if (!res.success) { UI.toast(res.error.message, 'error'); return; }
 
       current.phone = res.data.phone;
-      current.name  = nameInput.value.trim();
       current.exists = res.data.exists;
       current.needsSetup = res.data.needsPasswordSetup;
       if (res.data.passwordMinLength) {
@@ -359,13 +361,14 @@
 
   function doRegister() {
     var a = document.getElementById('newPwInput').value;
+    var name = document.getElementById('nameInput').value.trim();
     var b = document.getElementById('newPw2Input').value;
     if (!passwordOk(a, b, document.getElementById('newPwInput'))) return;
 
     var btn = document.getElementById('registerBtn');
     UI.setLoading(btn, true, '注册中 SIGNING UP');
 
-    API.customer.register(current.phone, current.name, a).then(function (res) {
+    API.customer.register(current.phone, name, a).then(function (res) {
       UI.setLoading(btn, false);
       if (done(res)) return;
       /* 号码刚好在这期间被别人注册了 → 改成请他登录 */
@@ -420,7 +423,8 @@
     var btn = document.getElementById('setupBtn');
     UI.setLoading(btn, true, '设定中 SAVING');
 
-    API.customer.setFirstPassword(current.phone, a, current.name).then(function (res) {
+    API.customer.setFirstPassword(current.phone, a,
+      document.getElementById('setupNameInput').value.trim()).then(function (res) {
       UI.setLoading(btn, false);
       if (done(res)) return;
       if (res.error.code === 'PASSWORD_CHANGE_STAFF') {
@@ -446,9 +450,14 @@
     this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11);
   });
   phoneInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') nameInput.focus();
+    if (e.key === 'Enter') checkPhone();
   });
-  nameInput.addEventListener('keydown', function (e) { if (e.key === 'Enter') checkPhone(); });
+  document.getElementById('nameInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') doRegister();
+  });
+  document.getElementById('setupNameInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') doSetup();
+  });
 
   ['newPwInput', 'newPw2Input'].forEach(function (id) {
     document.getElementById(id).addEventListener('keydown', function (e) {

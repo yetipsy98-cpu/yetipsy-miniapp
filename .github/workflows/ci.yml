@@ -16,17 +16,23 @@ jobs:
         with:
           node-version: '20'
 
-      - name: 后端测试（直接执行 apps-script/*.gs）
+      - name: 安装测试用依赖（jsdom 给登录页 DOM 测试用）
+        run: npm install --no-audit --no-fund
+
+      - name: 后端测试（直接执行 apps-script/*.gs · 86 项）
         run: node demo/test-apps-script.js
 
-      - name: API 测试（25 组 / 163 项）
+      - name: API 测试（25 组 / 196 项）
         run: node demo/tests.js
 
-      - name: 前端健全性检查（页面 ↔ API ↔ 后端契约）
+      - name: 前端健全性检查（页面 ↔ API ↔ 后端契约 · 330 项）
         run: node demo/smoke-ui.js
 
-      - name: 端到端 HTTP 测试（demo server + apps-script）
+      - name: 端到端 HTTP 测试（demo server + apps-script · 52 项）
         run: node demo/e2e-ui.js
+
+      - name: 登录页 DOM 测试（jsdom 真的开 login.html 点按钮 · 27 项）
+        run: node demo/test-login-ui.js
 
       - name: 确认没有把 demo 资料档提交进来
         run: |

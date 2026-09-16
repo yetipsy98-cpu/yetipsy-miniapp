@@ -7,7 +7,7 @@
      · Wallet / Customer / Staff 任何敏感数据
    ============================================================= */
 
-var CACHE_NAME = 'yetipsy-v1.2.0';   // 改版就 +1，让旧快取自动清掉
+var CACHE_NAME = 'yetipsy-v1.3.0';   // 改版就 +1，让旧快取自动清掉（见 demo/smoke-ui.js 的版本对照）
 
 var SHELL = [
   './',
@@ -99,7 +99,31 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  // 5) 静态资源 → Stale-while-revalidate
+  // 5) 程式码（.js / .css / .html）→ Network first
+  //    ★ 以前这里是 cache-first，结果改版后浏览器还在跑旧的 js/api.js，
+  //      新页面呼叫 API.customer.checkPhone 就变成「点了没反应」。
+  //      程式码一律先走网络，只有断线才用快取。
+  var isCode = /\.(js|css|html)(\?|$)/i.test(url.pathname) ||
+    url.pathname === '/' || url.pathname === '';
+
+  if (isCode) {
+    event.respondWith(
+      fetch(req).then(function (res) {
+        if (res && res.status === 200 && res.type === 'basic') {
+          var copy = res.clone();
+          caches.open(CACHE_NAME).then(function (cache) { cache.put(req, copy); });
+        }
+        return res;
+      }).catch(function () {
+        return caches.match(req).then(function (hit) {
+          return hit || caches.match('./index.html');
+        });
+      })
+    );
+    return;
+  }
+
+  // 6) 其他静态资源（图标 / manifest）→ Stale-while-revalidate
   event.respondWith(
     caches.match(req).then(function (hit) {
       var network = fetch(req).then(function (res) {
