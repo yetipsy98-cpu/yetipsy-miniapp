@@ -14,7 +14,7 @@ var YETIPSY_CONFIG = {
      1) API 地址
      部署 Google Apps Script 之后，把 Web App URL 粘贴到这里
      例如：
-     API_URL: 'https://script.google.com/macros/s/AKfycb..../exec'
+     API_URL: 'https://script.google.com/macros/s/AKfycbw2WXwgeHls1AvyAl_dcNW0q2Fd4KOsurqPXky28MqDo6wxMPuVICAhyfr-xex34qgSuw/exec'
      ---------------------------------------------------------- */
   API_URL: '',
 
