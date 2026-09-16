@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0D0D0D">
+<title>YETIPSY — 会员条码</title>
+<link rel="manifest" href="manifest.json">
+<link rel="stylesheet" href="css/app.css">
+<style>
+/* 条码要白底黑条，扫描器才认得；这一页刻意反白 */
+.code-stage {
+  min-height: 100vh; padding: 18px 16px 32px;
+  display: flex; flex-direction: column; align-items: center;
+}
+.code-card {
+  width: 100%; max-width: 420px; background: #FFFFFF; color: #0D0D0D;
+  border-radius: 18px; padding: 20px 16px 16px; text-align: center;
+  box-shadow: 0 12px 40px rgba(0,0,0,.5);
+}
+.code-name { font-size: 17px; font-weight: 700; letter-spacing: .4px; }
+.code-id { font-size: 11px; letter-spacing: 2.4px; color: #6B6B6B; margin-top: 4px; }
+.code-bar { margin: 14px 0 6px; }
+.code-bar svg, .code-bar canvas { width: 100%; height: 96px; display: block; }
+.code-qr { margin-top: 12px; }
+.code-qr canvas, .code-qr img { width: 118px; height: 118px; image-rendering: pixelated; }
+.code-meta { font-size: 10.5px; letter-spacing: 1.2px; color: #6B6B6B; margin-top: 10px; }
+.code-timer {
+  display: inline-block; margin-top: 12px; padding: 5px 14px;
+  border: 1px solid #D8D2C4; border-radius: 999px;
+  font-size: 11px; letter-spacing: 1.6px; color: #8A6B2F;
+}
+.code-tip {
+  max-width: 420px; margin-top: 16px; font-size: 11.5px; line-height: 1.8;
+  color: var(--muted-2); text-align: center;
+}
+.code-actions { margin-top: 14px; display: flex; gap: 10px; width: 100%; max-width: 420px; }
+.code-actions .btn { flex: 1; }
+</style>
+</head>
+<body>
+
+<div class="code-stage">
+
+  <div class="code-card">
+    <div class="code-name" id="memberName">—</div>
+    <div class="code-id" id="memberId">—</div>
+
+    <div class="code-bar" id="barcodeBox">
+      <svg id="barcode"></svg>
+    </div>
+
+    <div class="code-qr" id="qrBox"></div>
+
+    <div class="code-meta" id="memberMeta">—</div>
+    <div class="code-timer" id="codeTimer">—</div>
+  </div>
+
+  <div class="code-tip">
+    把这一页出示给店员扫描，用来确认是你本人，然后才能抵扣钱包。<br>
+    条码每 <span id="ttlText">60</span> 秒自动更换，旧码扫过就失效。<br>
+    <span class="muted-2">Show this screen to our staff to verify it’s really you
+    before any wallet redemption.</span>
+  </div>
+
+  <div class="code-actions">
+    <button id="refreshBtn" class="btn btn-secondary">
+      <span>换一条<span class="btn-sub-label">REFRESH</span></span>
+    </button>
+    <a href="wallet.html" class="btn btn-primary">
+      <span>返回钱包<span class="btn-sub-label">BACK</span></span>
+    </a>
+  </div>
+
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/vendor/jsbarcode.min.js"></script>
+<script src="js/vendor/qrcode.js"></script>
+<script src="js/code.js"></script>
+
+<script>
+/* PWA：註冊 Service Worker（只 Cache App Shell，不 Cache 任何敏感资料） */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('service-worker.js').catch(function () {});
+  });
+}
+</script>
+</body>
+</html>

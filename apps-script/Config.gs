@@ -228,6 +228,11 @@ function defaultSettings() {
     CURRENCY:                 'MYR',
     TIMEZONE:                 'Asia/Kuala_Lumpur',
 
+    /* 会员条码（员工扫码验证身分后才允许抵扣） */
+    MEMBER_CODE_SECONDS: '60',            // 会员端条码多久换一次（秒）
+    MEMBER_VERIFY_SECONDS: '180',         // 员工扫到后，几分钟内必须完成抵扣
+    REQUIRE_MEMBER_CODE_SCAN: 'TRUE',     // TRUE = 抵扣前必须扫会员条码
+
     /* 会员身份（手机号码 + 密码登录，不使用 WhatsApp / SMS OTP） */
     DEFAULT_COUNTRY_CODE:     '60',        // 60 = Malaysia, 65 = Singapore
     ALLOWED_COUNTRY_CODES:    '60,65',

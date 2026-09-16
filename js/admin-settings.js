@@ -70,17 +70,22 @@ var ADMIN_SETTINGS = (function () {
     }
     box.innerHTML = '<div class="a-list">' + promotions.map(function (p) {
       var active = (p.status === 'ACTIVE');
+      var badge  = visibilityBadge(p);
       return '<div class="a-item">' +
         '<div class="a-main">' +
           '<div class="a-title">' + UI.esc(p.title) + '</div>' +
-          '<div class="a-sub">' + UI.esc(p.subtitle || '') +
-            (p.startDate || p.endDate ? ' · ' + UI.esc(p.startDate || '') + ' → ' + UI.esc(p.endDate || '') : '') +
+          '<div class="a-sub">' + UI.esc(p.subtitle || '') + '</div>' +
+          '<div class="a-sub" style="margin-top:4px">' +
+            '📅 ' + UI.esc(p.startDate || '(不限)') + ' → ' + UI.esc(p.endDate || '(不限)') +
           '</div>' +
+          '<div class="a-sub" style="margin-top:4px;color:' + badge.color + '">' +
+            badge.text + '</div>' +
         '</div>' +
-        '<div class="a-right">' +
+        '<div class="a-right" style="display:flex;flex-direction:column;gap:6px;align-items:flex-end">' +
           '<button class="chip ' + (active ? 'ok' : '') + '" data-toggle="' + UI.esc(p.promotionId) + '" ' +
             'data-status="' + (active ? 'INACTIVE' : 'ACTIVE') + '" style="cursor:pointer">' +
             UI.esc(p.status) + '</button>' +
+          '<button class="chip" data-edit="' + UI.esc(p.promotionId) + '" style="cursor:pointer">改日期</button>' +
         '</div>' +
       '</div>';
     }).join('') + '</div>';
@@ -96,6 +101,64 @@ var ADMIN_SETTINGS = (function () {
         });
       });
     });
+
+    Array.prototype.forEach.call(box.querySelectorAll('[data-edit]'), function (btn) {
+      btn.addEventListener('click', function () {
+        editPromotion(btn.getAttribute('data-edit'));
+      });
+    });
+  }
+
+  /**
+   * 会员端看不看得到这条活动？后端已经算好 visibilityReason，
+   * 这里只是把它翻译成人话 —— 「为什么客户端没有活动」九成是这里的答案。
+   */
+  function visibilityBadge(p) {
+    if (p.visibilityReason === 'EXPIRED') {
+      return { color: '#E2696B', text: '✗ 客户端看不到：已过期（结束日 ' + UI.esc(p.endDate) + '）' };
+    }
+    if (p.visibilityReason === 'NOT_STARTED') {
+      return { color: '#E5B769', text: '⏳ 客户端看不到：还没开始（' + UI.esc(p.startDate) + '）' };
+    }
+    if (p.visibilityReason === 'INACTIVE') {
+      return { color: '#8A8A8A', text: '○ 客户端看不到：已停用 INACTIVE' };
+    }
+    return { color: '#5FBF7F', text: '✓ 客户端看得到' };
+  }
+
+  /** 改日期 / 标题 —— 过期的示范活动就是靠这个救回来 */
+  function editPromotion(promotionId) {
+    var p = null;
+    for (var i = 0; i < promotions.length; i++) {
+      if (promotions[i].promotionId === promotionId) { p = promotions[i]; break; }
+    }
+    if (!p) return;
+
+    var start = window.prompt(
+      '开始日期 START DATE（YYYY-MM-DD，留空 = 不限）\n' +
+      '目前是：' + (p.startDate || '(不限)'), p.startDate || '');
+    if (start === null) return;
+
+    var end = window.prompt(
+      '结束日期 END DATE（YYYY-MM-DD，留空 = 不限）\n' +
+      '目前是：' + (p.endDate || '(不限)') + '\n' +
+      '提示：今天是 ' + todayText() + '，结束日必须在这天之后才会出现在客户端。',
+      p.endDate || '');
+    if (end === null) return;
+
+    API.admin.updatePromotion(promotionId, { startDate: start, endDate: end })
+      .then(function (res) {
+        if (!res.success) { ADMIN.handleError(res.error); return; }
+        UI.toast('已更新 / Updated', 'success');
+        load();
+      });
+  }
+
+  function todayText() {
+    var d = new Date();
+    var m = ('0' + (d.getMonth() + 1)).slice(-2);
+    var day = ('0' + d.getDate()).slice(-2);
+    return d.getFullYear() + '-' + m + '-' + day;
   }
 
   function addPromotion() {

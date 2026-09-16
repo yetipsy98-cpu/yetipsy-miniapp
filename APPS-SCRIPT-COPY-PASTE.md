@@ -24,21 +24,21 @@
 
 | 顺序 | Apps Script 里的档案名 | 行数 | 内容 |
 |---|---|---|---|
-| 1 | `Config` | 302 | 所有设定与 12 张表的栏位定义（要改规则就改这里） |
-| 2 | `Utils` | 220 | 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 |
+| 1 | `Config` | 307 | 所有设定与 12 张表的栏位定义（要改规则就改这里） |
+| 2 | `Utils` | 225 | 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 |
 | 3 | `Database` | 567 | setupDatabase()、补栏位、防重复注册工具、dedupeCustomers() |
 | 4 | `Security` | 108 | Session Token、权限（STAFF/MANAGER/OWNER）、Rate Limit、登入锁定 |
 | 5 | `Audit` | 18 | Audit Log 写入与查询（最多保留 5000 条） |
 | 6 | `Points` | 83 | 积分累计 / 等级门槛计算 |
 | 7 | `Rewards` | 70 | 奖励产生与状态流转 |
-| 8 | `Wallet` | 180 | 钱包储值 / 抵扣 / 上限（金额一律 sen） |
-| 9 | `Customers` | 488 | ★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料 |
+| 8 | `Wallet` | 187 | 钱包储值 / 抵扣 / 上限（金额一律 sen） |
+| 9 | `Customers` | 595 | ★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料 |
 | 10 | `Orders` | 134 | 消费纪录与统计 |
 | 11 | `Claims` | 395 | QR / 4 位 Code 认领（只存 token 的 hash） |
-| 12 | `Promotions` | 72 | 优惠规则 |
+| 12 | `Promotions` | 94 | 优惠规则 |
 | 13 | `Admin` | 209 | 员工端：Dashboard、会员查询、手动调整、重设会员密码、设置 |
 | 14 | `Auth` | 89 | ping / getPublicSettings / staffLogin / staffLogout |
-| 15 | `Code` | 190 | ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 |
+| 15 | `Code` | 192 | ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 |
 
 > ⚠️ **15 个档案全部贴完再执行**，少一个会报 `xxx is not defined`。
 
@@ -47,7 +47,7 @@
 ## 1. Config.gs
 
 > Apps Script 里的档案名称：**`Config`**（不要打 .gs）
-> 所有设定与 12 张表的栏位定义（要改规则就改这里） · 302 行 · SHA-256 `879dc0738ad2a615`
+> 所有设定与 12 张表的栏位定义（要改规则就改这里） · 307 行 · SHA-256 `6480335150ce134b`
 
 ```javascript
 /* =============================================================
@@ -280,6 +280,11 @@ function defaultSettings() {
     CURRENCY:                 'MYR',
     TIMEZONE:                 'Asia/Kuala_Lumpur',
 
+    /* 会员条码（员工扫码验证身分后才允许抵扣） */
+    MEMBER_CODE_SECONDS: '60',            // 会员端条码多久换一次（秒）
+    MEMBER_VERIFY_SECONDS: '180',         // 员工扫到后，几分钟内必须完成抵扣
+    REQUIRE_MEMBER_CODE_SCAN: 'TRUE',     // TRUE = 抵扣前必须扫会员条码
+
     /* 会员身份（手机号码 + 密码登录，不使用 WhatsApp / SMS OTP） */
     DEFAULT_COUNTRY_CODE:     '60',        // 60 = Malaysia, 65 = Singapore
     ALLOWED_COUNTRY_CODES:    '60,65',
@@ -359,7 +364,7 @@ var ORDER_SOURCES = ['FOODCOURT', 'DIRECT', 'YETIPSY_APP', 'MANUAL', 'FOODCOURT_
 ## 2. Utils.gs
 
 > Apps Script 里的档案名称：**`Utils`**（不要打 .gs）
-> 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 · 220 行 · SHA-256 `b11b215333cd457a`
+> 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 · 225 行 · SHA-256 `f49900a67d2b595b`
 
 ```javascript
 /* =============================================================
@@ -556,6 +561,11 @@ var ERR = {
   PASSWORD_REQUIRED:       ['PASSWORD_REQUIRED', 'Password required. / 请输入密码。'],
   PASSWORD_TOO_SHORT:      ['PASSWORD_TOO_SHORT', 'Password is too short. / 密码太短。'],
   PASSWORD_SETUP_REQUIRED: ['PASSWORD_SETUP_REQUIRED', 'Please set your password first. / 请先设定密码。'],
+  MEMBER_CODE_INVALID:     ['MEMBER_CODE_INVALID', 'This member code is not valid. / 这个会员条码无效。'],
+  MEMBER_CODE_EXPIRED:     ['MEMBER_CODE_EXPIRED', 'Member code expired, please refresh. / 会员条码已过期，请顾客刷新后重扫。'],
+  MEMBER_VERIFY_REQUIRED:  ['MEMBER_VERIFY_REQUIRED', 'Scan the customer barcode first. / 请先扫描顾客的会员条码。'],
+  MEMBER_VERIFY_EXPIRED:   ['MEMBER_VERIFY_EXPIRED', 'Verification expired, scan again. / 验证已过期，请重新扫描顾客条码。'],
+  MEMBER_VERIFY_MISMATCH:  ['MEMBER_VERIFY_MISMATCH', 'Verification is for another customer or staff. / 这个验证属于别的顾客或员工。'],
   PASSWORD_CHANGE_STAFF:   ['PASSWORD_CHANGE_STAFF', 'Please ask our staff to reset your password. / 请联系店员重设密码。'],
   INVALID_AMOUNT:          ['INVALID_AMOUNT', 'Invalid amount. / 金额无效。'],
   INVALID_INPUT:           ['INVALID_INPUT', 'Invalid input. / 输入无效。'],
@@ -1485,7 +1495,7 @@ function generateReward(customer, order, amountSen) {
 ## 8. Wallet.gs
 
 > Apps Script 里的档案名称：**`Wallet`**（不要打 .gs）
-> 钱包储值 / 抵扣 / 上限（金额一律 sen） · 180 行 · SHA-256 `aa13c4fabbe0a7fd`
+> 钱包储值 / 抵扣 / 上限（金额一律 sen） · 187 行 · SHA-256 `8f4a382a3cb79a93`
 
 ```javascript
 /* =============================================================
@@ -1606,6 +1616,11 @@ function redeemWallet(data, token) {
     return err('DUPLICATE_EXTERNAL_ORDER');
   }
 
+  /* ★ 必须扫过这位顾客的会员条码（REQUIRE_MEMBER_CODE_SCAN = TRUE 时）
+     放在所有金额检查之后，避免验证被白白消耗掉 */
+  var verifyError = peekMemberVerify(data.verifyToken, c.customerId, ctx.staff.staffId);
+  if (verifyError) return verifyError;
+
   var order = createMemberTransaction({
     source: source,
     externalOrderId: externalOrderId,
@@ -1635,6 +1650,8 @@ function redeemWallet(data, token) {
   issuePoints(c, order, points, 'Purchase with wallet redemption', ctx.staff.staffId, 'STAFF', 'EARN');
 
   var reward = generateReward(c, order, bill);
+
+  consumeMemberVerify(data.verifyToken);   // 交易成立，这次验证用掉了
 
   return ok({
     orderId: order.orderId,
@@ -1675,7 +1692,7 @@ function manualWalletAdjustment(data, token) {
 ## 9. Customers.gs
 
 > Apps Script 里的档案名称：**`Customers`**（不要打 .gs）
-> ★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料 · 488 行 · SHA-256 `5ce70aedc330eb44`
+> ★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料 · 595 行 · SHA-256 `5cb51d3fef07f4bd`
 
 ```javascript
 /* =============================================================
@@ -2165,6 +2182,113 @@ function getCustomerHistory(data, token) {
     .slice(0, 30)
     .map(orderSummary);
   return ok({ orders: list });
+}
+
+/* =============================================================
+   会员条码（Member Code）
+   -------------------------------------------------------------
+   顾客在手机上出示条码 → 员工扫 → 确认是本人 → 才允许抵扣。
+
+   安全设计：
+   · 条码里只有 CustomerID + 一次性随机码，没有电话、没有密码
+   · 随机码的 SHA-256 存在 CacheService，MEMBER_CODE_SECONDS 秒后失效
+   · 扫过就作废（一次性），画面每 N 秒自动换一条
+   · 员工扫到后拿到 verifyToken（MEMBER_VERIFY_SECONDS 秒内有效），
+     redeemWallet 必须带回这个 token，且只能用于同一个顾客 + 同一个员工
+   ============================================================= */
+
+/** 拆解会员条码内容：'YT1|YT000001|<32 hex>' */
+function parseMemberCode(payload) {
+  var raw = String(payload || '').trim();
+  var parts = raw.split('|');
+  if (parts.length !== 3) return null;
+  if (parts[0] !== 'YT1') return null;
+  var customerId = String(parts[1]).trim().toUpperCase();
+  var secret = String(parts[2]).trim();
+  if (!/^[A-Z]{2,4}\d{4,10}$/.test(customerId)) return null;
+  if (!/^[a-f0-9]{16,128}$/i.test(secret)) return null;
+  return { customerId: customerId, secret: secret };
+}
+
+/** 会员端：取得条码内容（顾客 session） */
+function getMemberCode(data, token) {
+  var ctx = requireCustomer(token);
+  if (ctx.error) return ctx.error;
+  var c = ctx.customer;
+
+  var seconds = numSetting('MEMBER_CODE_SECONDS', 60);
+  var secret  = randomToken(16);                       // 32 hex
+  rateLimitSet('membercode:' + sha256(secret),
+    { customerId: c.customerId, at: Date.now() }, seconds);
+
+  return ok({
+    payload: 'YT1|' + c.customerId + '|' + secret,
+    format: 'CODE128',
+    seconds: seconds,
+    customerId: c.customerId,
+    displayName: maskName(c.name),
+    membershipTier: c.membershipTier,
+    currentPoints: Number(c.currentPoints) || 0,
+    walletBalance: Number(c.walletBalance) || 0
+  });
+}
+
+/** 员工端：扫到条码 → 验证 → 回传顾客资料 + verifyToken */
+function scanMemberCode(data, token) {
+  var ctx = requireStaff(token);
+  if (ctx.error) return ctx.error;
+
+  var parsed = parseMemberCode(data.payload || data.code);
+  if (!parsed) return err('MEMBER_CODE_INVALID');
+
+  var key = 'membercode:' + sha256(parsed.secret);
+  var rec = rateLimitGet(key);
+  if (!rec) return err('MEMBER_CODE_EXPIRED');
+  rateLimitClear(key);                                  // 一次性：扫过即作废
+
+  var c = dbById('customers', parsed.customerId);
+  if (!c || c.status !== 'ACTIVE') return err('CUSTOMER_NOT_FOUND');
+
+  var verifySeconds = numSetting('MEMBER_VERIFY_SECONDS', 180);
+  var verifyToken   = randomToken(16);
+  rateLimitSet('memberverify:' + sha256(verifyToken), {
+    customerId: c.customerId,
+    staffId: ctx.staff.staffId,
+    at: Date.now()
+  }, verifySeconds);
+
+  audit(ctx.staff.staffId, 'STAFF', 'SCAN_MEMBER_CODE', 'CUSTOMER',
+    c.customerId, '', maskName(c.name));
+
+  return ok({
+    customer: publicCustomer(c),
+    membership: membershipInfo(c),
+    verifyToken: verifyToken,
+    verifySeconds: verifySeconds
+  });
+}
+
+/**
+ * 检查 verifyToken（不消耗）。回传 null = 通过；否则回传错误回应。
+ * @param {string} verifyToken
+ * @param {string} customerId
+ * @param {string} staffId
+ */
+function peekMemberVerify(verifyToken, customerId, staffId) {
+  if (!boolSetting('REQUIRE_MEMBER_CODE_SCAN', true)) return null;
+  if (!verifyToken) return err('MEMBER_VERIFY_REQUIRED');
+
+  var rec = rateLimitGet('memberverify:' + sha256(String(verifyToken)));
+  if (!rec) return err('MEMBER_VERIFY_EXPIRED');
+  if (rec.customerId !== customerId) return err('MEMBER_VERIFY_MISMATCH');
+  if (staffId && rec.staffId && rec.staffId !== staffId) return err('MEMBER_VERIFY_MISMATCH');
+  return null;
+}
+
+/** 真的用掉 verifyToken（在交易确定会成功之后才呼叫） */
+function consumeMemberVerify(verifyToken) {
+  if (!verifyToken) return;
+  rateLimitClear('memberverify:' + sha256(String(verifyToken)));
 }
 ```
 
@@ -2722,7 +2846,7 @@ function claimReward(data, token) {
 ## 12. Promotions.gs
 
 > Apps Script 里的档案名称：**`Promotions`**（不要打 .gs）
-> 优惠规则 · 72 行 · SHA-256 `5034d8b7f55edcfb`
+> 优惠规则 · 94 行 · SHA-256 `9e1bc2d9d9c4ab15`
 
 ```javascript
 /* =============================================================
@@ -2748,11 +2872,33 @@ function getPromotions() {
   return ok({ promotions: list });
 }
 
+/**
+ * 这条活动今天会不会出现在会员端？
+ * 员工端最常问「为什么客户端看不到」，所以直接把原因算出来回传。
+ */
+function promotionVisibility(p, today) {
+  if (p.status !== 'ACTIVE') return { visible: false, reason: 'INACTIVE' };
+  if (p.startDate && p.startDate > today) return { visible: false, reason: 'NOT_STARTED' };
+  if (p.endDate && p.endDate < today)     return { visible: false, reason: 'EXPIRED' };
+  return { visible: true, reason: 'VISIBLE' };
+}
+
 function getPromotionsAdmin(data, token) {
   var ctx = requireStaff(token, ['MANAGER', 'OWNER']);
   if (ctx.error) return ctx.error;
-  return ok({ promotions: dbRecent('promotions') });
+  var today = todayKey();
+  var list = dbRecent('promotions').map(function (p) {
+    var v = promotionVisibility(p, today);
+    p.visibleToday = v.visible;
+    p.visibilityReason = v.reason;
+    return p;
+  });
+  return ok({ promotions: list, today: today });
 }
+
+/* 注意：没有「删除活动」。
+   DB 层（dbFlush）只新增与更新，删掉一列会让下面所有列的行号错位。
+   不想让会员看到就切成 INACTIVE，或把日期改到今天之后。 */
 
 function createPromotion(data, token) {
   var ctx = requireStaff(token, ['MANAGER', 'OWNER']);
@@ -3122,7 +3268,7 @@ function getStaffSession(data, token) {
 ## 15. Code.gs
 
 > Apps Script 里的档案名称：**`Code`**（不要打 .gs）
-> ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 · 190 行 · SHA-256 `1ade1f1cf422135d`
+> ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 · 192 行 · SHA-256 `d92c2ea2fca3e814`
 
 ```javascript
 /* =============================================================
@@ -3160,6 +3306,8 @@ function getHandlers() {
     customerLogin: customerLogin,
     customerSetFirstPassword: customerSetFirstPassword,
     changeCustomerPassword: changeCustomerPassword,
+    getMemberCode: getMemberCode,
+    scanMemberCode: scanMemberCode,
     customerLogout: customerLogout,
     getProfile: getProfile,
     updateProfile: updateProfile,

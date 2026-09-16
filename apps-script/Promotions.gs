@@ -21,11 +21,33 @@ function getPromotions() {
   return ok({ promotions: list });
 }
 
+/**
+ * 这条活动今天会不会出现在会员端？
+ * 员工端最常问「为什么客户端看不到」，所以直接把原因算出来回传。
+ */
+function promotionVisibility(p, today) {
+  if (p.status !== 'ACTIVE') return { visible: false, reason: 'INACTIVE' };
+  if (p.startDate && p.startDate > today) return { visible: false, reason: 'NOT_STARTED' };
+  if (p.endDate && p.endDate < today)     return { visible: false, reason: 'EXPIRED' };
+  return { visible: true, reason: 'VISIBLE' };
+}
+
 function getPromotionsAdmin(data, token) {
   var ctx = requireStaff(token, ['MANAGER', 'OWNER']);
   if (ctx.error) return ctx.error;
-  return ok({ promotions: dbRecent('promotions') });
+  var today = todayKey();
+  var list = dbRecent('promotions').map(function (p) {
+    var v = promotionVisibility(p, today);
+    p.visibleToday = v.visible;
+    p.visibilityReason = v.reason;
+    return p;
+  });
+  return ok({ promotions: list, today: today });
 }
+
+/* 注意：没有「删除活动」。
+   DB 层（dbFlush）只新增与更新，删掉一列会让下面所有列的行号错位。
+   不想让会员看到就切成 INACTIVE，或把日期改到今天之后。 */
 
 function createPromotion(data, token) {
   var ctx = requireStaff(token, ['MANAGER', 'OWNER']);

@@ -126,6 +126,7 @@ yetipsy-miniapp/
 │   ├── test-login-ui.js 登录页 DOM 测试（jsdom 真的开页面点按钮）27 项
 │   ├── build-copypaste.js 产生复制贴上文件（手动部署用）
 │   ├── test-copypaste.js 复制贴上文件校验（跟 .gs 同步 + 可执行）60 项
+│   ├── test-scan-ui.js  条码 / 扫码抵扣 DOM 测试 56 项
 │   └── harness.js       测试框架（零依赖）
 │
 ├── .github/workflows/
@@ -183,7 +184,7 @@ npm run demo          # = node demo/server.js
 ## 4. 测试
 
 ```bash
-npm test                 # 全部 6 套（770 项检查）
+npm test                 # 全部 7 套（875 项检查）
 
 npm run test:backend     # 直接执行 apps-script/*.gs（86 项）
 npm run test:api         # 完整 API 测试 25 组（196 项）
@@ -191,6 +192,7 @@ npm run test:ui          # 前端 ↔ API ↔ 后端契约（349 项）
 npm run test:e2e         # 起 demo server 走完整 HTTP 流程（52 项）
 npm run test:login       # 用 jsdom 打开 login.html 点按钮（27 项，需先 npm install）
 npm run test:copypaste   # APPS-SCRIPT-COPY-PASTE.md 跟 .gs 同步、且贴上去能跑（60 项）
+npm run test:scan        # 用 jsdom 跑会员条码页与员工扫码抵扣页（56 项）
 npm run build:copypaste  # 改完 .gs 之后重新产生那份复制贴上文件
 ```
 
@@ -298,7 +300,7 @@ App 内 `PROFILE` 页面有完整隐私说明。
 4. Deploy → New deployment → Web app → 复制 URL
 5. `js/config.js` 贴上 API URL（`REQUIRE_BACKEND: true`）→ push → 开启 GitHub Pages
 
-> 之后改后端只要 `git push`：CI 会先跑 770 项测试，再用 `clasp` 部署，
+> 之后改后端只要 `git push`：CI 会先跑 875 项测试，再用 `clasp` 部署，
 > Web App URL 不变，前端不用动。设定方法见 `apps-script/README.md`。
 
 ---
@@ -325,6 +327,49 @@ YETIPSY MINI APP 1.1 · FOODCOURT EDITION
 Simple before complex. Secure before fancy.
 Fast for staff. Fun for customers.
 ```
+
+### 6.5 会员条码 → 员工扫码 → 才能抵扣钱包
+
+以前员工端抵扣只要填 CustomerID，没有任何身分确认。现在的流程：
+
+```
+顾客：钱包页 / 我的 → 「出示会员条码」 → code.html
+        （Code128 一维条码 + 同内容的 QR，每 60 秒自动换一条）
+              ↓  店员扫
+员工：admin/redeem.html → ① 扫码 → ② 确认是这位顾客
+        → ③ 输入账单、计算可抵扣、确认抵扣
+```
+
+安全设计：
+
+| 机制 | 说明 |
+|---|---|
+| 条码内容 | `YT1\|CustomerID\|随机码`，**不含电话、不含密码** |
+| 时效 | 随机码的 SHA-256 存在 CacheService，`MEMBER_CODE_SECONDS`（预设 60 秒）后失效 |
+| 一次性 | 扫过就作废，重扫回 `MEMBER_CODE_EXPIRED` |
+| verifyToken | 员工扫到后取得，`MEMBER_VERIFY_SECONDS`（预设 180 秒）内有效 |
+| 绑定 | verifyToken 只能用于「扫到的那位顾客 + 扫码的那位员工」，否则 `MEMBER_VERIFY_MISMATCH` |
+| 强制 | `REQUIRE_MEMBER_CODE_SCAN = TRUE` 时，`redeemWallet` 没带 verifyToken 直接回 `MEMBER_VERIFY_REQUIRED` |
+
+扫描方式：`BarcodeDetector`（Chrome / Android）直接读一维条码；
+不支援的浏览器（iOS Safari）自动退回 jsQR 读条码下方那个 QR。
+没有相机或非 HTTPS 环境时，页面会提示改用「手动输入」，不会报错。
+
+### 6.6 活动（Promotions）为什么客户端看不到
+
+`getPromotions` 只回传**今天在有效期内且 ACTIVE** 的活动。
+员工端 **SETTINGS → Promotions** 每一条都会直接标出原因：
+
+| 标记 | 意思 | 怎么修 |
+|---|---|---|
+| ✓ 客户端看得到 | 正常 | — |
+| ✗ 已过期 | `endDate` 早于今天 | 按「改日期」把结束日改到今天之后 |
+| ⏳ 还没开始 | `startDate` 晚于今天 | 改开始日，或等它开始 |
+| ○ 已停用 | `status = INACTIVE` | 按状态钮切回 ACTIVE |
+
+> `setupDatabase()` 种的示范活动日期是**相对第一次执行那天**算的
+> （-30 天 → +60 天），所以放久了会过期。用「改日期」救回来，
+> 或切 INACTIVE 把它收起来。
 
 ### 6.4 会员登录：手机号码 + 密码（不使用 WhatsApp / SMS OTP）
 

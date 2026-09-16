@@ -104,9 +104,11 @@ YETIPSY_CONFIG.IS_MISCONFIGURED = function () {
   return YETIPSY_CONFIG.IS_DEMO() && YETIPSY_CONFIG.REQUIRE_BACKEND !== false;
 };
 
-/* 实际请求地址 */
+/* 实际请求地址
+   DEMO 模式一定要用根目录的 '/api'：员工端页面在 /admin/ 底下，
+   写成相对的 'api' 会被解析成 /admin/api，整个员工端就连不到后端。 */
 YETIPSY_CONFIG.getApiUrl = function () {
-  return YETIPSY_CONFIG.IS_DEMO() ? 'api' : YETIPSY_CONFIG.API_URL;
+  return YETIPSY_CONFIG.IS_DEMO() ? '/api' : YETIPSY_CONFIG.API_URL;
 };
 
 /* 生成 Claim QR 内容（完整 URL）

@@ -171,12 +171,29 @@ async function waitForServer(timeoutMs) {
       t.okIs(calc, '计算抵扣');
       t.equal('上限 = 20% = RM12.00', calc.data.capAmount, 1200);
 
+      /* 本版规则：抵扣前员工必须扫过顾客的会员条码 */
+      const memberCode = await post('getMemberCode', {}, global.__customerToken);
+      t.okIs(memberCode, '顾客出示会员条码');
+      t.check('条码内容格式正确',
+        /^YT1\|YT\d+\|[a-f0-9]{32}$/.test(memberCode.data.payload), memberCode.data.payload);
+
+      const noScan = await post('redeemWallet', {
+        customerId: global.__customerId, billAmount: 6000, walletAmount: 1000
+      }, global.__staffToken);
+      t.errorIs(noScan, 'MEMBER_VERIFY_REQUIRED', '没扫码不能抵扣 ★');
+
+      const scanned = await post('scanMemberCode',
+        { payload: memberCode.data.payload }, global.__staffToken);
+      t.okIs(scanned, '员工扫码确认身分 ★');
+      t.equal('扫到同一位顾客', scanned.data.customer.customerId, global.__customerId);
+
       const redeem = await post('redeemWallet', {
         customerId: global.__customerId,
         billAmount: 6000,
         walletAmount: calc.data.usableAmount,
         source: 'FOODCOURT',
-        externalOrderId: 'FC9001'
+        externalOrderId: 'FC9001',
+        verifyToken: scanned.data.verifyToken
       }, global.__staffToken);
       t.okIs(redeem, '员工确认抵扣');
       t.equal('顾客实付 RM48.00', redeem.data.customerPays, 4800);

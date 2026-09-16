@@ -13,7 +13,7 @@ const { Suite } = require('./harness');
 const { loadBackend } = require('./load-backend');
 
 const OWNER = { username: 'owner', password: 'owner-pass-123' };
-const suite = new Suite('YETIPSY · API 测试（25 组 + 防重复注册 + 密码登录）');
+const suite = new Suite('YETIPSY · API 测试（27 组 + 防重复注册 + 密码登录 + 会员条码）');
 
 /* -------------------------------------------------------------
    工具
@@ -416,10 +416,16 @@ suite.group('17 · 钱包抵扣执行', (t) => {
   const before = call(w, 'getWallet', {}, mt).data.balance;
   t.equal('余额 RM50.00', before, 5000);
 
+  /* 本版规则：抵扣前必须扫过这位顾客的会员条码（见第 26 组） */
+  const code = call(w, 'getMemberCode', {}, mt);
+  const scan = call(w, 'scanMemberCode', { payload: code.data.payload }, w.ownerToken);
+  t.okIs(scan, '员工扫码确认身分');
+
   const res = call(w, 'redeemWallet', {
     customerId: member.data.customer.customerId,
     billAmount: 6000, walletAmount: 1200,
-    source: 'FOODCOURT', externalOrderId: 'FC999'
+    source: 'FOODCOURT', externalOrderId: 'FC999',
+    verifyToken: scan.data.verifyToken
   }, w.ownerToken);
 
   t.okIs(res, '抵扣成功');
@@ -726,6 +732,172 @@ suite.group('25 · ping / 公开设置', (t) => {
   const pub = w.api.doGet();
   t.okIs(pub, '浏览器直接打开 Web App URL 会回系统状态');
   t.equal('doGet 版本一致', pub.data.version, ping.data.version);
+});
+
+/* -------------------------------------------------------------
+   26 · 会员条码 → 员工扫码 → 才能抵扣
+   ------------------------------------------------------------- */
+suite.group('26 · 会员条码与扫码抵扣', (t) => {
+  const w = newWorld();
+  const reg = register(w, '0123456789', 'Jason');
+  t.okIs(reg, '会员注册');
+  const ct = reg.data.token;
+  const cid = reg.data.customer.customerId;
+
+  /* 先给钱包一点钱，不然没法抵扣 */
+  t.okIs(call(w, 'manualWalletAdjustment',
+    { customerId: cid, amount: 5000, reason: 'test top up' }, w.ownerToken), '储值 RM50');
+
+  /* ① 会员取条码 */
+  const mc = call(w, 'getMemberCode', {}, ct);
+  t.okIs(mc, '取得会员条码');
+  t.equal('条码格式 YT1|CustomerID|secret', /^YT1\|YT\d+\|[a-f0-9]{32}$/.test(mc.data.payload), true,
+    mc.data.payload);
+  t.equal('条码有有效期', mc.data.seconds > 0, true, mc.data.seconds);
+  t.equal('条码里不含电话号码', mc.data.payload.indexOf('60123456789') === -1, true);
+
+  /* ② 没扫码就抵扣 → 挡下 */
+  t.errorIs(call(w, 'redeemWallet',
+    { customerId: cid, billAmount: 10000, walletAmount: 2000 }, w.ownerToken),
+    'MEMBER_VERIFY_REQUIRED', '没扫条码不能抵扣 ★');
+
+  /* ③ 垃圾字串 / 伪造条码 */
+  t.errorIs(call(w, 'scanMemberCode', { payload: 'hello world' }, w.ownerToken),
+    'MEMBER_CODE_INVALID', '垃圾字串 → 无效');
+  t.errorIs(call(w, 'scanMemberCode',
+    { payload: 'YT1|YT999999|deadbeefdeadbeefdeadbeefdeadbeef' }, w.ownerToken),
+    'MEMBER_CODE_EXPIRED', '伪造条码 → 过期（不泄漏有没有这个会员）');
+
+  /* ④ 没登录的顾客拿不到条码 */
+  t.errorIs(call(w, 'getMemberCode', {}, 'not-a-real-token'),
+    'INVALID_SESSION', '没 session 拿不到条码');
+
+  /* ⑤ 员工扫码 */
+  const scan = call(w, 'scanMemberCode', { payload: mc.data.payload }, w.ownerToken);
+  t.okIs(scan, '员工扫码成功');
+  t.equal('扫到的是同一位顾客', scan.data.customer.customerId, cid);
+  t.equal('有 verifyToken', typeof scan.data.verifyToken === 'string' && scan.data.verifyToken.length >= 32, true);
+  t.equal('verify 有时效', scan.data.verifySeconds > 0, true, scan.data.verifySeconds);
+
+  /* ⑥ 同一条码不能重扫（一次性） */
+  t.errorIs(call(w, 'scanMemberCode', { payload: mc.data.payload }, w.ownerToken),
+    'MEMBER_CODE_EXPIRED', '条码扫过就作废 ★');
+
+  /* ⑦ 带 verifyToken 抵扣 → 成功 */
+  const okRes = call(w, 'redeemWallet', {
+    customerId: cid, billAmount: 10000, walletAmount: 2000,
+    verifyToken: scan.data.verifyToken
+  }, w.ownerToken);
+  t.okIs(okRes, '扫码后抵扣成功 ★');
+  t.equal('扣了 RM20', okRes.data.walletUsed, 2000);
+  t.equal('顾客付 RM80', okRes.data.customerPays, 8000);
+
+  /* ⑧ verifyToken 用过就失效 */
+  t.errorIs(call(w, 'redeemWallet', {
+    customerId: cid, billAmount: 10000, walletAmount: 1000,
+    verifyToken: scan.data.verifyToken
+  }, w.ownerToken), 'MEMBER_VERIFY_EXPIRED', 'verifyToken 一次性 ★');
+
+  /* ⑨ 乱造的 verifyToken */
+  t.errorIs(call(w, 'redeemWallet', {
+    customerId: cid, billAmount: 10000, walletAmount: 1000,
+    verifyToken: 'deadbeefdeadbeefdeadbeefdeadbeef'
+  }, w.ownerToken), 'MEMBER_VERIFY_EXPIRED', '伪造 verifyToken → 过期');
+
+  /* ⑩ verifyToken 不能用在别的顾客身上 */
+  const other = register(w, '0198765432', 'Ah Sg');
+  const mc2 = call(w, 'getMemberCode', {}, other.data.token);
+  const scan2 = call(w, 'scanMemberCode', { payload: mc2.data.payload }, w.ownerToken);
+  t.okIs(scan2, '扫第二位顾客的码');
+  t.errorIs(call(w, 'redeemWallet', {
+    customerId: cid, billAmount: 10000, walletAmount: 1000,
+    verifyToken: scan2.data.verifyToken
+  }, w.ownerToken), 'MEMBER_VERIFY_MISMATCH', 'A 的验证不能用在 B 身上 ★');
+
+  /* ⑪ 关掉开关就不需要扫码（给不想用的分店留退路） */
+  w.api.mutate((DB, sb) => { sb.setSetting('REQUIRE_MEMBER_CODE_SCAN', 'FALSE'); });
+  const noScan = call(w, 'redeemWallet',
+    { customerId: cid, billAmount: 10000, walletAmount: 1000 }, w.ownerToken);
+  t.okIs(noScan, '关掉 REQUIRE_MEMBER_CODE_SCAN 后可以直接抵扣');
+
+  /* ⑫ 会员端不能扫别人的条码（需要员工 session） */
+  w.api.mutate((DB, sb) => { sb.setSetting('REQUIRE_MEMBER_CODE_SCAN', 'TRUE'); });
+  const mc3 = call(w, 'getMemberCode', {}, ct);
+  t.errorIs(call(w, 'scanMemberCode', { payload: mc3.data.payload }, ct),
+    'INVALID_SESSION', '会员 session 不能呼叫员工端的扫码');
+});
+
+/* -------------------------------------------------------------
+   27 · 活动可见性（为什么客户端看不到 promotion）
+   ------------------------------------------------------------- */
+suite.group('27 · Promotion 可见性诊断', (t) => {
+  const w = newWorld();
+  const reg = register(w, '0123456789', 'Jason');
+  const ct = reg.data.token;
+
+  const before = call(w, 'getPromotions', {}, ct);
+  t.okIs(before, '会员端取得活动');
+  const seedCount = before.data.promotions.length;
+  t.check('setupDatabase 会种示范活动', seedCount >= 2, seedCount);
+
+  /* 新增一条已经过期的活动 */
+  const past = call(w, 'createPromotion', {
+    title: 'Expired Promo', subtitle: 'test',
+    startDate: '2020-01-01', endDate: '2020-12-31', status: 'ACTIVE'
+  }, w.ownerToken);
+  t.okIs(past, '建立一条已过期的活动');
+  const pid = past.data.promotion.promotionId;
+
+  const afterCreate = call(w, 'getPromotions', {}, ct);
+  t.equal('过期的活动不会出现在会员端 ★', afterCreate.data.promotions.length, seedCount);
+
+  /* 员工端要直接讲出原因 */
+  const admin = call(w, 'getPromotionsAdmin', {}, w.ownerToken);
+  t.okIs(admin, '员工端取得活动清单');
+  const row = admin.data.promotions.filter((p) => p.promotionId === pid)[0];
+  t.equal('员工端标成 EXPIRED', row.visibilityReason, 'EXPIRED');
+  t.equal('员工端标成看不到', row.visibleToday, false);
+  t.check('回传今天日期', /^\d{4}-\d{2}-\d{2}$/.test(admin.data.today), admin.data.today);
+
+  /* 改日期 → 立刻出现 */
+  const future = new Date(Date.now() + 30 * 86400000).toISOString().slice(0, 10);
+  t.okIs(call(w, 'updatePromotion',
+    { promotionId: pid, endDate: future }, w.ownerToken), '把结束日改到未来');
+
+  const afterFix = call(w, 'getPromotions', {}, ct);
+  t.equal('改完日期就出现在会员端 ★', afterFix.data.promotions.length, seedCount + 1);
+
+  /* 停用 → 又消失 */
+  t.okIs(call(w, 'updatePromotion',
+    { promotionId: pid, status: 'INACTIVE' }, w.ownerToken), '停用活动');
+  const afterOff = call(w, 'getPromotions', {}, ct);
+  t.equal('停用后会员端看不到', afterOff.data.promotions.length, seedCount);
+
+  const admin2 = call(w, 'getPromotionsAdmin', {}, w.ownerToken);
+  const row2 = admin2.data.promotions.filter((p) => p.promotionId === pid)[0];
+  t.equal('员工端标成 INACTIVE', row2.visibilityReason, 'INACTIVE');
+
+  /* 还没开始的活动 */
+  const soon = call(w, 'createPromotion', {
+    title: 'Next Month', startDate: '2099-01-01', endDate: '2099-12-31'
+  }, w.ownerToken);
+  const admin3 = call(w, 'getPromotionsAdmin', {}, w.ownerToken);
+  const row3 = admin3.data.promotions.filter((p) => p.promotionId === soon.data.promotion.promotionId)[0];
+  t.equal('未来的活动标成 NOT_STARTED', row3.visibilityReason, 'NOT_STARTED');
+
+  /* STAFF 不能建活动（要 Manager / Owner） */
+  w.api.mutate((DB) => {
+    DB.staff.push({
+      staffId: 'STF9001', username: 'cashier', passwordHash: DB.staff[0].passwordHash,
+      salt: DB.staff[0].salt, name: 'Cashier', role: 'STAFF', pin: '',
+      status: 'ACTIVE', createdAt: new Date().toISOString(), lastLoginAt: ''
+    });
+  });
+  const staffLogin = call(w, 'staffLogin', { username: 'cashier', password: OWNER.password });
+  if (staffLogin.success) {
+    t.errorIs(call(w, 'createPromotion', { title: 'nope' }, staffLogin.data.token),
+      'UNAUTHORIZED', 'STAFF 不能建活动');
+  }
 });
 
 suite.run().then((pass) => process.exit(pass ? 0 : 1));

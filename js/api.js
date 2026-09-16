@@ -148,6 +148,11 @@ var API = (function () {
         { phone: phone, password: password, name: name || '' }, { sessionType: null });
     },
     /* ⑤ 会员自己改密码 */
+    /** 会员条码内容（员工扫码验证身分用；N 秒自动换一条） */
+    getMemberCode: function () {
+      return call('getMemberCode', {}, { sessionType: 'customer' });
+    },
+
     changePassword: function (currentPassword, newPassword) {
       return call('changeCustomerPassword',
         { currentPassword: currentPassword, newPassword: newPassword }, { sessionType: 'customer' });
@@ -245,20 +250,26 @@ var API = (function () {
     getCustomerHistory: function (customerId) {
       return call('getCustomerHistory', { customerId: customerId }, { sessionType: 'staff' });
     },
+    /** 扫顾客的会员条码 → 回传顾客资料 + verifyToken（抵扣时必须带回） */
+    scanMemberCode: function (payload) {
+      return call('scanMemberCode', { payload: payload }, { sessionType: 'staff' });
+    },
+
     calculateWalletRedemption: function (customerId, billSen) {
       return call('calculateWalletRedemption', {
         customerId: customerId,
         billAmount: billSen
       }, { sessionType: 'staff' });
     },
-    redeemWallet: function (customerId, billSen, walletSen, externalOrderId, source, note) {
+    redeemWallet: function (customerId, billSen, walletSen, externalOrderId, source, note, verifyToken) {
       return call('redeemWallet', {
         customerId: customerId,
         billAmount: billSen,
         walletAmount: walletSen,
         externalOrderId: externalOrderId || '',
         source: source || 'DIRECT',
-        note: note || ''
+        note: note || '',
+        verifyToken: verifyToken || ''
       }, { sessionType: 'staff' });
     },
     getOrders: function (limit, filters) {

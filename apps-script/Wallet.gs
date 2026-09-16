@@ -116,6 +116,11 @@ function redeemWallet(data, token) {
     return err('DUPLICATE_EXTERNAL_ORDER');
   }
 
+  /* ★ 必须扫过这位顾客的会员条码（REQUIRE_MEMBER_CODE_SCAN = TRUE 时）
+     放在所有金额检查之后，避免验证被白白消耗掉 */
+  var verifyError = peekMemberVerify(data.verifyToken, c.customerId, ctx.staff.staffId);
+  if (verifyError) return verifyError;
+
   var order = createMemberTransaction({
     source: source,
     externalOrderId: externalOrderId,
@@ -145,6 +150,8 @@ function redeemWallet(data, token) {
   issuePoints(c, order, points, 'Purchase with wallet redemption', ctx.staff.staffId, 'STAFF', 'EARN');
 
   var reward = generateReward(c, order, bill);
+
+  consumeMemberVerify(data.verifyToken);   // 交易成立，这次验证用掉了
 
   return ok({
     orderId: order.orderId,

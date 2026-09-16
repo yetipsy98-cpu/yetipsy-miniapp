@@ -518,6 +518,22 @@ YETIPSY MINI APP 1.2 · FOODCOURT EDITION
 Validate the business model before scaling the technology.
 ```
 
+## 会员条码与扫码抵扣（本版规则）
+
+顾客在 `钱包` 或 `我的` 页按「出示会员条码」→ 店员在员工端
+`SCAN & REDEEM`（`admin/redeem.html`）扫描 → 确认是本人 → 才允许抵扣钱包。
+
+| Action | 谁能用 | 做什么 |
+|---|---|---|
+| `getMemberCode` | 会员 | 回传条码内容 `YT1\|CustomerID\|随机码`（不含电话、密码），N 秒后失效 |
+| `scanMemberCode` | 员工 | 验证条码 → 回传顾客资料 + `verifyToken`（条码扫过即作废） |
+| `redeemWallet` | 员工 | 必须带 `verifyToken`，否则回 `MEMBER_VERIFY_REQUIRED` |
+
+- 条码一次性：重扫 → `MEMBER_CODE_EXPIRED`
+- verifyToken 绑顾客 + 绑员工：拿别人的用 → `MEMBER_VERIFY_MISMATCH`
+- 员工端相机优先用 `BarcodeDetector`（Chrome / Android 直接读一维条码），
+  不支援时自动改用 jsQR 扫条码下方那个 QR；没相机或非 HTTPS 时提示手动输入。
+
 ## 重复注册与会员密码（本版规则）
 
 ### 1. 同一个号码只会有一笔会员
@@ -548,6 +564,9 @@ Validate the business model before scaling the technology.
 | `LOGIN_MAX_ATTEMPTS` | `6` | 连续输错几次就锁定 |
 | `LOGIN_LOCK_MINUTES` | `5` | 锁定几分钟 |
 | `PASSWORD_SELFSERVICE_SETUP` | `TRUE` | 旧会员（无密码）可否自己补设密码；**迁移完成后建议改成 `FALSE`** |
+| `MEMBER_CODE_SECONDS` | `60` | 会员端条码多久自动换一条（秒） |
+| `MEMBER_VERIFY_SECONDS` | `180` | 员工扫到条码后，几分钟内要完成抵扣 |
+| `REQUIRE_MEMBER_CODE_SCAN` | `TRUE` | `TRUE` = 抵扣前必须扫过顾客条码；改 `FALSE` 可关掉 |
 
 - 密码以每个会员独立 salt 的 SHA-256 储存，Sheet 里看不到明文。
 - 会员自己改密码：`我的 → 登录密码`（需要目前的密码；改完其他装置登出）。

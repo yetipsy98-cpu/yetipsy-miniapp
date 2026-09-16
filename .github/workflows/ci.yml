@@ -37,6 +37,9 @@ jobs:
       - name: 复制贴上文件校验（APPS-SCRIPT-COPY-PASTE.md 跟 .gs 同步且可执行 · 60 项）
         run: node demo/test-copypaste.js
 
+      - name: 条码 / 扫码抵扣 DOM 测试（jsdom 真的开页面 · 56 项）
+        run: node demo/test-scan-ui.js
+
       - name: 确认没有把 demo 资料档提交进来
         run: |
           if [ -f demo/demo-data.json ]; then

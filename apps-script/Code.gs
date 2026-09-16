@@ -33,6 +33,8 @@ function getHandlers() {
     customerLogin: customerLogin,
     customerSetFirstPassword: customerSetFirstPassword,
     changeCustomerPassword: changeCustomerPassword,
+    getMemberCode: getMemberCode,
+    scanMemberCode: scanMemberCode,
     customerLogout: customerLogout,
     getProfile: getProfile,
     updateProfile: updateProfile,

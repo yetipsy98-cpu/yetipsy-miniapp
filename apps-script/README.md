@@ -32,11 +32,11 @@ GitHub Pages（前端 HTML/JS）  ──POST──▶  Google Apps Script Web Ap
 | `Audit.gs` | 操作记录 |
 | `Points.gs` | 积分与等级（门槛读 Settings） |
 | `Rewards.gs` | 奖励产生（后端随机 + 每日预算） |
-| `Wallet.gs` | 钱包明细、抵扣上限、员工确认抵扣 |
-| `Customers.gs` | 会员查号码 / 注册 / 密码登录 / 改密码（**同一个号码只有一笔**） |
+| `Wallet.gs` | 钱包储值 / 抵扣（抵扣前必须扫过会员条码）/ 上限 |
+| `Customers.gs` | 会员查号码 / 注册 / 密码登录 / 改密码 / 会员条码（**同一个号码只有一笔**） |
 | `Orders.gs` | 已验证消费记录、取消订单（撤销积分与奖励） |
 | `Claims.gs` | Claim QR / Code、认领、Dashboard |
-| `Promotions.gs` | 今晚活动 |
+| `Promotions.gs` | 活动 CRUD + 会员端可见性诊断（EXPIRED / NOT_STARTED / INACTIVE） |
 | `Admin.gs` | 设置、积分调整、Audit Log、员工账号 |
 | `Auth.gs` | `ping`、员工登录（失败 6 次锁 5 分钟） |
 | `appsscript.json` | Apps Script manifest（V8 runtime、时区、权限范围） |

@@ -486,3 +486,110 @@ function getCustomerHistory(data, token) {
     .map(orderSummary);
   return ok({ orders: list });
 }
+
+/* =============================================================
+   会员条码（Member Code）
+   -------------------------------------------------------------
+   顾客在手机上出示条码 → 员工扫 → 确认是本人 → 才允许抵扣。
+
+   安全设计：
+   · 条码里只有 CustomerID + 一次性随机码，没有电话、没有密码
+   · 随机码的 SHA-256 存在 CacheService，MEMBER_CODE_SECONDS 秒后失效
+   · 扫过就作废（一次性），画面每 N 秒自动换一条
+   · 员工扫到后拿到 verifyToken（MEMBER_VERIFY_SECONDS 秒内有效），
+     redeemWallet 必须带回这个 token，且只能用于同一个顾客 + 同一个员工
+   ============================================================= */
+
+/** 拆解会员条码内容：'YT1|YT000001|<32 hex>' */
+function parseMemberCode(payload) {
+  var raw = String(payload || '').trim();
+  var parts = raw.split('|');
+  if (parts.length !== 3) return null;
+  if (parts[0] !== 'YT1') return null;
+  var customerId = String(parts[1]).trim().toUpperCase();
+  var secret = String(parts[2]).trim();
+  if (!/^[A-Z]{2,4}\d{4,10}$/.test(customerId)) return null;
+  if (!/^[a-f0-9]{16,128}$/i.test(secret)) return null;
+  return { customerId: customerId, secret: secret };
+}
+
+/** 会员端：取得条码内容（顾客 session） */
+function getMemberCode(data, token) {
+  var ctx = requireCustomer(token);
+  if (ctx.error) return ctx.error;
+  var c = ctx.customer;
+
+  var seconds = numSetting('MEMBER_CODE_SECONDS', 60);
+  var secret  = randomToken(16);                       // 32 hex
+  rateLimitSet('membercode:' + sha256(secret),
+    { customerId: c.customerId, at: Date.now() }, seconds);
+
+  return ok({
+    payload: 'YT1|' + c.customerId + '|' + secret,
+    format: 'CODE128',
+    seconds: seconds,
+    customerId: c.customerId,
+    displayName: maskName(c.name),
+    membershipTier: c.membershipTier,
+    currentPoints: Number(c.currentPoints) || 0,
+    walletBalance: Number(c.walletBalance) || 0
+  });
+}
+
+/** 员工端：扫到条码 → 验证 → 回传顾客资料 + verifyToken */
+function scanMemberCode(data, token) {
+  var ctx = requireStaff(token);
+  if (ctx.error) return ctx.error;
+
+  var parsed = parseMemberCode(data.payload || data.code);
+  if (!parsed) return err('MEMBER_CODE_INVALID');
+
+  var key = 'membercode:' + sha256(parsed.secret);
+  var rec = rateLimitGet(key);
+  if (!rec) return err('MEMBER_CODE_EXPIRED');
+  rateLimitClear(key);                                  // 一次性：扫过即作废
+
+  var c = dbById('customers', parsed.customerId);
+  if (!c || c.status !== 'ACTIVE') return err('CUSTOMER_NOT_FOUND');
+
+  var verifySeconds = numSetting('MEMBER_VERIFY_SECONDS', 180);
+  var verifyToken   = randomToken(16);
+  rateLimitSet('memberverify:' + sha256(verifyToken), {
+    customerId: c.customerId,
+    staffId: ctx.staff.staffId,
+    at: Date.now()
+  }, verifySeconds);
+
+  audit(ctx.staff.staffId, 'STAFF', 'SCAN_MEMBER_CODE', 'CUSTOMER',
+    c.customerId, '', maskName(c.name));
+
+  return ok({
+    customer: publicCustomer(c),
+    membership: membershipInfo(c),
+    verifyToken: verifyToken,
+    verifySeconds: verifySeconds
+  });
+}
+
+/**
+ * 检查 verifyToken（不消耗）。回传 null = 通过；否则回传错误回应。
+ * @param {string} verifyToken
+ * @param {string} customerId
+ * @param {string} staffId
+ */
+function peekMemberVerify(verifyToken, customerId, staffId) {
+  if (!boolSetting('REQUIRE_MEMBER_CODE_SCAN', true)) return null;
+  if (!verifyToken) return err('MEMBER_VERIFY_REQUIRED');
+
+  var rec = rateLimitGet('memberverify:' + sha256(String(verifyToken)));
+  if (!rec) return err('MEMBER_VERIFY_EXPIRED');
+  if (rec.customerId !== customerId) return err('MEMBER_VERIFY_MISMATCH');
+  if (staffId && rec.staffId && rec.staffId !== staffId) return err('MEMBER_VERIFY_MISMATCH');
+  return null;
+}
+
+/** 真的用掉 verifyToken（在交易确定会成功之后才呼叫） */
+function consumeMemberVerify(verifyToken) {
+  if (!verifyToken) return;
+  rateLimitClear('memberverify:' + sha256(String(verifyToken)));
+}
