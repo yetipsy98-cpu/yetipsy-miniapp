@@ -274,3 +274,14 @@ YETIPSY MINI APP 1.1 · FOODCOURT EDITION
 Simple before complex. Secure before fancy.
 Fast for staff. Fun for customers.
 ```
+
+### 6.4 会员身份与 WhatsApp OTP（更新）
+
+仅用电话号码登录无法证明号码属于当前顾客；任何人输入别人的号码都可能看到该会员资料。生产环境应开启 `js/config.js` 的 `OTP_ENABLED`，并在后端完成以下流程，**不要在前端生成或返回验证码**：
+
+1. `requestCustomerOtp`：后端把 6 位随机码的 hash、`phone`（E.164）、过期时间和尝试次数写入 OTP 表，并通过 WhatsApp Business Cloud API 或 BSP 发送模板消息；同一号码每 60 秒最多发送一次。
+2. `verifyCustomerOtp`：后端检查 hash、有效期和失败次数，成功后签发一次性短期 verification proof。
+3. `customerLogin`：必须验证该 proof，才创建或返回会员 session；没有 proof 时拒绝登录。`Customers.phone` 必须以 E.164 格式建立唯一约束（例如 `+60123456789`、`+6581234567`），并在写入时再次检查，不能只靠前端防重复。
+4. 生产环境还应限制 OTP 重试、IP/号码频率，日志中不要保存验证码明文。WhatsApp Cloud API token 只能放在 Apps Script Properties，不可放入这个前端仓库。
+
+本版本登录页已支持马来西亚 `+60` 与新加坡 `+65`，并加入请求超时，网络/GAS 无响应时会在 15 秒后结束 loading。由于当前仓库不包含 Apps Script 后端源码，`OTP_ENABLED` 默认保持 `false`；部署上述后端端点并测试 WhatsApp 模板后再改为 `true`。否则直接开启会正确显示“OTP 未配置”，不会悄悄允许无验证登录。

@@ -25,6 +25,11 @@ var YETIPSY_CONFIG = {
   TAGLINE: 'Join the night.',
   CURRENCY: 'RM',
   COUNTRY_CODE: '+60',
+  /* WhatsApp OTP：启用前必须先在后端配置 WhatsApp Cloud API / BSP。 */
+  OTP_ENABLED: false,
+  OTP_CHANNEL: 'WHATSAPP',
+  OTP_RESEND_SECONDS: 60,
+  API_TIMEOUT_MS: 15000,
   TIMEZONE: 'Asia/Kuala_Lumpur',
 
   /* ----------------------------------------------------------

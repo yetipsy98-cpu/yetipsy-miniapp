@@ -58,7 +58,13 @@ var API = (function () {
       redirect: 'follow',
       // 使用 text/plain 避免 CORS 预检（Google Apps Script 需要）
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload)
+      body: JSON.stringify(payload),
+      signal: (function () {
+        if (!window.AbortController) return undefined;
+        var controller = new AbortController();
+        setTimeout(function () { controller.abort(); }, YETIPSY_CONFIG.API_TIMEOUT_MS || 15000);
+        return controller.signal;
+      })()
     })
       .then(function (res) {
         if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -110,8 +116,14 @@ var API = (function () {
      CUSTOMER API
      ======================================================== */
   var customer = {
-    login: function (phone, name) {
-      return call('customerLogin', { phone: phone, name: name }, { sessionType: null });
+    login: function (phone, name, otp) {
+      return call('customerLogin', { phone: phone, name: name, verificationToken: otp || '' }, { sessionType: null });
+    },
+    requestOtp: function (phone) {
+      return call('requestCustomerOtp', { phone: phone, channel: YETIPSY_CONFIG.OTP_CHANNEL || 'WHATSAPP' }, { sessionType: null });
+    },
+    verifyOtp: function (phone, code) {
+      return call('verifyCustomerOtp', { phone: phone, code: code }, { sessionType: null });
     },
     logout: function () {
       return call('customerLogout', {}, { sessionType: 'customer' });
