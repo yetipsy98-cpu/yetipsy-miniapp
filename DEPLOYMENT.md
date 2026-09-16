@@ -506,3 +506,9 @@ Phase 2 建议加 WhatsApp OTP。
 YETIPSY MINI APP 1.1 · FOODCOURT EDITION
 Validate the business model before scaling the technology.
 ```
+
+## WhatsApp OTP 与重复会员（生产上线前）
+
+目前前端已准备 `requestCustomerOtp` / `verifyCustomerOtp` API，并支持 `+60`、`+65`。真正上线前必须在 Apps Script 后端接入 WhatsApp Business Cloud API 或 BSP：验证码只能由后端产生、储存 hash、限时、限次数，并在 `customerLogin` 强制检查一次性 verification proof。WhatsApp access token 请放在 Script Properties。
+
+同时把会员电话号码统一为 E.164 并设唯一约束，注册/登录时在 LockService 内再次查重；例如 `+60123456789` 与 `012-3456789` 必须视为同一个会员。完成后把 `YETIPSY_CONFIG.OTP_ENABLED` 改为 `true`，并用马来西亚及新加坡号码各完成一次真实 WhatsApp 测试。前端 API 设有 15 秒 timeout，可避免登录按钮无限卡住。

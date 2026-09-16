@@ -715,3 +715,16 @@ body:not(.has-bottom-nav) .toast-box { bottom: 26px; }
   margin-bottom: 14px;
   letter-spacing: .4px;
 }
+
+/* International phone selector */
+.phone-country {
+  min-height: 52px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--card-2);
+  color: var(--text);
+  padding: 0 8px;
+  font-size: 14px;
+  font-weight: 600;
+}
+.phone-row .phone-country + .input { min-width: 0; }

@@ -345,13 +345,14 @@ var UI = (function () {
     });
   }
 
-  /** 规范化马来西亚电话号码 → +60123456789 */
-  function normalizePhone(input) {
+  /** 规范化 E.164 电话号码。input 可为本地号码或已带国家码的号码。 */
+  function normalizePhone(input, countryCode) {
+    var code = String(countryCode || '+60').replace(/[^0-9]/g, '');
     var digits = String(input || '').replace(/[^0-9]/g, '');
-    if (digits.indexOf('60') === 0) digits = digits.slice(2);
-    else if (digits.indexOf('0') === 0) digits = digits.slice(1);
     if (!digits) return '';
-    return '+60' + digits;
+    if (digits.indexOf(code) === 0) digits = digits.slice(code.length);
+    else if (digits.indexOf('0') === 0) digits = digits.slice(1);
+    return '+' + code + digits;
   }
 
   function confirmDialog(messageZh, messageEn, confirmText) {
