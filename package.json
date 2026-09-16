@@ -1,0 +1,16 @@
+{
+  "name": "yetipsy-miniapp",
+  "version": "1.1.0",
+  "description": "YETIPSY MINI APP 1.1 — FOODCOURT EDITION. Membership / Points / Reward / Wallet on Google Sheets + Apps Script + GitHub Pages (RM0).",
+  "private": true,
+  "scripts": {
+    "demo": "node demo/server.js",
+    "test": "node demo/tests.js && node demo/test-apps-script.js",
+    "test:api": "node demo/tests.js",
+    "test:backend": "node demo/test-apps-script.js",
+    "test:ui": "node demo/smoke-ui.js",
+    "test:e2e": "node demo/e2e-ui.js"
+  },
+  "keywords": ["yetipsy", "loyalty", "membership", "pwa", "google-apps-script"],
+  "license": "MIT"
+}

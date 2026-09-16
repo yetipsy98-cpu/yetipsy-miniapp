@@ -1,0 +1,9 @@
+# DEMO 资料（本机试用产生）
+demo/demo-data.json
+
+# 依赖
+node_modules/
+
+# 系统
+.DS_Store
+Thumbs.db

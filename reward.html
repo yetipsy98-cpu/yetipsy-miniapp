@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0D0D0D">
+<title>YETIPSY — Tonight's Reward</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div class="page">
+
+  <div class="row-between" style="padding: 6px 2px 14px;">
+    <a href="index.html" style="color:var(--muted)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <div class="brand-mark" style="font-size:17px;letter-spacing:5px;text-indent:5px;">YETIPSY</div>
+    <div style="width:20px"></div>
+  </div>
+
+  <!-- LOADING -->
+  <div id="stateLoading">
+    <div class="skeleton" style="height:240px;border-radius:16px"></div>
+  </div>
+
+  <!-- CLOSED ENVELOPE -->
+  <div id="stateClosed" style="display:none">
+    <div class="reward-stage">
+      <div class="reward-envelope shake" id="envelope">
+        <div class="env-body">
+          <div class="env-mark">🎁</div>
+          <div class="env-zh">打开奖励</div>
+          <div class="env-en">OPEN REWARD</div>
+        </div>
+      </div>
+      <div class="bilingual-zh" style="font-size:15px">你的消费已认领</div>
+      <div class="bilingual-en">YOUR PURCHASE HAS BEEN CLAIMED</div>
+      <div class="small muted mt-12" id="closedMeta">—</div>
+      <div class="small muted-2 mt-8">今晚有东西等着你<br>Something is waiting for you tonight.</div>
+    </div>
+  </div>
+
+  <!-- OPENED -->
+  <div id="stateOpened" style="display:none">
+    <div class="reward-stage">
+      <div class="reward-open show">
+        <div class="tiny muted-2" style="letter-spacing:3px">TONIGHT'S REWARD</div>
+        <div class="reward-amount mt-12" id="rewardAmount">RM 0.00</div>
+        <div class="reward-note">
+          已存入你的 Yetipsy Wallet<br>
+          Added to your Yetipsy Wallet.
+        </div>
+      </div>
+    </div>
+
+    <div class="card mt-16">
+      <div class="row-between">
+        <div>
+          <div class="bilingual-zh">钱包余额</div>
+          <div class="bilingual-en">WALLET BALANCE</div>
+        </div>
+        <div style="font-size:22px;font-weight:700;color:var(--gold)" id="walletAfter">RM 0.00</div>
+      </div>
+      <div class="divider"></div>
+      <div class="small muted">下次消费时可出示钱包给店员抵扣<br>Show your wallet to our staff to use it next visit.</div>
+    </div>
+
+    <a class="btn btn-primary mt-8" href="wallet.html">
+      <span>查看我的钱包<span class="btn-sub-label">MY WALLET</span></span>
+    </a>
+    <a class="btn btn-secondary mt-8" href="index.html">
+      <span>返回首页<span class="btn-sub-label">BACK TO HOME</span></span>
+    </a>
+  </div>
+
+  <!-- ERROR -->
+  <div id="stateError" style="display:none"></div>
+
+  <div class="footnote">YETIPSY MINI APP 1.1 · FOODCOURT EDITION</div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/reward.js"></script>
+<script>
+  UI.renderBottomNav('reward.html');
+  REWARD.init();
+</script>
+
+<script>
+/* PWA：註冊 Service Worker（只 Cache App Shell，不 Cache 任何敏感资料） */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('service-worker.js').catch(function () {});
+  });
+}
+</script>
+</body>
+</html>

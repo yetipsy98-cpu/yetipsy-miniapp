@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0D0D0D">
+<title>YETIPSY — Profile</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div class="page">
+
+  <div class="row-between" style="padding: 6px 2px 14px;">
+    <a href="index.html" style="color:var(--muted)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <div class="brand-mark" style="font-size:17px;letter-spacing:5px;text-indent:5px;">YETIPSY</div>
+    <div style="width:20px"></div>
+  </div>
+
+  <!-- MEMBER CARD -->
+  <div class="hero-card">
+    <div class="hero-top">
+      <div>
+        <div style="font-size:20px;font-weight:650" id="memberName">—</div>
+        <div class="tiny muted-2 mt-8" id="memberId">—</div>
+      </div>
+      <div id="memberTier"></div>
+    </div>
+
+    <div class="stat-grid mt-16">
+      <div class="stat" style="background:#141414">
+        <div class="stat-label">Points 积分</div>
+        <div class="stat-value gold" id="statPoints">0</div>
+      </div>
+      <div class="stat" style="background:#141414">
+        <div class="stat-label">Wallet 钱包</div>
+        <div class="stat-value" id="statWallet">RM 0.00</div>
+      </div>
+      <div class="stat" style="background:#141414">
+        <div class="stat-label">Total Spend 累计</div>
+        <div class="stat-value" id="statSpend">RM 0.00</div>
+      </div>
+      <div class="stat" style="background:#141414">
+        <div class="stat-label">Visits 到店</div>
+        <div class="stat-value" id="statVisits">0</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- EDIT PROFILE -->
+  <div class="section">
+    <div class="section-title">
+      <span class="st-zh">会员资料</span><span class="st-en">MY DETAILS</span>
+    </div>
+    <div class="card">
+      <div class="field">
+        <div class="label"><span>名字</span><span class="l-en">NAME</span></div>
+        <input id="nameInput" class="input" type="text" maxlength="40" placeholder="Jason">
+      </div>
+      <div class="field">
+        <div class="label">
+          <span>生日（可不填 · 未来生日奖励用）</span>
+          <span class="l-en">BIRTHDAY — OPTIONAL</span>
+        </div>
+        <input id="birthdayInput" class="input" type="date">
+      </div>
+      <div class="field">
+        <div class="label"><span>手机号码</span><span class="l-en">MOBILE</span></div>
+        <input id="phoneInput" class="input" type="text" disabled>
+      </div>
+      <button id="saveBtn" class="btn btn-primary">
+        <span>保存资料<span class="btn-sub-label">SAVE</span></span>
+      </button>
+    </div>
+  </div>
+
+  <!-- PRIVACY -->
+  <div class="section">
+    <div class="section-title">
+      <span class="st-zh">隐私说明</span><span class="st-en">PRIVACY</span>
+    </div>
+    <div class="card">
+      <div class="small muted" style="line-height:1.8">
+        Yetipsy 只收集会员系统必要的资料：手机号码、名字（可不填）、生日（可不填）
+        以及你的消费记录。这些资料只用于：
+        <br><br>
+        · 会员身份识别 Membership identity<br>
+        · 积分累计 Points<br>
+        · 奖励发放 Rewards<br>
+        · 消费记录 Transaction history<br>
+        · 优惠通知 Promotions
+        <br><br>
+        我们不会因为会员系统收集不必要的个人资料。
+      </div>
+    </div>
+  </div>
+
+  <button id="logoutBtn" class="btn btn-danger">
+    <span>登出<span class="btn-sub-label">LOG OUT</span></span>
+  </button>
+
+  <div class="center mt-16">
+    <a href="admin/login.html" class="tiny muted-2" style="letter-spacing:1.4px">STAFF LOGIN 员工登录</a>
+  </div>
+
+  <div class="footnote">YETIPSY MINI APP 1.1 · FOODCOURT EDITION</div>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/profile.js"></script>
+<script>
+  UI.renderBottomNav('profile.html');
+  PROFILE.init();
+</script>
+
+<script>
+/* PWA：註冊 Service Worker（只 Cache App Shell，不 Cache 任何敏感资料） */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('service-worker.js').catch(function () {});
+  });
+}
+</script>
+</body>
+</html>
