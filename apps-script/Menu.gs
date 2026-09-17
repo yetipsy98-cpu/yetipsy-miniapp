@@ -156,7 +156,7 @@ function clearMenuCache() {
 function orderingWindowState() {
   var enabled = boolSetting('ORDERING_ENABLED', true);
   var paused  = boolSetting('ORDERING_PAUSED', false);
-  var openTime  = String(setting('ORDERING_OPEN_TIME', '18:30'));
+  var openTime  = String(setting('ORDERING_OPEN_TIME', '08:30'));
   var closeTime = String(setting('ORDERING_CLOSE_TIME', '00:00'));
 
   var state = {
