@@ -43,7 +43,7 @@ Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积�
 → 完成时才发 Points / Reward（§22），并写入同一套会员资料
 ```
 
-Foodcourt Claim（1.x 原流程，保留但降级为次要，仅 MANAGER / OWNER）：
+Foodcourt Claim（1.x 原流程，保留但已移出员工首页、入口在 MORE，仅 MANAGER / OWNER）：
 
 ```
 经理建立 Claim → 顾客认领 → 绑定会员 → 同上

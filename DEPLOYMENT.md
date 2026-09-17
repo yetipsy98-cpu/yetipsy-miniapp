@@ -426,7 +426,9 @@ https://你的账号.github.io/yetipsy-miniapp/
 - [ ] 出现 QR 与 4 位 Code
 - [ ] **再建立一次同样的 TEST001** → 应该出现「此订单号已存在」（重复保护正常）
 - [ ] 按 `CANCEL` 取消这笔测试 Claim
-- [ ] ★ 用一个 **STAFF**（普通员工）账号登入 → 首页**看不到** `CREATE CLAIM`
+- [ ] ★ **任何角色**（含 owner）登入，首页都**没有** `CREATE CLAIM` 按钮；
+      首页四个大按钮应为 SCAN & GRANT / ORDER BOARD / MENU STATUS / SCAN & REDEEM
+- [ ] ★ `MORE → FOODCOURT CLAIM` 仍可进入（§85 不能断掉 1.x）
 
 ### G1-c. 商品上下架（★ 1.6 所有员工都可以）
 
@@ -510,7 +512,7 @@ https://你的账号.github.io/yetipsy-miniapp/
 ### 顾客没在场 / 事后补登（次要流程，限 Manager / Owner）
 
 ```
-员工：CREATE CLAIM
+员工：MORE → FOODCOURT CLAIM
       来源 FOODCOURT · 单号 FC8231 · 金额 86.00
         ↓
 系统产生 QR + Code → 员工把 Code 给顾客
@@ -520,8 +522,11 @@ https://你的账号.github.io/yetipsy-miniapp/
 
 > 顾客可以回家再注册、再认领。Claim 24 小时内有效（可在 Settings 修改）。
 >
-> ⚠️ 1.6 起 **普通员工看不到 CREATE CLAIM** —— 因为主流程已经不需要它。
-> 只有 MANAGER / OWNER 用得到（顾客已经走了、要事后补登的情况）。
+> ⚠️ 1.6 起 **员工首页已经没有「建立 Claim / 生成 QR」这个按钮了** ——
+> 主流程改成扫会员码进分，生成 QR 不再需要摆在员工每天看的首页上。
+> 它没有被删除：入口移到 **MORE → FOODCOURT CLAIM**，
+> 后端 `createClaim` 也保留，只是收紧到 MANAGER / OWNER
+> （顾客已经走了、要事后补登的情况才用得到）。
 
 ## 顾客回来用钱包
 

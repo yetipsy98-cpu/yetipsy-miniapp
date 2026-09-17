@@ -678,7 +678,7 @@ Owner 在 2.0 各 Phase 完成后提出四项业务决定。这一节记录决�
 
 | # | 决定 | 实作 |
 |---|---|---|
-| 1 | 主流程改成「员工输入账单金额 → 扫会员码 → 自动进积分 + 自动发 Reward」。Foodcourt Claim 保留但**降级为次要**（只有经理用得到）。 | 新增 `grantOrder` action（`Claims.gs`）；`createClaim` 收紧为 MANAGER / OWNER；`admin/grant.html` 为员工首页第一个大按钮 |
+| 1 | 主流程改成「员工输入账单金额 → 扫会员码 → 自动进积分 + 自动发 Reward」。Foodcourt Claim 保留但**移出员工首页**（入口移到 MORE，只有经理用得到）。★ 注意不是「按角色隐藏」—— 首页根本没有这个按钮了。 | 新增 `grantOrder` action（`Claims.gs`）；`createClaim` 收紧为 MANAGER / OWNER；`admin/grant.html` 为员工首页第一个大按钮 |
 | 2 | 会员端改成「登入 → 导览界面」，导览界面三张卡：**酒单 / 会员码 / 会员中心**；原功能放在下方。 | `index.html` 改版；`js/ui.js` 底部导航改 4 格（首页 / 酒单 / 会员码 / 会员中心）；认领入口移到右上角 |
 | 3 | 员工菜单管理改成 `status_only`：**所有员工**都能上下架（ACTIVE ↔ ARCHIVED）与标售罄；改价与新增商品仍限 MANAGER / OWNER。 | 新增 `setProductStatus` action（`Menu.gs`，任何员工可用）；`admin/menu.js` 每一列都显示上下架钮 |
 | 4 | 积分／Reward 由**后端自动计算**（员工只输账单金额），不让员工自己填点数。 | `grantOrder` 内部走与点单完成同一条 `issuePoints` / `generateReward`，没有第二套规则 |
