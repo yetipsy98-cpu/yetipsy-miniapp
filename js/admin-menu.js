@@ -5,6 +5,11 @@
 
    权限（§32）：
    · MANAGER / OWNER：新增 / 编辑商品、价格、图片、分类、排序、促销、规格
+   ·
+   · 2.1.15：新增 / 编辑商品的表单改成「小抽屉」从下面滑上来。
+   ·   以前表单是页面最上面的一块（#productForm），手机按「编辑」时
+   ·   表单在萤幕外，看起来就像「按了没反应」。另外「+ 商品 / 编辑」
+   ·   改成事件委派绑定，列表重画也不会变装饰按钮。
    · 普通员工：只能切换 售罄 / 有货
 
    §33：图片只存 ImageURL，图片档放 GitHub /assets/menu/*.webp，
@@ -44,6 +49,78 @@ var ADMIN_MENU = (function () {
       if (state.canEdit) add.addEventListener('click', function () { openForm(null); });
       else add.style.display = 'none';            // §32 员工不能新增
     }
+
+    /* 分类也一样走小抽屉（以前是页面最上面的那块表单） */
+    var cat = document.getElementById('addCategoryBtn');
+    if (cat) {
+      if (state.canEdit) cat.addEventListener('click', addCategory);
+      else cat.style.display = 'none';
+    }
+
+    bindSheet();
+    bindRowDelegates();
+  }
+
+  /* ---------------------------------------------------------
+     小抽屉（2.1.15）
+     --------------------------------------------------------- */
+
+  function bindSheet() {
+    if (document.body.getAttribute('data-menu-sheet') === '1') return;
+    document.body.setAttribute('data-menu-sheet', '1');
+
+    var close = document.getElementById('menuSheetClose');
+    if (close) close.addEventListener('click', closeForm);
+    var back = document.getElementById('menuSheetBackdrop');
+    if (back) back.addEventListener('click', closeForm);
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      var sheet = document.getElementById('menuSheet');
+      if (sheet && sheet.style.display !== 'none') closeForm();
+    });
+  }
+
+  function openSheet() {
+    var sheet = document.getElementById('menuSheet');
+    if (!sheet) return;
+    sheet.style.display = '';
+    document.body.classList.add('sheet-open');
+  }
+
+  function closeSheet() {
+    var sheet = document.getElementById('menuSheet');
+    if (sheet) sheet.style.display = 'none';
+    document.body.classList.remove('sheet-open');
+  }
+
+  function isSheetOpen() {
+    var sheet = document.getElementById('menuSheet');
+    return !!sheet && sheet.style.display !== 'none';
+  }
+
+  /**
+   * 列表的「编辑 EDIT」用委派绑定在 #menuAdminBody 上：
+   * 商品列表每次筛选 / 重抓都会整块重画，直接绑在按钮上的话，
+   * 重画之后就会变成没反应的装饰按钮。
+   */
+  function bindRowDelegates() {
+    var box = document.getElementById('menuAdminBody');
+    if (!box || box.getAttribute('data-row-bound') === '1') return;
+    box.setAttribute('data-row-bound', '1');
+    box.addEventListener('click', function (e) {
+      var btn = marked(e.target, 'data-edit');
+      var pid = btn ? btn.getAttribute('data-edit') : null;
+      if (!pid) {
+        /* 手机上好按：点整张卡片也能编辑；但 chip 按钮（售罄 / 上下架）照旧 */
+        if (!state.canEdit) return;
+        if (e.target && e.target.closest && e.target.closest('button')) return;
+        var row = marked(e.target, 'data-row');
+        pid = row ? row.getAttribute('data-row') : null;
+      }
+      if (!pid) return;
+      var prod = state.products.filter(function (p) { return p.productId === pid; })[0];
+      if (prod) openForm(prod);
+    });
   }
 
   /* ---------------------------------------------------------
@@ -190,12 +267,7 @@ var ADMIN_MENU = (function () {
       });
     });
 
-    Array.prototype.forEach.call(box.querySelectorAll('[data-edit]'), function (el) {
-      el.addEventListener('click', function () {
-        var pid = el.getAttribute('data-edit');
-        openForm(state.products.filter(function (p) { return p.productId === pid; })[0]);
-      });
-    });
+    /* [data-edit] 由 bindRowDelegates() 委派处理（列表重画也不会失效） */
 
     /* ★ 上下架：任何员工都能做（§32 状态类操作） */
     Array.prototype.forEach.call(box.querySelectorAll('[data-status]'), function (el) {
@@ -227,13 +299,9 @@ var ADMIN_MENU = (function () {
 
     var panel = document.getElementById('productForm');
     if (!panel) return;
-    panel.style.display = '';
+    var foot = document.getElementById('menuSheetFoot');
 
     var isEdit = !!product;
-    /* ★ 标题由下面的 innerHTML 一并写入。
-       之前这里多了一句 document.getElementById('formTitle').textContent = …，
-       但 #formTitle 那时还不存在（它正是这段 innerHTML 建立的），
-       所以第一次打开表单必定抛 TypeError，表单永远开不起来。 */
 
     var catOptions = state.categories.map(function (c) {
       return '<option value="' + UI.esc(c.categoryId) + '"' +
@@ -241,13 +309,7 @@ var ADMIN_MENU = (function () {
         UI.esc(c.nameZH || c.nameEN) + '</option>';
     }).join('');
 
-    var title = isEdit
-      ? '编辑商品 EDIT PRODUCT · ' + (product.nameZH || product.nameEN || '')
-      : '新增商品 ADD PRODUCT';
-
     panel.innerHTML =
-      '<div class="a-section-title" id="formTitle">' + title + '</div>' +
-
       field('商品名称（英） NAME (EN)', 'fNameEN', product ? product.nameEN : '', 'Mojito') +
       field('商品名称（中） NAME (ZH)', 'fNameZH', product ? product.nameZH : '', '经典莫希托') +
 
@@ -292,13 +354,26 @@ var ADMIN_MENU = (function () {
       field('图片 URL（§33 放 GitHub /assets/menu/*.webp）', 'fImage',
         product ? product.imageURL : '', '/assets/menu/mojito.webp') +
 
-      (isEdit ? optionsHtml(product) : '') +
+      (isEdit ? optionsHtml(product) : '');
 
-      '<button class="btn btn-primary mt-16" id="saveProductBtn" style="width:100%">' +
-        (isEdit ? '保存变更 SAVE' : '建立商品 CREATE') + '</button>' +
-      '<button class="btn btn-ghost mt-8" id="cancelFormBtn" style="width:100%">取消 CANCEL</button>' +
-      (isEdit ? '<button class="btn btn-ghost mt-8" id="archiveBtn" style="width:100%;color:#E2696B">' +
-        '下架商品 ARCHIVE</button>' : '');
+    /* 标题在抽屉顶端（固定看得到），按钮在抽屉底部（固定按得到） */
+    var sheetTitle = document.getElementById('sheetFormTitle');
+    if (sheetTitle) sheetTitle.textContent = isEdit
+      ? '编辑商品 · ' + (product.nameZH || product.nameEN || '')
+      : '新增商品 ADD PRODUCT';
+    var sheetSub = document.getElementById('sheetFormSub');
+    if (sheetSub) sheetSub.textContent = isEdit
+      ? 'EDIT PRODUCT' + (product.nameEN ? ' · ' + product.nameEN : '')
+      : 'NEW PRODUCT';
+
+    if (foot) {
+      foot.innerHTML =
+        '<button class="btn btn-primary" id="saveProductBtn" style="width:100%">' +
+          (isEdit ? '保存变更 SAVE' : '建立商品 CREATE') + '</button>' +
+        '<button class="btn btn-ghost mt-8" id="cancelFormBtn" style="width:100%">取消 CANCEL</button>' +
+        (isEdit ? '<button class="btn btn-ghost mt-8" id="archiveBtn" style="width:100%;color:#E2696B">' +
+          '下架商品 ARCHIVE</button>' : '');
+    }
 
     var save = document.getElementById('saveProductBtn');
     if (save) save.addEventListener('click', onSave);
@@ -308,12 +383,7 @@ var ADMIN_MENU = (function () {
     if (archive) archive.addEventListener('click', onArchive);
 
     bindFormDelegates();
-
-    /* ★ 表单在页面最上面。员工在下面一点的商品按「编辑」时，
-       表单如果只是展开、没有滚动过去，看起来就像「按了没反应」。
-       所以每次打开都滚动到表单。 */
-    try { panel.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
-    catch (e) { try { panel.scrollIntoView(); } catch (e2) {} }
+    openSheet();
   }
 
   /* ---------------------------------------------------------
@@ -490,8 +560,13 @@ var ADMIN_MENU = (function () {
 
   function closeForm() {
     var panel = document.getElementById('productForm');
-    if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+    /* 只清内容，不要移除 data-form-bound —— 那个委派监听挂在 panel 本体上，
+       移除标记会让下次开启再绑一次，规格就会被存两次。 */
+    if (panel) panel.innerHTML = '';
+    var foot = document.getElementById('menuSheetFoot');
+    if (foot) foot.innerHTML = '';
     state.editing = null;
+    closeSheet();
   }
 
   /** RM → sen；空白回 null 表示「不改这个栏位」 */
@@ -578,15 +653,24 @@ var ADMIN_MENU = (function () {
     if (!state.canEdit) { UI.toast('需要经理权限', 'error'); return; }
     var panel = document.getElementById('productForm');
     if (!panel) return;
+    var foot = document.getElementById('menuSheetFoot');
     state.editing = null;
-    panel.style.display = '';
     panel.innerHTML =
-      '<div class="a-section-title">新增分类 ADD CATEGORY</div>' +
       field('名称（英） NAME (EN)', 'cNameEN', '', 'SIGNATURE') +
       field('名称（中） NAME (ZH)', 'cNameZH', '', '招牌特调') +
-      field('排序 SORT ORDER', 'cSort', '0', '0', 'number') +
-      '<button class="btn btn-primary mt-16" id="saveCatBtn" style="width:100%">建立 CREATE</button>' +
-      '<button class="btn btn-ghost mt-8" id="cancelFormBtn" style="width:100%">取消 CANCEL</button>';
+      field('排序 SORT ORDER', 'cSort', '0', '0', 'number');
+
+    var sheetTitle = document.getElementById('sheetFormTitle');
+    if (sheetTitle) sheetTitle.textContent = '新增分类 ADD CATEGORY';
+    var sheetSub = document.getElementById('sheetFormSub');
+    if (sheetSub) sheetSub.textContent = 'NEW CATEGORY';
+
+    if (foot) {
+      foot.innerHTML =
+        '<button class="btn btn-primary" id="saveCatBtn" style="width:100%">建立 CREATE</button>' +
+        '<button class="btn btn-ghost mt-8" id="cancelFormBtn" style="width:100%">取消 CANCEL</button>';
+    }
+    openSheet();
 
     document.getElementById('saveCatBtn').addEventListener('click', function () {
       var body = { nameEN: txt('cNameEN'), nameZH: txt('cNameZH'),
@@ -611,7 +695,9 @@ var ADMIN_MENU = (function () {
       products: state.products.length,
       filter: state.filter,
       search: state.search,
-      editing: state.editing ? state.editing.productId : null
+      editing: state.editing ? state.editing.productId : null,
+      sheetOpen: isSheetOpen(),
+      canEdit: state.canEdit
     };
   }
 
@@ -622,6 +708,8 @@ var ADMIN_MENU = (function () {
     openForm: openForm,
     addCategory: addCategory,
     closeForm: closeForm,
+    openSheet: openSheet,
+    isSheetOpen: isSheetOpen,
     debugState: debugState
   };
 

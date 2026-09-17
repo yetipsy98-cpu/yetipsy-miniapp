@@ -6,15 +6,22 @@
 <meta name="theme-color" content="#0B0B0B">
 <title>YETIPSY STAFF — 菜单管理</title>
 <link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
-<link rel="stylesheet" href="../css/app.css?v=2.1.14">
-<link rel="stylesheet" href="../css/admin.css?v=2.1.14">
+<link rel="stylesheet" href="../css/app.css?v=2.1.15">
+<link rel="stylesheet" href="../css/admin.css?v=2.1.15">
 <style>
 .menu-bar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 8px 0 12px; }
 .menu-bar .a-input { flex: 1 1 160px; }
-#productForm {
-  display: none; border: 1px solid var(--a-gold); border-radius: 14px;
-  padding: 14px; margin-bottom: 16px;
+/* 商品 / 分类表单现在住在小抽屉里（2.1.15）——
+   以前它是页面最上面的一块，手机打开时常常在萤幕外，
+   按「编辑」看起来就像没反应。 */
+#menuSheet .sheet-inner { max-height: 82vh; }
+#menuSheet .sheet-inner::before {
+  content: ''; display: block; width: 34px; height: 4px; border-radius: 2px;
+  background: var(--a-line); margin: 0 auto 8px;
 }
+#menuSheet .sheet-body { padding-bottom: 4px; }
+#menuSheet .sheet-body .a-field:first-child { margin-top: 2px; }
+#menuSheet .sheet-foot { padding-top: 10px; }
 .a-list { display: flex; align-items: flex-start; gap: 10px; padding: 12px 0;
   border-bottom: 1px solid var(--a-line); }
 .a-list .a-right { display: flex; flex-direction: column; gap: 6px; flex: 0 0 auto; }
@@ -39,23 +46,36 @@
 
   <div class="cat-strip" id="catFilter"></div>
 
-  <div id="productForm"></div>
-
   <div id="menuAdminBody"></div>
 
 </div>
 
-<script src="../js/config.js?v=2.1.14"></script>
-<script src="../js/api.js?v=2.1.14"></script>
-<script src="../js/auth.js?v=2.1.14"></script>
-<script src="../js/ui.js?v=2.1.14"></script>
-<script src="../js/admin.js?v=2.1.14"></script>
-<script src="../js/admin-menu.js?v=2.1.14"></script>
+<!-- ============ 商品 / 分类：小抽屉（不用往下找表单） ============ -->
+<div class="sheet" id="menuSheet" style="display:none">
+  <div class="sheet-backdrop" id="menuSheetBackdrop"></div>
+  <div class="sheet-inner" role="dialog" aria-modal="true" aria-label="商品 MENU ITEM">
+    <div class="sheet-head">
+      <div class="sheet-titles">
+        <div class="bilingual-zh" id="sheetFormTitle" style="font-size:16px">—</div>
+        <div class="bilingual-en" id="sheetFormSub">—</div>
+      </div>
+      <button class="sheet-close" id="menuSheetClose" aria-label="关闭 CLOSE">✕</button>
+    </div>
+    <div class="sheet-body" id="productForm"></div>
+    <div class="sheet-foot" id="menuSheetFoot"></div>
+  </div>
+</div>
+
+<script src="../js/config.js?v=2.1.15"></script>
+<script src="../js/api.js?v=2.1.15"></script>
+<script src="../js/auth.js?v=2.1.15"></script>
+<script src="../js/ui.js?v=2.1.15"></script>
+<script src="../js/admin.js?v=2.1.15"></script>
+<script src="../js/admin-menu.js?v=2.1.15"></script>
 <script>
   if (ADMIN.requireAuth()) {
     ADMIN.renderShell({ title: 'MENU' });
     ADMIN_MENU.init();
-    document.getElementById('addCategoryBtn').addEventListener('click', ADMIN_MENU.addCategory);
   }
 </script>
 </body>
