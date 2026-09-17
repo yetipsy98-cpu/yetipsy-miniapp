@@ -81,7 +81,9 @@ async function openPage(JSDOM, pathname, seed) {
 async function until(fn, timeoutMs) {
   const start = Date.now();
   while (Date.now() - start < (timeoutMs || 12000)) {
-    if (fn()) return true;
+    /* ★ 必须 await：传进来的可能是 async 函式，而 Promise 物件永远为真，
+       写成 if (fn()) 会让第一次检查就「通过」，根本没真的等。 */
+    if (await fn()) return true;
     await sleep(80);
   }
   return false;
@@ -468,6 +470,175 @@ suite.group('05 · §68 旧的员工页面照常可开', async (t) => {
   t.check('★ 更多页有菜单管理入口', moreHtml.indexOf('menu.html') >= 0);
   t.check('★ 更多页有业绩报表入口', moreHtml.indexOf('analytics.html') >= 0);
   more.dom.window.close();
+});
+
+/* -------------------------------------------------------------
+   06 · 之前从来没被执行过的页面
+   ------------------------------------------------------------- */
+
+suite.group('06 · admin/settings.html 能存设置（§63 开点单开关）', async (t) => {
+  /* 先把点单关掉，再从页面上打开 —— 证明页面真的写回后端 */
+  t.okIs(await post('updateSetting',
+    { key: 'ORDERING_ENABLED', value: 'false' }, global.__ownerToken), '先关掉点单');
+  const off = await post('getSettings', {}, global.__ownerToken);
+  const beforeVal = (off.data.settings || []).filter((x) => x.key === 'ORDERING_ENABLED')[0];
+  t.equal('后端确实是 false', String(beforeVal.value).toLowerCase(), 'false');
+
+  const page = await openPage(global.__JSDOM, '/admin/settings.html',
+    seedStaff(global.__ownerToken, global.__ownerProfile));
+  const { win, doc } = page;
+  await until(() => doc.querySelectorAll('#settingsBox [data-save]').length > 0, 12000);
+
+  const saveBtns = doc.querySelectorAll('#settingsBox [data-save]');
+  t.check('★ 设置列表渲染出来', saveBtns.length >= 20, saveBtns.length + ' 个设置');
+
+  /* 画面上要能看到 2.0 的新设置（§63） */
+  const html = doc.getElementById('settingsBox').innerHTML;
+  ['ORDERING_ENABLED', 'ORDERING_OPEN_TIME', 'ORDERING_CLOSE_TIME', 'MAX_ORDER_ITEMS',
+   'VISIT_SESSION_HOURS', 'CHECKOUT_QUOTE_EXPIRY_MINUTES', 'MAX_WALLET_USAGE_PERCENT']
+    .forEach((k) => t.check('★ 设置页有 ' + k, html.indexOf(k) >= 0));
+
+  /* 找到 ORDERING_ENABLED 那一列，改成 true 并点 SAVE */
+  const btn = doc.querySelector('#settingsBox [data-save="ORDERING_ENABLED"]');
+  t.check('★ 找得到 ORDERING_ENABLED 的储存钮', !!btn);
+  const input = doc.getElementById('set_' + btn.getAttribute('data-index'));
+  t.check('找得到对应的输入框', !!input);
+  input.value = 'true';
+  btn.click();
+
+  const saved = await until(async () => {
+    const r = await post('getSettings', {}, global.__ownerToken);
+    const row = (r.data.settings || []).filter((x) => x.key === 'ORDERING_ENABLED')[0];
+    return row && String(row.value).toLowerCase() === 'true';
+  }, 12000);
+  t.check('★ 从页面上把点单打开了', saved);
+
+  page.dom.window.close();
+});
+
+suite.group('06b · admin/staff.html 能建账号（§32 的前提）', async (t) => {
+  const page = await openPage(global.__JSDOM, '/admin/staff.html',
+    seedStaff(global.__ownerToken, global.__ownerProfile));
+  const { win, doc } = page;
+  await until(() => doc.querySelectorAll('#staffList .a-item').length > 0, 12000);
+
+  t.check('★ 员工列表渲染出来',
+    doc.querySelectorAll('#staffList .a-item').length >= 3,
+    doc.querySelectorAll('#staffList .a-item').length + ' 位');
+
+  /* 建一个 MANAGER */
+  doc.getElementById('newUsername').value = 'uitestmgr';
+  doc.getElementById('newPassword').value = 'mgr-pass-123';
+  const roleSel = doc.getElementById('newRole');
+  roleSel.value = 'MANAGER';
+  doc.getElementById('createStaffBtn').click();
+
+  const created = await until(async () => {
+    const r = await post('staffLogin', { username: 'uitestmgr', password: 'mgr-pass-123' });
+    return r.success && r.data.staff.role === 'MANAGER';
+  }, 12000);
+  t.check('★ 建出来的 MANAGER 能登入', created);
+
+  /* 建一个 STAFF */
+  doc.getElementById('newUsername').value = 'uiteststaff';
+  doc.getElementById('newPassword').value = 'stf-pass-123';
+  doc.getElementById('newRole').value = 'STAFF';
+  doc.getElementById('createStaffBtn').click();
+
+  const created2 = await until(async () => {
+    const r = await post('staffLogin', { username: 'uiteststaff', password: 'stf-pass-123' });
+    return r.success && r.data.staff.role === 'STAFF';
+  }, 12000);
+  t.check('★ 建出来的 STAFF 能登入', created2);
+
+  /* 角色下拉必须有这三个（§32 权限分界靠它） */
+  const roles = Array.prototype.map.call(roleSel.options, (o) => o.value);
+  ['OWNER', 'MANAGER', 'STAFF'].forEach((r) =>
+    t.check('★ 角色下拉有 ' + r, roles.indexOf(r) >= 0, roles.join(',')));
+
+  page.dom.window.close();
+});
+
+suite.group('06c · admin/audit.html 操作记录页', async (t) => {
+  const page = await openPage(global.__JSDOM, '/admin/audit.html',
+    seedStaff(global.__ownerToken, global.__ownerProfile));
+  const { win, doc } = page;
+  await until(() => doc.getElementById('logList').innerHTML.trim().length > 0, 12000);
+
+  const html = doc.getElementById('logList').innerHTML;
+  t.check('★ 有记录列出来', html.indexOf('a-item') >= 0, html.slice(0, 80));
+  t.check('★ 看得到刚才的设置变更', html.indexOf('UPDATE_SETTING') >= 0 ||
+    html.indexOf('SETTING') >= 0);
+  t.check('有筛选下拉', !!doc.getElementById('actionFilter'));
+
+  page.dom.window.close();
+});
+
+suite.group('06d · reward.html 顾客开 Reward', async (t) => {
+  /* 造一个有待领 Reward 的会员 */
+  const reg = await post('customerRegister',
+    { phone: '0126665555', name: 'RewardTester', password: 'test-pass-123' });
+  t.okIs(reg, '注册会员');
+  const ct = reg.data.token;
+  const made = await post('createClaim',
+    { source: 'FOODCOURT', externalOrderId: 'RW-1', amount: 8600 }, global.__ownerToken);
+  t.okIs(made, '建立 Claim');
+  const claim = await post('claimOrder', { token: made.data.token }, ct);
+  t.okIs(claim, '认领');
+  t.check('产生了 Reward', !!claim.data.reward, JSON.stringify(claim.data.reward));
+
+  const seedCustomer = (w) => {
+    w.localStorage.setItem('yt_customer_token', ct);
+    w.localStorage.setItem('yt_customer_profile', JSON.stringify(reg.data.customer));
+  };
+  const page = await openPage(global.__JSDOM, '/reward.html', seedCustomer);
+  const { win, doc } = page;
+
+  /* ★ 断言要能分辨「静态标记」与「真的载入成功」。
+     reward.html 的静态值就是 closedMeta = '—'、rewardAmount = 'RM 0.00'、
+     walletAfter = 'RM 0.00'，所以「非空」和「含 RM」都会假通过。 */
+  const ready = await until(() => {
+    const meta = doc.getElementById('closedMeta').textContent;
+    return meta !== '—' && meta.indexOf('RW-1') >= 0;
+  }, 12000);
+  t.check('★ 信封画面出现了（closedMeta 有真实订单资料）', ready,
+    JSON.stringify(doc.getElementById('closedMeta').textContent));
+  t.check('★ closedMeta 显示订单金额 RM 86.00',
+    doc.getElementById('closedMeta').textContent.indexOf('86.00') >= 0);
+  t.equal('没有错误状态', doc.getElementById('stateError').style.display, 'none');
+
+  const walletBefore = (await post('getWallet', {}, ct)).data.balance;
+  t.equal('开之前钱包是 0', walletBefore, 0);
+  doc.getElementById('envelope').click();
+
+  const opened = await until(() => {
+    const el = doc.getElementById('rewardAmount').textContent;
+    return el !== 'RM 0.00' && el.length > 0;
+  }, 12000);
+  t.check('★ 打开后显示真实金额（不是静态的 RM 0.00）', opened,
+    JSON.stringify(doc.getElementById('rewardAmount').textContent));
+
+  const walletAfter = (await post('getWallet', {}, ct)).data.balance;
+  t.check('★ 钱包真的进帐了', walletAfter > 0, walletBefore + ' → ' + walletAfter);
+  /* 画面显示的余额要跟后端一致 */
+  const shown = doc.getElementById('walletAfter').textContent.replace(/[^0-9.]/g, '');
+  t.equal('★ 画面余额与后端一致', Math.round(parseFloat(shown) * 100), walletAfter,
+    shown + ' vs ' + walletAfter);
+
+  /* 再点一次不会进帐两次（后端 claimReward 幂等） */
+  doc.getElementById('envelope').click();
+  await sleep(600);
+  t.equal('★ 重复点击不会进帐两次',
+    (await post('getWallet', {}, ct)).data.balance, walletAfter);
+
+  page.dom.window.close();
+});
+
+suite.group('06e · preview.html 总览页跑得起来', async (t) => {
+  const page = await openPage(global.__JSDOM, '/preview.html',
+    seedStaff(global.__ownerToken, global.__ownerProfile));
+  t.check('★ preview.html 载入且 API 可用', !!page.win.API);
+  page.dom.window.close();
 });
 
 /* =============================================================

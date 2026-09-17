@@ -25,7 +25,36 @@
 | 11 | Analytics（§80） | ⬜ 未开始 |
 | 12 | 安全审计（§81） | ✅ 完成 · §81 的 12 项逐条验 · `test:security` 214 项 |
 
-### Phase 10 / 11 页面验收（`npm run test:admin-ui`，88 项）
+### 页面覆盖率补完（`npm run test:admin-ui`，123 项）
+
+比对「repo 里有哪些页面」与「哪些页面被测试真的开过」，发现 5 个页面
+从来没被任何测试执行过：`preview.html`、`reward.html`、`admin/audit.html`、
+`admin/settings.html`、`admin/staff.html`。其中两个对 2.0 是关键的 ——
+设置页是老板开点单开关（`ORDERING_ENABLED` / 营业时间，§63）的地方，
+员工页是建 MANAGER / STAFF 账号（§32 权限分界的前提）的地方。已全部补测：
+
+| 页面 | 实跑验证 |
+|---|---|
+| `admin/settings.html` | 39 个设置渲染出来，§63 的 7 个新设置都在画面上；从页面把 `ORDERING_ENABLED` 由 `false` 改成 `true` 并点 SAVE，后端 `getSettings` 读回来确实是 `true` |
+| `admin/staff.html` | 员工列表渲染；从页面建 `MANAGER` 与 `STAFF` 各一个，两个都能用新密码登入且角色正确；角色下拉含 OWNER / MANAGER / STAFF |
+| `admin/audit.html` | 操作记录列出来，看得到刚才的设置变更，筛选下拉在 |
+| `reward.html` | 顾客开 Reward：信封显示真实订单资料（`RM 86.00 · RW-1`）而非静态占位；点击后钱包 `0 → 145`，画面余额与后端一致；**重复点击不会进帐两次**（`claimReward` 幂等） |
+| `preview.html` | 总览页载入且 API 可用 |
+
+**写测试时踩到的一个陷阱，值得记下来**：`reward.html` 的静态标记里
+`#closedMeta` 是「—」、`#rewardAmount` 与 `#walletAfter` 都是「RM 0.00」。
+所以「内容非空」「含 RM」这类断言会被静态 HTML 骗过而假通过。
+断言必须能分辨「静态标记」与「真的载入成功」—— 改成比对真实订单编号
+`RW-1`、金额 `86.00`、以及「不等于 RM 0.00」。
+
+顺带确认一个**不是** bug 的东西：`js/reward.js` 在 `state.reward` 为 null 时
+点信封会抛 `TypeError`。但 `show()` 一次只显示四个状态中的一个，
+载入失败走的是 `show('stateError')`，会把信封所在的 `stateClosed`
+设成 `display:none`，真实用户点不到；而 `show('stateClosed')` 只在
+`state.reward` 赋值之后才呼叫。所以那条路径在正常 UI 下不可达，
+只在程序化派发 click 时才会碰到 —— 不去「修」一个不存在的问题。
+
+### Phase 10 / 11 页面验收（§32 权限分界）
 
 这两页之前只有 smoke-ui 的静态契约检查，从来没被真正执行过。用 jsdom
 真的把页面开起来跑之后，抓到三个「后端测过了但页面根本跑不起来」的问题：
