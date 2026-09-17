@@ -2,12 +2,14 @@
    YETIPSY — app.js  (Customer Home)
    -------------------------------------------------------------
    客户主页只有一个画面：
+
      · 顶栏：品牌 · LIVE 状态 · 认领（右上角）
-     · 活动幕布：会员问候 / 待领奖励 / 活动，左右滑动 + 自动轮播
+     · 活动幕布：会员卡 / 待领奖励 / 活动，左右滑动 + 自动轮播
      · 四个入口：下单 · 会员码 · 会员中心 · 我的订单
 
    刻意不在下面放任何其他入口：
      钱包 / 记录都收进「会员中心」，避免首页变成功能清单。
+   会员卡（积分 / 钱包 / 到店）放在幕布第一张，一眼看到但不多占版面。
    ============================================================= */
 
 var APP = (function () {
@@ -25,6 +27,13 @@ var APP = (function () {
 
   var rotateTimer = null;
   var paused = false;
+
+  /* 幕布上的装饰：鸡尾酒杯（纯装饰，不含资料） */
+  var ART_GLASS =
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2" ' +
+    'stroke-linecap="round" stroke-linejoin="round">' +
+    '<path d="M4 4h16l-8 8z"/><path d="M12 12v6"/><path d="M8.5 20h7"/>' +
+    '<path d="M6.4 6.6h11.2"/></svg>';
 
   /* ---------------------------------------------------------
      初始化
@@ -48,11 +57,11 @@ var APP = (function () {
   function init() {
     if (!AUTH.isCustomerLoggedIn()) { AUTH.requireCustomer(); return; }
 
-    setIcon('claimIcon',  'scan', 18);
-    setIcon('tileMenu',   'menu', 30);
-    setIcon('tileCode',   'scan', 30);
-    setIcon('tileProfile','profile', 30);
-    setIcon('tileOrders', 'orders', 30);
+    setIcon('claimIcon',  'scan', 15);
+    setIcon('tileMenu',   'menu', 22);
+    setIcon('tileCode',   'scan', 22);
+    setIcon('tileProfile','profile', 22);
+    setIcon('tileOrders', 'orders', 22);
 
     renderConfigError();
     bindBanner();
@@ -77,20 +86,21 @@ var APP = (function () {
     if (!box) return;
     if (YETIPSY_CONFIG.IS_MISCONFIGURED()) {
       box.textContent = '● NO BACKEND';
-      box.style.color = '#E2696B';
+      box.className = 'live-pill off';
       return;
     }
     box.textContent = '● …';
+    box.className = 'live-pill';
     API.system.ping().then(function (res) {
       if (res.success && res.data && res.data.mode === 'PRODUCTION') {
         box.textContent = '● LIVE';
-        box.style.color = 'var(--ok)';
+        box.className = 'live-pill on';
       } else if (res.success) {
         box.textContent = '● ' + (res.data.mode || 'ONLINE');
-        box.style.color = 'var(--muted-2)';
+        box.className = 'live-pill';
       } else {
         box.textContent = '● OFFLINE';
-        box.style.color = '#E2696B';
+        box.className = 'live-pill off';
       }
     });
   }
@@ -147,17 +157,26 @@ var APP = (function () {
      活动幕布
      --------------------------------------------------------- */
 
+  function stat(value, label) {
+    return '<span class="hb-stat"><b>' + UI.esc(value) + '</b><i>' + UI.esc(label) + '</i></span>';
+  }
+
   function buildSlides(promotions) {
     var slides = [];
-
-    /* ① 会员问候（一定在第一张，顾客一眼看到自己的名字与等级） */
-    var g = greeting();
     var c = state.profile || {};
+    var g = greeting();
+
+    /* ① 会员卡（一定在第一张）：问候 + 积分 / 钱包 / 到店 */
     slides.push({
       kind: 'greeting',
-      zh: g.zh + '，' + (c.name || 'Friend'),
-      en: g.en.toUpperCase() + ' · ' + UI.tierName(c.membershipTier),
-      sub: UI.points(c.currentPoints) + ' POINTS · ' + UI.money(c.walletBalance) + ' WALLET',
+      eyebrow: g.zh + ' · ' + g.en.toUpperCase() + ' · ' + UI.tierName(c.membershipTier),
+      zh: c.name || 'Friend',
+      art: ART_GLASS,
+      stats: [
+        stat(UI.points(c.currentPoints), 'POINTS 积分'),
+        stat(UI.money(c.walletBalance), 'WALLET 钱包'),
+        stat(c.totalVisits || 0, 'VISITS 到店')
+      ],
       href: 'menu.html',
       cta: '开始点单 ORDER NOW'
     });
@@ -166,9 +185,10 @@ var APP = (function () {
     if (state.pendingReward) {
       slides.splice(1, 0, {
         kind: 'reward',
-        zh: '你的奖励已准备好',
-        en: 'YOUR REWARD IS READY',
-        sub: '点开领取 · TAP TO OPEN',
+        eyebrow: 'REWARD · 奖励已准备好',
+        zh: UI.money(state.pendingReward.rewardAmount || state.pendingReward.amount || 0),
+        sub: '点开领取，金额进入钱包',
+        art: ART_GLASS,
         href: 'reward.html?rewardId=' + encodeURIComponent(state.pendingReward.rewardId),
         cta: '领取 CLAIM'
       });
@@ -176,14 +196,17 @@ var APP = (function () {
 
     /* ③ 活动 */
     promotions.forEach(function (p) {
+      var when = '';
+      if (p.startDate || p.endDate) {
+        when = (p.startDate || '') + (p.endDate ? ' — ' + p.endDate : '');
+      }
       slides.push({
         kind: 'promo',
+        eyebrow: 'PROMOTION · ' + (p.subtitle || 'TONIGHT'),
         zh: p.title || '今晚活动',
-        en: p.subtitle || 'TONIGHT',
         sub: p.description || '',
-        date: (p.startDate || p.endDate)
-          ? (p.startDate || '') + (p.endDate ? ' — ' + p.endDate : '')
-          : '',
+        date: when,
+        art: ART_GLASS,
         href: 'menu.html',
         cta: '看酒单 VIEW MENU'
       });
@@ -192,30 +215,34 @@ var APP = (function () {
     return slides;
   }
 
+  function slideHtml(s, i) {
+    var inner =
+      '<span class="hb-art">' + (s.art || '') + '</span>' +
+      '<span class="hb-eyebrow">' + UI.esc(s.eyebrow || '') + '</span>' +
+      '<span class="hb-zh">' + UI.esc(s.zh || '') + '</span>' +
+      (s.sub ? '<span class="hb-sub">' + UI.esc(s.sub) + '</span>' : '') +
+      (s.stats && s.stats.length ? '<span class="hb-stats">' + s.stats.join('') + '</span>' : '') +
+      (s.date ? '<span class="hb-date">' + UI.esc(s.date) + '</span>' : '') +
+      (s.cta ? '<span class="hb-cta">' + UI.esc(s.cta) + ' ›</span>' : '');
+
+    return '<a class="hb-slide hb-' + UI.esc(s.kind) + '" href="' + UI.esc(s.href) +
+      '" data-slide="' + i + '">' + inner + '</a>';
+  }
+
   function renderBanner() {
     var track = document.getElementById('homeBannerTrack');
     var dots = document.getElementById('homeBannerDots');
     if (!track) return;
 
-    var html = state.slides.map(function (s, i) {
-      var inner =
-        '<div class="hb-zh">' + UI.esc(s.zh) + '</div>' +
-        '<div class="hb-en">' + UI.esc(s.en) + '</div>' +
-        (s.sub ? '<div class="hb-sub">' + UI.esc(s.sub) + '</div>' : '') +
-        (s.date ? '<div class="hb-date">' + UI.esc(s.date) + '</div>' : '') +
-        (s.cta ? '<div class="hb-cta">' + UI.esc(s.cta) + ' ›</div>' : '');
-
-      return '<a class="hb-slide hb-' + UI.esc(s.kind) + '" href="' + UI.esc(s.href) +
-        '" data-slide="' + i + '">' + inner + '</a>';
-    }).join('');
+    var html = state.slides.map(slideHtml).join('');
 
     /* 活动载入失败 → 换成一张写清楚的错误幕布（顾客/员工都看得出来） */
     if (state.promoError) {
       var e = state.promoError;
       html += '<div class="hb-slide hb-error">' +
-        '<div class="hb-zh" style="color:#E2696B">活动载入失败</div>' +
-        '<div class="hb-en">PROMOTIONS FAILED TO LOAD</div>' +
-        '<div class="hb-sub">' + UI.esc(e.code || 'ERROR') + '<br>' + UI.esc(e.message || '') + '</div>' +
+        '<span class="hb-eyebrow" style="color:#E2696B">活动载入失败</span>' +
+        '<span class="hb-zh" style="font-size:16px">PROMOTIONS FAILED TO LOAD</span>' +
+        '<span class="hb-sub">' + UI.esc(e.code || 'ERROR') + '<br>' + UI.esc(e.message || '') + '</span>' +
         '<button class="btn btn-secondary btn-sm hb-retry" id="promoRetryBtn">' +
           '<span>重试<span class="btn-sub-label">RETRY</span></span></button>' +
         '</div>';

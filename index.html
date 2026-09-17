@@ -16,10 +16,13 @@
 <div class="page home-page">
 
   <!-- 顶栏：品牌 · 连线状态 · 认领（右上角保留） -->
-  <div class="row-between" style="padding: 6px 2px 14px;">
-    <div class="brand-mark" style="font-size:19px;letter-spacing:6px;text-indent:6px;">YETIPSY</div>
-    <div class="row-between" style="gap:10px;align-items:center">
-      <div id="connectionStatus" class="tiny muted-2" style="letter-spacing:1.4px"></div>
+  <div class="home-top">
+    <div class="home-brand">
+      <span class="hb-mark">YETIPSY</span>
+      <span class="hb-slogan">JOIN THE NIGHT</span>
+    </div>
+    <div class="home-top-right">
+      <span id="connectionStatus" class="live-pill">● …</span>
       <a href="claim.html" class="top-claim" id="topClaimLink">
         <span id="claimIcon"></span>
         <span class="tc-zh">认领</span><span class="tc-en">CLAIM</span>
@@ -27,12 +30,13 @@
     </div>
   </div>
 
-  <!-- 活动幕布：活动 / 待领奖励轮流播放，可左右滑动 -->
+  <!-- 活动幕布：会员卡 / 待领奖励 / 活动，左右滑动 + 自动轮播 -->
   <div class="home-banner" id="homeBanner">
     <div class="hb-track" id="homeBannerTrack">
-      <div class="hb-slide hb-default">
-        <div class="hb-zh">YETIPSY</div>
-        <div class="hb-en">JOIN THE NIGHT</div>
+      <div class="hb-slide hb-greeting">
+        <div class="hb-eyebrow">YETIPSY MEMBER</div>
+        <div class="hb-zh">欢迎回来</div>
+        <div class="hb-sub">Join the night.</div>
       </div>
     </div>
     <div class="hb-dots" id="homeBannerDots"></div>
@@ -41,24 +45,40 @@
   <!-- 只有 API_URL 没配置时才会出现（正式环境不会显示） -->
   <div id="configError"></div>
 
-  <!-- 四个入口：下面没有别的选项 -->
+  <!-- 四个入口：下面不再有别的选项 -->
   <div class="home-grid">
     <a class="home-tile" href="menu.html">
-      <span class="ht-icon" id="tileMenu"></span>
-      <span class="ht-zh">下单</span><span class="ht-en">ORDER</span>
+      <span class="ht-badge" id="tileMenu"></span>
+      <span class="ht-text">
+        <span class="ht-zh">下单</span>
+        <span class="ht-en">ORDER DRINKS</span>
+      </span>
     </a>
     <a class="home-tile" href="code.html">
-      <span class="ht-icon" id="tileCode"></span>
-      <span class="ht-zh">会员码</span><span class="ht-en">MEMBER CODE</span>
+      <span class="ht-badge" id="tileCode"></span>
+      <span class="ht-text">
+        <span class="ht-zh">会员码</span>
+        <span class="ht-en">MEMBER CODE</span>
+      </span>
     </a>
     <a class="home-tile" href="profile.html">
-      <span class="ht-icon" id="tileProfile"></span>
-      <span class="ht-zh">会员中心</span><span class="ht-en">MEMBER</span>
+      <span class="ht-badge" id="tileProfile"></span>
+      <span class="ht-text">
+        <span class="ht-zh">会员中心</span>
+        <span class="ht-en">MEMBER CENTRE</span>
+      </span>
     </a>
     <a class="home-tile" href="orders.html">
-      <span class="ht-icon" id="tileOrders"></span>
-      <span class="ht-zh">我的订单</span><span class="ht-en">MY ORDERS</span>
+      <span class="ht-badge" id="tileOrders"></span>
+      <span class="ht-text">
+        <span class="ht-zh">我的订单</span>
+        <span class="ht-en">MY ORDERS</span>
+      </span>
     </a>
+  </div>
+
+  <div class="home-foot">
+    <span class="hf-dot"></span>YETIPSY · MINI APP
   </div>
 
 </div>

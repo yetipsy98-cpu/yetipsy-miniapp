@@ -2843,7 +2843,7 @@ function cancelOrder(data, token) {
 ## 11. Menu.gs
 
 > Apps Script 里的档案名称：**`Menu`**（不要打 .gs）
-> ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） · 831 行 · SHA-256 `870e0d43b1c1b74c`
+> ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） · 831 行 · SHA-256 `fecb5bf514c7cb21`
 
 ```javascript
 /* =============================================================
@@ -3531,7 +3531,7 @@ function seedDemoMenu() {
       descriptionEN: it[3], descriptionZH: it[4],
       priceSen: it[5], originalPriceSen: 0, promoPriceSen: 0, promoStart: '', promoEnd: '',
       tags: it[6], strength: it[7],
-      imageURL: '/assets/menu/' + it[1].toLowerCase().replace(/[^a-z]+/g, '-') + '.webp',
+      imageURL: '',   /* 图片是可选：要放就在菜单管理里填 imageURL（例：/assets/menu/mojito.webp） */
       status: 'ACTIVE', available: 'TRUE', sortOrder: i + 1,
       createdAt: nowISO(), updatedAt: nowISO()
     };

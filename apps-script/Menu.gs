@@ -683,7 +683,7 @@ function seedDemoMenu() {
       descriptionEN: it[3], descriptionZH: it[4],
       priceSen: it[5], originalPriceSen: 0, promoPriceSen: 0, promoStart: '', promoEnd: '',
       tags: it[6], strength: it[7],
-      imageURL: '/assets/menu/' + it[1].toLowerCase().replace(/[^a-z]+/g, '-') + '.webp',
+      imageURL: '',   /* 图片是可选：要放就在菜单管理里填 imageURL（例：/assets/menu/mojito.webp） */
       status: 'ACTIVE', available: 'TRUE', sortOrder: i + 1,
       createdAt: nowISO(), updatedAt: nowISO()
     };

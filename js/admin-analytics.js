@@ -109,7 +109,7 @@ var ADMIN_ANALYTICS = (function () {
 
   /** §50 今日 */
   function todayBlock() {
-    var t = state.sales.today;
+    var t = (state.sales && state.sales.today) || {};
     return '<div class="a-section-title">今日 TODAY · ' + UI.esc(t.date) + '</div>' +
       '<div class="dash-grid">' +
         card('销售 SALES', UI.money(t.sales), '毛额 ' + UI.money(t.gross)) +
@@ -124,7 +124,7 @@ var ADMIN_ANALYTICS = (function () {
 
   /** §51 通路业绩 —— 老板判断点餐系统价值的关键 */
   function channelBlock() {
-    var list = state.sales.channels;
+    var list = (state.sales && state.sales.channels) || [];
     var total = state.sales.channelTotal || 0;
 
     var rows = list.length
@@ -180,11 +180,11 @@ var ADMIN_ANALYTICS = (function () {
 
   /** 趋势 */
   function trendBlock() {
-    var trend = state.sales.trend || [];
-    var max = trend.reduce(function (m, d) { return Math.max(m, d.sales); }, 0);
+    var trend = (state.sales && state.sales.trend) || [];
+    var max = trend.reduce(function (m, d) { return Math.max(m, Number(d.sales) || 0); }, 0);
     var bars = trend.map(function (d) {
       var h = max ? Math.max(2, Math.round(d.sales * 100 / max)) : 2;
-      var appH = d.sales ? Math.round(d.appSales * 100 / d.sales) : 0;
+      var appH = d.sales ? Math.round((Number(d.appSales) || 0) * 100 / d.sales) : 0;
       return '<div class="tr-col" title="' + UI.esc(d.date) + ' · ' +
           UI.money(d.sales) + ' · ' + d.orders + ' 单">' +
         '<div class="tr-bar" style="height:' + h + '%">' +
@@ -200,7 +200,7 @@ var ADMIN_ANALYTICS = (function () {
 
   /** §52 会员分析 */
   function memberBlock() {
-    var m = state.members;
+    var m = state.members || {};
     var tiers = (m.tiers || []).map(function (x) {
       return UI.esc(x.tier) + ' ' + x.members;
     }).join(' · ');
@@ -224,10 +224,11 @@ var ADMIN_ANALYTICS = (function () {
       loading: state.loading,
       errorCode: state.errorCode,
       days: state.days,
-      todaySales: state.sales ? state.sales.today.sales : null,
-      todayOrders: state.sales ? state.sales.today.orders : null,
+      todaySales: state.sales && state.sales.today ? state.sales.today.sales : null,
+      todayOrders: state.sales && state.sales.today ? state.sales.today.orders : null,
       channelTotal: state.sales ? state.sales.channelTotal : null,
-      channels: state.sales ? state.sales.channels.map(function (c) { return c.channel; }) : [],
+      channels: state.sales && state.sales.channels
+        ? state.sales.channels.map(function (c) { return c.channel; }) : [],
       topProducts: state.products ? state.products.products.length : null,
       totalMembers: state.members ? state.members.totalMembers : null
     };

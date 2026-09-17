@@ -25,7 +25,8 @@ var ADMIN_ORDERBOARD = (function () {
     errorCode: null,
     knownIds: null,       // 第一次载入不响铃，否则一开页面就吵
     busy: {},             // appOrderId → true，避免连点
-    ticking: 0
+    ticking: 0,
+    laneSig: {}           // 每一栏的内容指纹：没变就不重画（现场反应快很多）
   };
 
   var pollTimer = null;
@@ -35,6 +36,7 @@ var ADMIN_ORDERBOARD = (function () {
   function init() {
     state.muted = localStorage.getItem(MUTE_KEY) === '1';
     bindEvents();
+    bindBoard();
     renderMuteBtn();
     load(true);
   }
@@ -280,6 +282,54 @@ var ADMIN_ORDERBOARD = (function () {
     return m + ':' + (r < 10 ? '0' : '') + r;
   }
 
+  var LANES = [
+    { key: 'NEW',       zh: '新订单',   en: 'NEW',       accent: 'var(--a-gold)' },
+    { key: 'CONFIRMED', zh: '已确认',   en: 'CONFIRMED', accent: 'var(--a-line)' },
+    { key: 'PREPARING', zh: '制作中',   en: 'PREPARING', accent: 'var(--a-line)' },
+    { key: 'READY',     zh: '可取酒',   en: 'READY',     accent: '#7FC8A9' }
+  ];
+
+  function laneShell(lane) {
+    return '<section class="lane" data-lane="' + lane.key + '">' +
+      '<div class="lane-head" style="border-color:' + lane.accent + '">' +
+        '<span class="lane-zh">' + lane.zh + '</span>' +
+        '<span class="lane-en">' + lane.en + '</span>' +
+        '<span class="lane-count">0</span>' +
+      '</div>' +
+      '<div class="lane-body"></div>' +
+    '</section>';
+  }
+
+  /** 事件只绑一次（委派）：重画卡片不用重新绑，也不会越绑越多 */
+  function bindBoard() {
+    var box = document.getElementById('boardBody');
+    if (!box || box.getAttribute('data-bound') === '1') return;
+    box.setAttribute('data-bound', '1');
+    box.addEventListener('click', function (e) {
+      var t = closest(e.target, '[data-act],[data-pay],[data-cancel]');
+      if (!t) return;
+      var card = closest(t, '[data-card]');
+      if (!card) return;
+      var id = card.getAttribute('data-card');
+      var num = (card.querySelector('.bc-num') || {}).textContent || '';
+      if (t.hasAttribute && t.hasAttribute('data-act')) {
+        act(id, t.getAttribute('data-act'), '处理中…');
+      } else if (t.hasAttribute && t.hasAttribute('data-pay')) {
+        pay(id);
+      } else if (t.hasAttribute && t.hasAttribute('data-cancel')) {
+        cancel(id, num);
+      }
+    });
+  }
+
+  function closest(node, selector) {
+    while (node && node.nodeType === 1) {
+      if (node.matches ? node.matches(selector) : false) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
   function render() {
     var box = document.getElementById('boardBody');
     if (!box) return;
@@ -296,27 +346,30 @@ var ADMIN_ORDERBOARD = (function () {
       return;
     }
 
-    var lanes = [
-      { key: 'NEW',       zh: '新订单',   en: 'NEW',       accent: 'var(--a-gold)' },
-      { key: 'CONFIRMED', zh: '已确认',   en: 'CONFIRMED', accent: 'var(--a-line)' },
-      { key: 'PREPARING', zh: '制作中',   en: 'PREPARING', accent: 'var(--a-line)' },
-      { key: 'READY',     zh: '可取酒',   en: 'READY',     accent: '#7FC8A9' }
-    ];
+    if (box.getAttribute('data-ready') !== '1') {
+      box.innerHTML = LANES.map(laneShell).join('');
+      box.setAttribute('data-ready', '1');
+      state.laneSig = {};
+    }
 
-    box.innerHTML = lanes.map(function (lane) {
+    /* 只有真的变动的栏位才重画 —— 每 8 秒整块重画会让现场感觉「卡」 */
+    LANES.forEach(function (lane) {
       var list = state.lanes[lane.key] || [];
-      return '<section class="lane">' +
-        '<div class="lane-head" style="border-color:' + lane.accent + '">' +
-          '<span class="lane-zh">' + lane.zh + '</span>' +
-          '<span class="lane-en">' + lane.en + '</span>' +
-          '<span class="lane-count">' + list.length + '</span>' +
-        '</div>' +
-        (list.length ? list.map(function (o) { return card(o, lane.key); }).join('')
-                     : '<div class="a-empty" style="padding:14px">—</div>') +
-      '</section>';
-    }).join('');
+      var section = box.querySelector('.lane[data-lane="' + lane.key + '"]');
+      if (!section) return;
 
-    bindCards();
+      var count = section.querySelector('.lane-count');
+      if (count) count.textContent = list.length;
+
+      var sig = JSON.stringify(list);
+      if (state.laneSig[lane.key] === sig) return;
+      state.laneSig[lane.key] = sig;
+
+      var body = section.querySelector('.lane-body');
+      body.innerHTML = list.length
+        ? list.map(function (o) { return card(o, lane.key); }).join('')
+        : '<div class="a-empty" style="padding:14px">—</div>';
+    });
   }
 
   function renderTopbar() {
@@ -404,33 +457,6 @@ var ADMIN_ORDERBOARD = (function () {
           : '<span class="a-sub">已收款才能完成</span>') +
       '</div>' +
     '</article>';
-  }
-
-  function bindCards() {
-    var cards = document.querySelectorAll('[data-card]');
-    for (var i = 0; i < cards.length; i++) {
-      (function (card) {
-        var id = card.getAttribute('data-card');
-        var number = (card.querySelector('.bc-num') || {}).textContent || '';
-
-        var acts = card.querySelectorAll('[data-act]');
-        for (var a = 0; a < acts.length; a++) {
-          (function (btn) {
-            btn.addEventListener('click', function () {
-              act(id, btn.getAttribute('data-act'), '处理中…');
-            });
-          })(acts[a]);
-        }
-        var pays = card.querySelectorAll('[data-pay]');
-        for (var p = 0; p < pays.length; p++) {
-          pays[p].addEventListener('click', function () { pay(id); });
-        }
-        var cancels = card.querySelectorAll('[data-cancel]');
-        for (var c = 0; c < cancels.length; c++) {
-          cancels[c].addEventListener('click', function () { cancel(id, number); });
-        }
-      })(cards[i]);
-    }
   }
 
   function debugState() {

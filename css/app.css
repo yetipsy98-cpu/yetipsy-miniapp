@@ -725,7 +725,10 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; }
 .product-thumb {
   width: 62px; height: 62px; flex: 0 0 62px;
   border-radius: 10px;
-  background: var(--card-2) center/cover no-repeat;
+  /* 没有商品图时不是「空白」，是一块有质感的底 */
+  background:
+    radial-gradient(120% 120% at 28% 18%, rgba(229,183,105,.20), transparent 62%),
+    linear-gradient(180deg, #1C1C1C, #141414);
   display: flex; align-items: center; justify-content: center;
   font-size: 22px; color: var(--muted-2);
   overflow: hidden;
@@ -791,7 +794,9 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; }
 .detail-hero {
   height: 200px;
   border-radius: var(--radius);
-  background: var(--card-2) center/cover no-repeat;
+  background:
+    radial-gradient(90% 90% at 50% 18%, rgba(229,183,105,.18), transparent 66%),
+    linear-gradient(180deg, #1C1C1C, #131313);
   display: flex; align-items: center; justify-content: center;
   font-size: 44px; color: var(--muted-2);
   margin-bottom: 14px;
@@ -877,22 +882,50 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; }
 }
 
 /* =============================================================
-   2.0 会员端导览界面（登入后的第一个画面）
+   2.1 会员端首页（登入后的第一个画面）
+   -------------------------------------------------------------
+   动线：活动幕布（会员卡 / 奖励 / 活动）→ 四个入口 → 没有别的。
+   视觉：深色底 + 金色点缀，幕布有酒杯装饰与玻璃反光。
    ============================================================= */
+
+.home-page { padding: 14px 16px 26px; }
+
+/* ---- 顶栏 ---- */
+.home-top {
+  display: flex; align-items: center; justify-content: space-between;
+  gap: 10px; margin-bottom: 14px;
+}
+.home-brand { display: flex; flex-direction: column; gap: 1px; }
+.hb-mark {
+  font-size: 19px; font-weight: 750; letter-spacing: 6px; text-indent: 6px;
+  background: linear-gradient(92deg, #F4E3BF, var(--gold) 62%, #B98F45);
+  -webkit-background-clip: text; background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+.hb-slogan { font-size: 7.5px; letter-spacing: 3.4px; color: var(--muted-2); }
+.home-top-right { display: flex; align-items: center; gap: 8px; }
+
+.live-pill {
+  font-size: 8.5px; letter-spacing: 1.4px; color: var(--muted-2);
+  border: 1px solid var(--line); border-radius: 999px; padding: 5px 9px;
+  white-space: nowrap;
+}
+.live-pill.on   { color: var(--ok);     border-color: rgba(88,181,140,.35); }
+.live-pill.off  { color: var(--danger); border-color: rgba(226,105,107,.4); }
 
 /* 右上角的认领入口（foodcourt 认领用；主流程是员工扫会员码） */
 .top-claim {
   display: inline-flex; align-items: center; gap: 5px;
-  border: 1px solid var(--line); border-radius: 999px;
+  border: 1px solid var(--gold-line); border-radius: 999px;
   padding: 5px 11px; color: var(--gold); text-decoration: none;
+  background: rgba(229,183,105,.06);
 }
 .top-claim:active { transform: scale(.96); }
 .top-claim .tc-zh { font-size: 11px; }
 .top-claim .tc-en { font-size: 7.5px; letter-spacing: 1px; color: var(--muted-2); }
 
-/* ---- 活动幕布（会员问候 / 待领奖励 / 活动，左右滑动 + 自动轮播） ---- */
-.home-page { padding-top: 12px; }
-.home-banner { position: relative; margin-bottom: 16px; }
+/* ---- 活动幕布（会员卡 / 待领奖励 / 活动：左右滑动 + 自动轮播） ---- */
+.home-banner { position: relative; margin-bottom: 14px; }
 .hb-track {
   display: flex; gap: 10px;
   overflow-x: auto; overflow-y: hidden;
@@ -901,28 +934,57 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; }
   scrollbar-width: none;
 }
 .hb-track::-webkit-scrollbar { display: none; }
+
 .hb-slide {
+  position: relative; overflow: hidden;
   flex: 0 0 100%; scroll-snap-align: center;
-  min-height: 158px; padding: 18px;
-  display: flex; flex-direction: column; justify-content: flex-end; gap: 3px;
-  border: 1px solid var(--line); border-radius: 20px;
+  min-height: 176px; padding: 18px 18px 16px;
+  display: flex; flex-direction: column; gap: 3px;
+  border: 1px solid var(--line); border-radius: 22px;
   color: var(--text); text-decoration: none;
   background:
-    radial-gradient(120% 90% at 88% 0%, rgba(229,183,105,0.18), transparent 58%),
-    linear-gradient(160deg, #1C1C1C, #121212);
+    radial-gradient(120% 95% at 88% -6%, rgba(229,183,105,0.20), transparent 58%),
+    radial-gradient(90% 80% at -10% 110%, rgba(111,168,214,0.10), transparent 60%),
+    linear-gradient(160deg, #1D1D1D, #111111);
+  box-shadow: var(--shadow);
 }
 .hb-slide:active { transform: scale(.985); }
 .hb-slide.hb-reward { border-color: var(--gold-line); }
-.hb-slide.hb-error { justify-content: center; }
-.hb-zh { font-size: 19px; font-weight: 700; letter-spacing: .3px; }
-.hb-en {
-  font-size: 9px; letter-spacing: 2px; color: var(--gold);
-  text-transform: uppercase;
+.hb-slide.hb-error  { justify-content: center; }
+
+/* 酒杯装饰（纯装饰，压在右下角） */
+.hb-art {
+  position: absolute; right: -6px; bottom: -12px;
+  width: 132px; height: 132px; color: var(--gold);
+  opacity: .13; pointer-events: none;
 }
-.hb-sub { font-size: 12px; color: var(--muted); margin-top: 6px; line-height: 1.55; }
+.hb-art svg { width: 100%; height: 100%; }
+
+.hb-eyebrow {
+  font-size: 8.5px; letter-spacing: 2.2px; text-transform: uppercase;
+  color: var(--gold); margin-bottom: 2px;
+}
+.hb-zh {
+  font-size: 26px; font-weight: 750; letter-spacing: .2px; line-height: 1.15;
+  margin: auto 0 0;
+}
+.hb-sub { font-size: 12px; color: var(--muted); margin-top: 5px; line-height: 1.5; }
 .hb-date { font-size: 9.5px; color: var(--muted-2); margin-top: 8px; letter-spacing: .6px; }
+
+.hb-stats {
+  display: flex; gap: 16px; margin-top: 10px;
+  padding-top: 10px; border-top: 1px solid rgba(255,255,255,.06);
+}
+.hb-stat { display: flex; flex-direction: column; gap: 2px; }
+.hb-stat b { font-size: 14px; font-weight: 700; letter-spacing: .2px; }
+.hb-stat i {
+  font-style: normal; font-size: 7.5px; letter-spacing: 1.1px;
+  color: var(--muted-2); text-transform: uppercase;
+}
+
 .hb-cta { font-size: 10px; letter-spacing: 1.6px; color: var(--gold); margin-top: 12px; }
 .hb-retry { width: auto; margin-top: 14px; padding: 0 18px; }
+
 .hb-dots {
   display: flex; gap: 6px; justify-content: center;
   margin-top: 10px; min-height: 6px;
@@ -940,15 +1002,35 @@ h1, h2, h3, h4 { margin: 0; font-weight: 600; }
   gap: 10px;
 }
 .home-tile {
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  gap: 4px; min-height: 118px; padding: 18px 10px;
-  background: var(--card); border: 1px solid var(--line);
-  border-radius: 20px; text-decoration: none; color: var(--text); text-align: center;
+  position: relative; overflow: hidden;
+  display: flex; flex-direction: column; gap: 10px;
+  min-height: 132px; padding: 16px;
+  background: linear-gradient(165deg, #1B1B1B, #121212);
+  border: 1px solid var(--line);
+  border-radius: 20px; text-decoration: none; color: var(--text);
 }
-.home-tile:active { transform: scale(.97); }
-.home-tile .ht-icon { color: var(--gold); display: block; margin-bottom: 4px; }
-.home-tile .ht-zh { font-size: 15px; font-weight: 700; letter-spacing: .6px; }
-.home-tile .ht-en {
-  font-size: 8px; letter-spacing: 1.6px; color: var(--muted-2);
-  display: block; margin-top: 2px;
+.home-tile::after {
+  content: '›'; position: absolute; right: 14px; top: 12px;
+  font-size: 16px; color: var(--muted-2);
+}
+.home-tile:active { transform: scale(.97); border-color: var(--gold-line); }
+.ht-badge {
+  width: 44px; height: 44px; border-radius: 14px;
+  display: inline-flex; align-items: center; justify-content: center;
+  color: var(--gold);
+  background: rgba(229,183,105,.10);
+  border: 1px solid rgba(229,183,105,.22);
+}
+.ht-text { display: flex; flex-direction: column; gap: 3px; margin-top: auto; }
+.ht-zh { font-size: 16px; font-weight: 700; letter-spacing: .6px; }
+.ht-en { font-size: 8px; letter-spacing: 1.8px; color: var(--muted-2); }
+
+/* ---- 底部只留一行品牌字，不是入口 ---- */
+.home-foot {
+  display: flex; align-items: center; justify-content: center; gap: 7px;
+  margin-top: 20px; font-size: 8px; letter-spacing: 3px; color: #4A4A4A;
+}
+.hf-dot {
+  width: 5px; height: 5px; border-radius: 999px; background: var(--gold);
+  opacity: .55;
 }

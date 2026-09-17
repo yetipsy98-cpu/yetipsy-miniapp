@@ -3,12 +3,12 @@
    -------------------------------------------------------------
    现场动线（foodcourt 通路）：
 
-     ① 录入 foodcourt 单据（单号 + 金额）→ 进「待进单」队列
+     ① 照 foodcourt 单据用键盘录入（单号选填 + 金额）→ 进「待进单」队列
      ② 顾客出示会员码 → 扫码
      ③ 确认会员 → 进分（积分 / Reward / 到店次数）
 
    为什么是这个顺序（跟旧的「输金额 → 扫会员码」不一样）：
-     · 单是 foodcourt 出的，金额以单据为准，员工不该再抄一次
+     · 单是 foodcourt 出的，金额以单据为准，员工不该再抄第二次
      · 值班时可以先把三五张单录进队列，顾客来了才逐张扫码
      · 扫码只是「这张单是谁的」，付款早在 foodcourt 完成了
 
@@ -22,6 +22,8 @@
 
 var ADMIN_POS = (function () {
 
+  var PAD_KEY = 'yt_pos_pad_open';
+
   var state = {
     step: 'queue',           // queue | scan | confirm | result
     tickets: [],
@@ -31,11 +33,14 @@ var ADMIN_POS = (function () {
     membership: null,
     verifyToken: '',
     verifyLeft: 0,
-    bill: 0,
     result: null,
     errorCode: null,
     busy: false,
-    pollSeconds: 8
+    pollSeconds: 8,
+    padOpen: false,
+    pad: '0',
+    padDecimal: false,
+    signature: ''
   };
 
   var el = {};
@@ -55,51 +60,46 @@ var ADMIN_POS = (function () {
     el.video       = document.getElementById('scanVideo');
     el.hint        = document.getElementById('scanHint');
     el.support     = document.getElementById('scanSupport');
+    el.padBody     = document.getElementById('padBody');
 
     on('refreshBtn', function () { loadQueue(true); });
-    on('newTicketBtn', toggleForm);
+    on('padToggle', function () { togglePad(); });
     on('saveTicketBtn', saveTicket);
-    on('cancelTicketBtn', function () { toggleForm(false); });
-    on('ticketAmountInput', null, function (e) { if (e.key === 'Enter') saveTicket(); });
-    on('ticketNoInput', null, function (e) { if (e.key === 'Enter') saveTicket(); });
-
+    on('manualBtn', function () { handleCode(txt('manualInput')); });
+    on('manualInput', null, function (e) { if (e.key === 'Enter') handleCode(txt('manualInput')); });
     on('startScanBtn', startCamera);
     on('stopScanBtn', function () { MEMBER_SCANNER.stop(); });
-    on('manualBtn', function () {
-      var v = txt('manualInput');
-      if (!v) { UI.toast('请输入条码内容 / Enter the code', 'error'); return; }
-      handleCode(v);
-    });
-    on('backToQueueBtn', backToQueue);
-    on('rescanBtn', function () { pickTicket(state.selected); });
     on('confirmBtn', confirm);
+    on('rescanBtn', function () { if (state.selected) pickTicket(state.selected.orderId); });
+    on('backToQueueBtn', backToQueue);
     on('nextTicketBtn', backToQueue);
 
-    MEMBER_SCANNER.init();
-    if (el.support) el.support.innerHTML = MEMBER_SCANNER.supportText();
-    if (!MEMBER_SCANNER.hasCamera()) show('startScanBtn', false);
+    bindPad();
 
     document.addEventListener('visibilitychange', function () {
-      if (document.hidden) stopPolling();
+      if (document.hidden) { stopPolling(); MEMBER_SCANNER.stop(); }
       else if (state.step === 'queue') { loadQueue(false); startPolling(); }
     });
 
+    /* 键盘预设：没有待进单时自动打开（员工一眼知道下一步） */
+    var saved = null;
+    try { saved = localStorage.getItem(PAD_KEY); } catch (e) {}
+    state.padOpen = saved === null ? true : saved === '1';
+    renderPad();
+
     show('queue');
-    loadQueue(true);
-    var amount = document.getElementById('ticketAmountInput');
-    if (amount) amount.focus();
+    loadQueue(false);
   }
 
   function on(id, fn, keyFn) {
     var node = document.getElementById(id);
     if (!node) return;
-    if (fn) node.addEventListener('click', fn);
-    if (keyFn) node.addEventListener('keydown', keyFn);
+    node.addEventListener(keyFn ? 'keydown' : 'click', keyFn || fn);
   }
 
   function txt(id) {
     var node = document.getElementById(id);
-    return node ? node.value.trim() : '';
+    return node ? String(node.value || '').trim() : '';
   }
 
   function set(id, value) {
@@ -118,11 +118,21 @@ var ADMIN_POS = (function () {
     if (el.stepScan)    el.stepScan.style.display    = step === 'scan'    ? '' : 'none';
     if (el.stepConfirm) el.stepConfirm.style.display = step === 'confirm' ? '' : 'none';
     if (el.stepResult)  el.stepResult.style.display  = step === 'result'  ? '' : 'none';
-    if (step === 'queue') { startPolling(); } else { stopPolling(); }
+
+    Array.prototype.forEach.call(document.querySelectorAll('.pos-steps .ps'), function (n) {
+      var key = n.getAttribute('data-step');
+      var on = (step === 'queue' && key === 'queue') ||
+               (step === 'scan' && key === 'scan') ||
+               ((step === 'confirm' || step === 'result') && key === 'result');
+      n.className = 'ps' + (on ? ' on' : '');
+    });
+
+    if (step === 'queue') startPolling(); else stopPolling();
+    window.scrollTo(0, 0);
   }
 
   /* ---------------------------------------------------------
-     待进单队列
+     待进单队列（不变就不重画：避免闪动、滚动位置被吃掉）
      --------------------------------------------------------- */
 
   function loadQueue(verbose) {
@@ -131,13 +141,14 @@ var ADMIN_POS = (function () {
       if (!res.success) {
         state.errorCode = res.error.code;
         if (!ADMIN.handleError(res.error) && verbose) UI.toast(res.error.message, 'error');
+        renderQueue(true);
         return res;
       }
       state.errorCode = null;
       state.tickets = res.data.pending || [];
       state.today = res.data.today || null;
       state.pollSeconds = Number(res.data.pollSeconds) || 8;
-      renderQueue();
+      renderQueue(false);
       return res;
     });
   }
@@ -155,33 +166,39 @@ var ADMIN_POS = (function () {
     if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
   }
 
-  function renderQueue() {
+  function renderQueue(force) {
     var box = document.getElementById('queueBody');
     if (!box) return;
 
     set('statOpen', state.tickets.length);
     set('statBound', state.today ? state.today.bound : 0);
     set('statPoints', state.today ? UI.points(state.today.points) : 0);
+    set('queueCount', state.tickets.length);
 
     var status = document.getElementById('queueStatus');
     if (status) {
       status.textContent = state.errorCode
         ? '载入失败 ' + state.errorCode
-        : (state.tickets.length ? state.tickets.length + ' 张单据等着进单' : '目前没有待进单');
+        : (state.tickets.length ? state.tickets.length + ' 张单据等着进单' : '目前没有待进单 · 用下面键盘录入第一张');
       status.className = 'a-sub' + (state.errorCode ? ' warn' : '');
     }
+
+    if (!state.tickets.length && !state.errorCode) {
+      if (typeof state.padOpen === 'boolean') { state.padOpen = true; renderPad(); }
+    }
+
+    var sig = JSON.stringify([state.errorCode, state.tickets, state.today]);
+    if (!force && sig === state.signature) return;
+    state.signature = sig;
 
     if (state.errorCode) {
       box.innerHTML = '<div class="a-empty">' +
         '载入失败 / LOAD FAILED<br>' + UI.esc(state.errorCode) +
         '<br><button class="chip mt-16" id="retryBtn">重试 RETRY</button></div>';
       on('retryBtn', function () { loadQueue(true); });
-      return;
-    }
-
-    if (!state.tickets.length) {
-      box.innerHTML = '<div class="a-empty" style="padding:22px">' +
-        '没有待进单 · 顾客来了就先按下面的「录入 FOODCOURT 单据」</div>';
+    } else if (!state.tickets.length) {
+      box.innerHTML = '<div class="a-empty" style="padding:20px">' +
+        '还没有待进单<br><span class="tiny">顾客在 foodcourt 付完款 → 用下面键盘录入单据</span></div>';
     } else {
       box.innerHTML = state.tickets.map(ticketCard).join('');
       Array.prototype.forEach.call(box.querySelectorAll('[data-scan]'), function (node) {
@@ -205,11 +222,12 @@ var ADMIN_POS = (function () {
         '<span class="tk-num">' + UI.esc(t.orderNumber) + '</span>' +
         '<span class="tk-amt">' + UI.money(t.amount) + '</span>' +
       '</div>' +
-      '<div class="tk-meta">' + UI.esc(t.source) + ' · ' + UI.esc(UI.timeOnly(t.createdAt)) + '</div>' +
-      (t.note ? '<div class="tk-note">' + UI.esc(t.note) + '</div>' : '') +
+      '<div class="tk-meta">' + UI.esc(t.source) + ' · ' + UI.esc(UI.timeOnly(t.createdAt)) +
+        (t.note ? ' · ' + UI.esc(t.note) : '') + '</div>' +
       '<div class="tk-actions">' +
-        '<button class="big-action" data-scan="' + UI.esc(t.orderId) + '">扫会员码进单 SCAN MEMBER</button>' +
-        '<button class="chip" data-cancel="' + UI.esc(t.orderId) + '">取消 ✕</button>' +
+        '<button class="big-action" data-scan="' + UI.esc(t.orderId) + '">' +
+          '扫会员码进单 SCAN MEMBER</button>' +
+        '<button class="chip" data-cancel="' + UI.esc(t.orderId) + '">✕</button>' +
       '</div>' +
     '</div>';
   }
@@ -236,34 +254,115 @@ var ADMIN_POS = (function () {
   }
 
   /* ---------------------------------------------------------
-     录入单据
+     POS 键盘（金额）
      --------------------------------------------------------- */
 
-  function toggleForm(force) {
-    var box = document.getElementById('ticketForm');
-    if (!box) return;
-    var open = typeof force === 'boolean' ? force : box.style.display === 'none';
-    box.style.display = open ? '' : 'none';
-    if (open) {
-      var amount = document.getElementById('ticketAmountInput');
-      if (amount) amount.focus();
+  function bindPad() {
+    var keys = document.getElementById('padKeys');
+    if (keys) {
+      keys.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('[data-key]') : null;
+        if (!btn) return;
+        padPress(btn.getAttribute('data-key'));
+      });
+    }
+    var quick = document.getElementById('padQuick');
+    if (quick) {
+      quick.addEventListener('click', function (e) {
+        var btn = e.target.closest ? e.target.closest('[data-quick]') : null;
+        if (!btn) return;
+        padQuick(btn.getAttribute('data-quick'));
+      });
+    }
+    on('ticketNoInput', null, function (e) { if (e.key === 'Enter') saveTicket(); });
+  }
+
+  function padValue() {
+    var n = parseFloat(state.pad);
+    if (!isFinite(n) || n < 0) n = 0;
+    return Math.round(n * 100);
+  }
+
+  function padPress(key) {
+    if (key === 'del') {
+      state.pad = state.pad.length > 1 ? state.pad.slice(0, -1) : '0';
+      if (state.pad === '' || state.pad === '.') state.pad = '0';
+      if (state.pad.indexOf('.') === -1) state.padDecimal = false;
+      updatePad();
+      return;
+    }
+
+    if (key === '.') {
+      if (!state.padDecimal) {
+        state.padDecimal = true;
+        if (state.pad.indexOf('.') === -1) state.pad += '.';
+      }
+      updatePad();
+      return;
+    }
+
+    if (state.padDecimal) {
+      var dec = (state.pad.split('.')[1] || '');
+      if (dec.length >= 2) return;
+      state.pad += String(key);
+    } else {
+      if (state.pad === '0') state.pad = String(key);
+      else if (state.pad.replace('.', '').length < 7) state.pad += String(key);
+    }
+    updatePad();
+  }
+
+  function padQuick(what) {
+    if (what === 'clear') {
+      state.pad = '0'; state.padDecimal = false;
+    } else {
+      state.pad = String(what); state.padDecimal = false;
+    }
+    updatePad();
+  }
+
+  function updatePad() {
+    var money = UI.money(padValue());
+    set('padAmount', money.replace(/^RM\s*/, ''));
+    set('padPeek', money);
+  }
+
+  function renderPad() {
+    if (el.padBody) el.padBody.style.display = state.padOpen ? '' : 'none';
+    var caret = document.querySelector('.pad-caret');
+    if (caret) caret.textContent = state.padOpen ? '▴' : '▾';
+    try { localStorage.setItem(PAD_KEY, state.padOpen ? '1' : '0'); } catch (e) {}
+    updatePad();
+  }
+
+  function togglePad(force) {
+    state.padOpen = typeof force === 'boolean' ? force : !state.padOpen;
+    renderPad();
+    if (state.padOpen) {
+      var no = document.getElementById('ticketNoInput');
+      if (no && !no.value) no.focus();
     }
   }
+
+  /* ---------------------------------------------------------
+     录入单据
+     --------------------------------------------------------- */
 
   function saveTicket() {
     if (state.busy) return;
 
-    var rm = parseFloat(txt('ticketAmountInput').replace(/[^0-9.]/g, ''));
-    if (!isFinite(rm) || rm <= 0) {
+    var sen = padValue();
+    if (sen <= 0) {
       UI.toast('请输入金额 / Enter the amount', 'error');
+      togglePad(true);
       return;
     }
 
     state.busy = true;
-    UI.setLoading(document.getElementById('saveTicketBtn'), true, 'SAVING');
+    UI.setLoading(document.getElementById('saveTicketBtn'), true, 'ADDING');
 
     API.staff.createPosTicket({
-      amount: Math.round(rm * 100),
+      amount: sen,
       externalOrderId: txt('ticketNoInput'),
       note: txt('ticketNoteInput')
     }).then(function (res) {
@@ -275,15 +374,18 @@ var ADMIN_POS = (function () {
         return;
       }
 
-      ['ticketNoInput', 'ticketAmountInput', 'ticketNoteInput'].forEach(function (id) {
+      ['ticketNoInput', 'ticketNoteInput'].forEach(function (id) {
         var node = document.getElementById(id);
         if (node) node.value = '';
       });
-      toggleForm(false);
+      state.pad = '0'; state.padDecimal = false;
+      updatePad();
+
       UI.toast('已加入待进单 ' + UI.money(res.data.ticket.amount), 'success');
       loadQueue(false);
-      var amount = document.getElementById('ticketAmountInput');
-      if (amount) amount.focus();
+
+      var no = document.getElementById('ticketNoInput');
+      if (no) no.focus();
     });
   }
 
@@ -345,8 +447,9 @@ var ADMIN_POS = (function () {
     show('scan');
 
     /* 点「扫会员码进单」本身就是使用者手势，可以直接开相机 */
+    if (el.hint) el.hint.textContent = '请顾客出示会员码（条码，或条码下方的 QR）';
     if (MEMBER_SCANNER.hasCamera()) startCamera();
-    else if (el.hint) el.hint.textContent = '这台装置没有相机，请用下面的手动输入';
+    else if (el.hint) el.hint.textContent = '这台装置没有相机 · 请用下面的手动输入';
   }
 
   function startCamera() {
@@ -377,6 +480,8 @@ var ADMIN_POS = (function () {
   }
 
   function handleCode(text) {
+    text = String(text || '').trim();
+    if (!text) return;
     if (!state.selected) { UI.toast('请先选一张单据 / Pick a ticket first', 'error'); backToQueue(); return; }
     MEMBER_SCANNER.stop();
     UI.showLoading('VERIFYING');
@@ -466,7 +571,7 @@ var ADMIN_POS = (function () {
   }
 
   /* ---------------------------------------------------------
-     进单
+     进分
      --------------------------------------------------------- */
 
   function confirm() {
@@ -540,7 +645,10 @@ var ADMIN_POS = (function () {
       customerId: state.customer ? state.customer.customerId : null,
       pointsEarned: state.result ? state.result.pointsEarned : null,
       errorCode: state.errorCode,
-      busy: state.busy
+      busy: state.busy,
+      pad: state.pad,
+      padValue: padValue(),
+      padOpen: state.padOpen
     };
   }
 
@@ -548,6 +656,9 @@ var ADMIN_POS = (function () {
     init: init,
     loadQueue: loadQueue,
     handleCode: handleCode,
+    padPress: padPress,
+    saveTicket: saveTicket,
+    togglePad: togglePad,
     debugState: debugState
   };
 })();
