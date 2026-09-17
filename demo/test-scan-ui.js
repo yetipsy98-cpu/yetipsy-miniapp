@@ -147,6 +147,67 @@ suite.group('01 · 会员条码页（code.html）画得出条码', async (t) => 
   t.check('条码内容格式', /^YT1\|YT\d+\|[a-f0-9]{32}$/.test(code.data.payload), code.data.payload);
 });
 
+suite.group('01b · 换码不闪、不用全屏转圈（顾客要求）', async (t) => {
+  const { win, doc } = global.__codePage;
+
+  /* ① 这一页从头到尾不该出现全屏 loading 遮罩
+        （UI.showLoading 是懒建立的：没呼叫过就不会有这个元素） */
+  t.check('★ 页面上没有全屏 loading 遮罩',
+    doc.getElementById('loadingOverlay') === null,
+    doc.getElementById('loadingOverlay') ? '有遮罩元素' : '没有');
+
+  const barsBefore = doc.querySelectorAll('#barcode rect').length;
+  t.check('换码前条码已经在画面上', barsBefore > 20, barsBefore + ' rects');
+
+  /* ② 装个计数器：换码过程若呼叫 UI.showLoading 就会被抓到 */
+  let overlayCalls = 0;
+  const realShow = win.UI.showLoading;
+  win.UI.showLoading = function () { overlayCalls++; return realShow.apply(win.UI, arguments); };
+
+  /* ③ 让 getMemberCode 慢一点（模拟线上 GAS），才有时间取样 */
+  const realFetch = win.fetch;
+  win.fetch = function (input, init) {
+    const p = realFetch(input, init);
+    let action = '';
+    try { action = JSON.parse(init.body).action; } catch (e) { /* 忽略 */ }
+    if (action !== 'getMemberCode') return p;
+    return new Promise((resolve) => setTimeout(() => resolve(p), 900));
+  };
+
+  const payloadBefore = win.CODE.debugState().payload;
+  doc.getElementById('refreshBtn').click();
+
+  /* ④ 等的这段时间，旧条码必须一直在画面上（不能被清空、不能被盖住） */
+  const samples = [];
+  for (let i = 0; i < 7; i++) {
+    await sleep(120);
+    samples.push({
+      bars: doc.querySelectorAll('#barcode rect').length,
+      hint: doc.getElementById('codeHint').textContent,
+      overlay: !!doc.getElementById('loadingOverlay')
+    });
+  }
+
+  t.check('★ 等待期间旧条码一直可见（没有空白）',
+    samples.every((x) => x.bars > 20), samples.map((x) => x.bars).join(','));
+  t.check('★ 等待期间没有全屏遮罩', samples.every((x) => !x.overlay));
+  t.equal('全程没有呼叫 UI.showLoading', overlayCalls, 0);
+  t.check('等待期间条码区下方显示「更新中」',
+    samples.some((x) => x.hint.indexOf('更新中') !== -1),
+    samples.map((x) => x.hint).filter(Boolean).join('|') || '(空)');
+
+  /* ⑤ 新码回来 → 直接覆盖 */
+  const swapped = await until(() => win.CODE.debugState().payload !== payloadBefore, 8000);
+  t.check('★ 新条码直接覆盖旧的', swapped);
+  t.check('覆盖后条码还在画面上', doc.querySelectorAll('#barcode rect').length > 20);
+  t.equal('更新中的小字已清掉', doc.getElementById('codeHint').textContent, '');
+  t.check('倒数重新开始', /\d+ 秒后更换/.test(doc.getElementById('codeTimer').textContent),
+    doc.getElementById('codeTimer').textContent);
+
+  win.fetch = realFetch;
+  win.UI.showLoading = realShow;
+});
+
 suite.group('02 · 员工扫码抵扣页（admin/redeem.html）', async (t) => {
   const page = await openPage(global.__JSDOM, '/admin/redeem.html', (w) => {
     w.localStorage.setItem('yt_staff_token', global.__staffToken);

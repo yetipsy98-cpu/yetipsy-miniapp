@@ -126,7 +126,7 @@ yetipsy-miniapp/
 │   ├── test-login-ui.js 登录页 DOM 测试（jsdom 真的开页面点按钮）27 项
 │   ├── build-copypaste.js 产生复制贴上文件（手动部署用）
 │   ├── test-copypaste.js 复制贴上文件校验（跟 .gs 同步 + 可执行）60 项
-│   ├── test-scan-ui.js  条码 / 扫码抵扣 DOM 测试 56 项
+│   ├── test-scan-ui.js  条码 / 扫码抵扣 DOM 测试 66 项
 │   ├── test-home-ui.js  首页活动区块 DOM 测试 12 项
 │   └── harness.js       测试框架（零依赖）
 │
@@ -185,7 +185,7 @@ npm run demo          # = node demo/server.js
 ## 4. 测试
 
 ```bash
-npm test                 # 全部 8 套（894 项检查）
+npm test                 # 全部 8 套（904 项检查）
 
 npm run test:backend     # 直接执行 apps-script/*.gs（86 项）
 npm run test:api         # 完整 API 测试 25 组（196 项）
@@ -193,7 +193,7 @@ npm run test:ui          # 前端 ↔ API ↔ 后端契约（349 项）
 npm run test:e2e         # 起 demo server 走完整 HTTP 流程（52 项）
 npm run test:login       # 用 jsdom 打开 login.html 点按钮（27 项，需先 npm install）
 npm run test:copypaste   # APPS-SCRIPT-COPY-PASTE.md 跟 .gs 同步、且贴上去能跑（60 项）
-npm run test:scan        # 用 jsdom 跑会员条码页与员工扫码抵扣页（56 项）
+npm run test:scan        # 用 jsdom 跑会员条码页与员工扫码抵扣页（66 项）
 npm run test:home        # 首页活动：后端失败时不能伪装成「暂无活动」（12 项）
 npm run build:copypaste  # 改完 .gs 之后重新产生那份复制贴上文件
 ```
@@ -302,7 +302,7 @@ App 内 `PROFILE` 页面有完整隐私说明。
 4. Deploy → New deployment → Web app → 复制 URL
 5. `js/config.js` 贴上 API URL（`REQUIRE_BACKEND: true`）→ push → 开启 GitHub Pages
 
-> 之后改后端只要 `git push`：CI 会先跑 894 项测试，再用 `clasp` 部署，
+> 之后改后端只要 `git push`：CI 会先跑 904 项测试，再用 `clasp` 部署，
 > Web App URL 不变，前端不用动。设定方法见 `apps-script/README.md`。
 
 ---
@@ -356,6 +356,12 @@ Fast for staff. Fun for customers.
 扫描方式：`BarcodeDetector`（Chrome / Android）直接读一维条码；
 不支援的浏览器（iOS Safari）自动退回 jsQR 读条码下方那个 QR。
 没有相机或非 HTTPS 环境时，页面会提示改用「手动输入」，不会报错。
+
+载入体验（`code.html`）：**不使用全屏 loading 遮罩**。
+第一次载入只在条码区显示占位骨架；换码时保留旧条码、只在下方显示
+「更新中」，新码回来直接覆盖（不闪、不清空）；并在剩 30% 时间时
+就先抓下一条，避免「旧的过期了、新的还没来」的空窗。
+载入失败时错误码与重试钮显示在条码区内。
 
 ### 6.6 活动（Promotions）为什么客户端看不到
 
