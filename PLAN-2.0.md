@@ -25,6 +25,36 @@
 | 11 | Analytics（§80） | ⬜ 未开始 |
 | 12 | 安全审计（§81） | ✅ 完成 · §81 的 12 项逐条验 · `test:security` 214 项 |
 
+### Phase 10 / 11 页面验收（`npm run test:admin-ui`，88 项）
+
+这两页之前只有 smoke-ui 的静态契约检查，从来没被真正执行过。用 jsdom
+真的把页面开起来跑之后，抓到三个「后端测过了但页面根本跑不起来」的问题：
+
+| 问题 | 说明 |
+|---|---|
+| ★ 菜单管理页永远载不出来 | `js/admin-menu.js` 用员工 token 打 `getMenu`，但 `getMenu` 走 `requireCustomer()`，`userType !== 'CUSTOMER'` 一律回 `INVALID_SESSION`。整页只有「载入失败」 |
+| ★ 就算放行也看不到下架商品 | `buildMenu()` 只回 `status = ACTIVE` 的分类 / 商品 / 规格，老板无法恢复或编辑已下架的商品 |
+| ★ 编辑表单第一次打开必定抛错 | `openForm()` 第一行 `getElementById('formTitle').textContent = …`，但 `#formTitle` 正是**下一行** `innerHTML` 建立的，那时还不存在 → `TypeError`，表单永远开不起来 |
+
+**修法**：新增员工专用的 `getAdminMenu`（`Menu.gs`）—— 任何员工都能读
+（普通员工要看得到商品才能标售罄），回传**全部状态**的资料，并附上管理
+才需要的栏位（`status` / `promoPrice` / `promoStart` / `promoEnd`）与后端
+算出来的 `canEdit`；不走 CacheService，管理页要立刻看到刚改的结果。
+删掉 `openForm()` 里那行多余的 `formTitle` 赋值。
+
+顺带清掉 repo 里的污染：`admin/index.html` 与 `claim.html` 被注入过
+Cloudflare challenge-platform 脚本（`__CF$cv$params` + 隐藏 iframe），
+来自最初的基底 commit，会去载 `/cdn-cgi/...`（GitHub Pages 与 Apps Script
+上都不存在）。已移除。
+
+§32 权限分界（实跑验证）：MANAGER / OWNER 看得到「新增商品」「新增分类」
+与每列的编辑按钮，表单里有价格 / 促销价 / 时间窗 / 图片 URL 栏位；
+普通 STAFF 那些全部没有，只剩「标售罄 / 恢复有货」，而且就算用 devtools
+强行呼叫 `openForm()` 也会被挡（`state.canEdit` 为 false 直接 return）。
+在页面上改价格 RM22.00 → RM25.90、新增商品「Test Old Fashioned」RM32.00，
+后端与顾客端都同步。业绩报表页算出今日 RM44.00 / 1 单 / 通路 YETIPSY_APP /
+热销 Mojito，普通员工打开则整页空白（`requireManager()` 弹提示后跳回首页）。
+
 ### §84 / §85 最终验收（`npm run test:mvp`，115 项）
 
 计划书最后那条现场流程，已经做成自动化测试逐步跑通：

@@ -124,7 +124,10 @@ function getHandlers() {
     /* ===== 2.0 点单：业绩分析（Phase 11）===== */
     getSalesAnalytics: getSalesAnalytics,       // §50 今日统计 + §51 通路业绩
     getProductAnalytics: getProductAnalytics,   // §50 TOP PRODUCTS
-    getMemberAnalytics: getMemberAnalytics      // §52 会员分析
+    getMemberAnalytics: getMemberAnalytics,     // §52 会员分析
+
+    /* ★ 员工专用酒单：回传全部状态（含已下架）的商品，管理页才载得出来 */
+    getAdminMenu: getAdminMenu
   };
 }
 

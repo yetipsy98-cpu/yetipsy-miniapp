@@ -7,7 +7,7 @@
     "demo": "node demo/server.js",
     "demo:reset": "node demo/server.js --reset",
     "build:copypaste": "node demo/build-copypaste.js",
-    "test": "node demo/test-apps-script.js && node demo/tests.js && node demo/smoke-ui.js && node demo/e2e-ui.js && node demo/test-login-ui.js && node demo/test-copypaste.js && node demo/test-scan-ui.js && node demo/test-home-ui.js && node demo/test-upgrade.js && node demo/test-menu.js && node demo/test-menu-ui.js && node demo/test-checkout.js && node demo/test-orderboard.js && node demo/test-order-ui.js && node demo/test-security.js && node demo/test-analytics.js && node demo/test-mvp.js",
+    "test": "node demo/test-apps-script.js && node demo/tests.js && node demo/smoke-ui.js && node demo/e2e-ui.js && node demo/test-login-ui.js && node demo/test-copypaste.js && node demo/test-scan-ui.js && node demo/test-home-ui.js && node demo/test-upgrade.js && node demo/test-menu.js && node demo/test-menu-ui.js && node demo/test-checkout.js && node demo/test-orderboard.js && node demo/test-order-ui.js && node demo/test-security.js && node demo/test-analytics.js && node demo/test-mvp.js && node demo/test-admin-ui.js",
     "test:api": "node demo/tests.js",
     "test:backend": "node demo/test-apps-script.js",
     "test:ui": "node demo/smoke-ui.js",
@@ -25,7 +25,8 @@
     "test:orderui": "node demo/test-order-ui.js",
     "test:security": "node demo/test-security.js",
     "test:analytics": "node demo/test-analytics.js",
-    "test:mvp": "node demo/test-mvp.js"
+    "test:mvp": "node demo/test-mvp.js",
+    "test:admin-ui": "node demo/test-admin-ui.js"
   },
   "keywords": [
     "yetipsy",

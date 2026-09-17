@@ -407,9 +407,10 @@ var API = (function () {
     setOrderingPaused: function (paused) {
       return call('setOrderingPaused', { paused: !!paused }, { sessionType: 'staff' });
     },
-    /* 2.0 菜单管理（§32）—— 只有 MANAGER / OWNER 能改 */
-    getMenu: function () {
-      return call('getMenu', {}, { sessionType: 'staff' });
+    /* 2.0 菜单管理（§32）—— 只有 MANAGER / OWNER 能改。
+       用 getAdminMenu：回传全部状态（含已下架）的商品 */
+    getAdminMenu: function () {
+      return call('getAdminMenu', {}, { sessionType: 'staff' });
     }
   };
 

@@ -29,7 +29,7 @@ var ADMIN_MENU = (function () {
   function init() {
     state.canEdit = ADMIN.isManager();
     bindEvents();
-    load();
+    /* 资料由导出的 init() 呼叫 fetchAll() 抓，这里不重复请求 */
   }
 
   function bindEvents() {
@@ -50,11 +50,16 @@ var ADMIN_MENU = (function () {
      资料
      --------------------------------------------------------- */
 
-  /** getMenu 一次就拿到分类 + 商品 + 规格（§82 不要多次读表） */
+  /**
+   * 一次就拿到分类 + 商品 + 规格（§82 不要多次读表）。
+   * ★ 必须用 getAdminMenu，不能用 getMenu：
+   *   getMenu 走 requireCustomer()，员工 token 一律 INVALID_SESSION；
+   *   而且它只回 status = ACTIVE 的商品，管理页会看不到已下架的。
+   */
   function fetchAll() {
     state.loading = true;
     render();
-    return API.call('getMenu', {}, { sessionType: 'staff' }).then(function (res) {
+    return API.call('getAdminMenu', {}, { sessionType: 'staff' }).then(function (res) {
       if (!res.success) {
         state.errorCode = res.error.code;
         state.loading = false;
@@ -198,8 +203,10 @@ var ADMIN_MENU = (function () {
     panel.style.display = '';
 
     var isEdit = !!product;
-    document.getElementById('formTitle').textContent =
-      isEdit ? '编辑商品 EDIT PRODUCT' : '新增商品 ADD PRODUCT';
+    /* ★ 标题由下面的 innerHTML 一并写入。
+       之前这里多了一句 document.getElementById('formTitle').textContent = …，
+       但 #formTitle 那时还不存在（它正是这段 innerHTML 建立的），
+       所以第一次打开表单必定抛 TypeError，表单永远开不起来。 */
 
     var catOptions = state.categories.map(function (c) {
       return '<option value="' + UI.esc(c.categoryId) + '"' +

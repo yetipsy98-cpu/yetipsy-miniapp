@@ -719,3 +719,80 @@ function seedDemoMenu() {
     options: 6
   });
 }
+
+/* =============================================================
+   员工专用菜单（2.0 Phase 10 · §32）
+   -------------------------------------------------------------
+   为什么不能用 getMenu：
+     1. getMenu 用 requireCustomer()，员工 token 一律 INVALID_SESSION
+     2. buildMenu() 只回 status = ACTIVE 的分类 / 商品 / 规格，
+        老板在管理页会看不到已下架的商品，也就无法恢复或编辑
+
+   所以这个函式：任何员工都能读（普通员工要看得到商品才能标售罄），
+   回传**全部状态**的资料，并附上管理才需要的栏位
+   （status / promoPrice / promoStart / promoEnd / 原价）。
+   不走 CacheService —— 管理页要看到刚改完的结果（§82 的快取是给顾客端的）。
+   ============================================================= */
+
+function getAdminMenu(data, token) {
+  var ctx = requireStaff(token);
+  if (ctx.error) return ctx.error;
+
+  var today = todayKeyOf();
+
+  var categories = dbFilter('categories', function () { return true; })
+    .sort(function (a, b) {
+      return (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
+    })
+    .map(function (c) {
+      var out = publicCategory(c);
+      out.status = String(c.status || 'ACTIVE').toUpperCase();
+      return out;
+    });
+
+  var products = dbFilter('products', function () { return true; })
+    .sort(function (a, b) {
+      return (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
+    })
+    .map(function (p) {
+      var out = publicProduct(p, today);
+      out.status = String(p.status || 'ACTIVE').toUpperCase();
+      out.promoPrice = Math.round(Number(p.promoPriceSen) || 0);
+      out.promoStart = p.promoStart || '';
+      out.promoEnd = p.promoEnd || '';
+      return out;
+    });
+
+  var options = dbFilter('productOptions', function () { return true; })
+    .sort(function (a, b) {
+      return (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
+    })
+    .map(function (o) {
+      var out = publicOption(o);
+      out.status = String(o.status || 'ACTIVE').toUpperCase();
+      return out;
+    });
+
+  var optionsByProduct = {};
+  options.forEach(function (o) {
+    if (!optionsByProduct[o.productId]) optionsByProduct[o.productId] = [];
+    optionsByProduct[o.productId].push(o);
+  });
+
+  return ok({
+    categories: categories,
+    products: products,
+    optionsByProduct: optionsByProduct,
+    today: today,
+    /* 前端要用这个决定「新增 / 编辑」按钮给不给看（§32） */
+    canEdit: ['MANAGER', 'OWNER'].indexOf(
+      String(ctx.staff && ctx.staff.role).toUpperCase()) >= 0,
+    counts: {
+      categories: categories.length,
+      products: products.length,
+      active: products.filter(function (p) { return p.status === 'ACTIVE'; }).length,
+      archived: products.filter(function (p) { return p.status !== 'ACTIVE'; }).length,
+      soldOut: products.filter(function (p) { return !p.available; }).length
+    }
+  });
+}

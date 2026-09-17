@@ -37,7 +37,7 @@
 | 8 | `Wallet` | 187 | 钱包储值 / 抵扣 / 上限（金额一律 sen） |
 | 9 | `Customers` | 595 | ★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料 |
 | 10 | `Orders` | 134 | 消费纪录与统计 |
-| 11 | `Menu` | 721 | ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） |
+| 11 | `Menu` | 798 | ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） |
 | 12 | `Checkout` | 332 | ★ 2.0 结帐报价：后端重算价格、钱包上限、Quote 5 分钟有效期、防重复下单的识别码 |
 | 13 | `AppOrders` | 370 | ★ 2.0 订单：placeOrder（幂等）、订单查询、取消、再点一次、名称与单价快照 |
 | 14 | `OrderBoard` | 463 | ★ 2.0 员工看板：接单 / 制作 / 完成（幂等）、收款才扣钱包、取消退回、6 小时内只算一次到店 |
@@ -46,7 +46,7 @@
 | 17 | `Promotions` | 154 | 优惠规则 |
 | 18 | `Admin` | 209 | 员工端：Dashboard、会员查询、手动调整、重设会员密码、设置 |
 | 19 | `Auth` | 89 | ping / getPublicSettings / staffLogin / staffLogout |
-| 20 | `Code` | 235 | ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 |
+| 20 | `Code` | 238 | ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 |
 
 > ⚠️ **20 个档案全部贴完再执行**，少一个会报 `xxx is not defined`。
 
@@ -2827,7 +2827,7 @@ function cancelOrder(data, token) {
 ## 11. Menu.gs
 
 > Apps Script 里的档案名称：**`Menu`**（不要打 .gs）
-> ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） · 721 行 · SHA-256 `881420c063880e28`
+> ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） · 798 行 · SHA-256 `3a38b24ddd8ac10e`
 
 ```javascript
 /* =============================================================
@@ -3549,6 +3549,83 @@ function seedDemoMenu() {
     categories: cats.length,
     products: items.length,
     options: 6
+  });
+}
+
+/* =============================================================
+   员工专用菜单（2.0 Phase 10 · §32）
+   -------------------------------------------------------------
+   为什么不能用 getMenu：
+     1. getMenu 用 requireCustomer()，员工 token 一律 INVALID_SESSION
+     2. buildMenu() 只回 status = ACTIVE 的分类 / 商品 / 规格，
+        老板在管理页会看不到已下架的商品，也就无法恢复或编辑
+
+   所以这个函式：任何员工都能读（普通员工要看得到商品才能标售罄），
+   回传**全部状态**的资料，并附上管理才需要的栏位
+   （status / promoPrice / promoStart / promoEnd / 原价）。
+   不走 CacheService —— 管理页要看到刚改完的结果（§82 的快取是给顾客端的）。
+   ============================================================= */
+
+function getAdminMenu(data, token) {
+  var ctx = requireStaff(token);
+  if (ctx.error) return ctx.error;
+
+  var today = todayKeyOf();
+
+  var categories = dbFilter('categories', function () { return true; })
+    .sort(function (a, b) {
+      return (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
+    })
+    .map(function (c) {
+      var out = publicCategory(c);
+      out.status = String(c.status || 'ACTIVE').toUpperCase();
+      return out;
+    });
+
+  var products = dbFilter('products', function () { return true; })
+    .sort(function (a, b) {
+      return (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
+    })
+    .map(function (p) {
+      var out = publicProduct(p, today);
+      out.status = String(p.status || 'ACTIVE').toUpperCase();
+      out.promoPrice = Math.round(Number(p.promoPriceSen) || 0);
+      out.promoStart = p.promoStart || '';
+      out.promoEnd = p.promoEnd || '';
+      return out;
+    });
+
+  var options = dbFilter('productOptions', function () { return true; })
+    .sort(function (a, b) {
+      return (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
+    })
+    .map(function (o) {
+      var out = publicOption(o);
+      out.status = String(o.status || 'ACTIVE').toUpperCase();
+      return out;
+    });
+
+  var optionsByProduct = {};
+  options.forEach(function (o) {
+    if (!optionsByProduct[o.productId]) optionsByProduct[o.productId] = [];
+    optionsByProduct[o.productId].push(o);
+  });
+
+  return ok({
+    categories: categories,
+    products: products,
+    optionsByProduct: optionsByProduct,
+    today: today,
+    /* 前端要用这个决定「新增 / 编辑」按钮给不给看（§32） */
+    canEdit: ['MANAGER', 'OWNER'].indexOf(
+      String(ctx.staff && ctx.staff.role).toUpperCase()) >= 0,
+    counts: {
+      categories: categories.length,
+      products: products.length,
+      active: products.filter(function (p) { return p.status === 'ACTIVE'; }).length,
+      archived: products.filter(function (p) { return p.status !== 'ACTIVE'; }).length,
+      soldOut: products.filter(function (p) { return !p.available; }).length
+    }
   });
 }
 ```
@@ -5964,7 +6041,7 @@ function getStaffSession(data, token) {
 ## 20. Code.gs
 
 > Apps Script 里的档案名称：**`Code`**（不要打 .gs）
-> ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 · 235 行 · SHA-256 `ce8934eb71f3cb36`
+> ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 · 238 行 · SHA-256 `8689a2c99ca0b10c`
 
 ```javascript
 /* =============================================================
@@ -6093,7 +6170,10 @@ function getHandlers() {
     /* ===== 2.0 点单：业绩分析（Phase 11）===== */
     getSalesAnalytics: getSalesAnalytics,       // §50 今日统计 + §51 通路业绩
     getProductAnalytics: getProductAnalytics,   // §50 TOP PRODUCTS
-    getMemberAnalytics: getMemberAnalytics      // §52 会员分析
+    getMemberAnalytics: getMemberAnalytics,     // §52 会员分析
+
+    /* ★ 员工专用酒单：回传全部状态（含已下架）的商品，管理页才载得出来 */
+    getAdminMenu: getAdminMenu
   };
 }
 
