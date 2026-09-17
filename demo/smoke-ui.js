@@ -61,6 +61,27 @@ suite.group('01 · 线上页面不是离线 DEMO 档', (t) => {
   t.check('离线预览档还在（preview.html）', /OFFLINE PREVIEW/.test(preview));
   t.check('离线预览档不会被线上页面连到',
     !PRODUCTION_PAGES.some((p) => /preview\.html/.test(read(p))));
+
+  /* ★ 上面那条 /OFFLINE PREVIEW/ 只匹配到 <title>（第 7 行），
+     跟真正挡混淆的「可见横幅」是两回事。
+
+     preview.html 是一个冻结在 1.1 的单档离线快照，里面没有任何 2.0 功能
+     （menu / code / grant / orderboard 全都是 0），但它是 HTTP 200 可直接
+     打开的。让人不会把它误认成现网产品的，就是 body 顶端那条固定横幅。
+     横幅被删掉 = 谁打开 /preview.html 都会看到一个完全不同的旧 App，
+     所以这里守住它。 */
+  const bannerIdx = preview.indexOf('离线预览（1.1 快照）');
+  t.check('★ 有「1.1 快照」可见横幅', bannerIdx !== -1);
+  t.check('★ 横幅明讲「不是线上版」', preview.indexOf('不是线上版') !== -1);
+  t.check('★ 横幅在 <body> 里（在 <head> 里就不会显示）',
+    bannerIdx > preview.indexOf('<body'));
+  t.check('★ 横幅导引到正式版 index.html',
+    /不是线上版[\s\S]{0,300}href="index\.html"/.test(preview));
+  t.check('★ 横幅没有被 CSS 藏起来',
+    !/离线预览（1\.1 快照）[\s\S]{0,400}display:\s*none/.test(preview));
+  /* 快照里不该出现 2.0 的东西，否则就是没冻结、会对不上 */
+  t.check('★ 快照确实冻结在 1.1（没有 2.0 入口）',
+    preview.indexOf('ADMIN_GRANT') === -1 && preview.indexOf('MEMBER_SCANNER') === -1);
 });
 
 /* -------------------------------------------------------------
