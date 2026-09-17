@@ -22,7 +22,9 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
 const suite = new Suite('YETIPSY · 前端健全性检查（smoke-ui）');
 
 const CUSTOMER_PAGES = ['index.html', 'login.html', 'claim.html', 'wallet.html',
-  'activity.html', 'profile.html', 'reward.html'];
+  'activity.html', 'profile.html', 'reward.html',
+  /* 2.0 点单（§69） */
+  'menu.html', 'product.html', 'cart.html'];
 const ADMIN_PAGES = ['admin/login.html', 'admin/index.html', 'admin/claim.html',
   'admin/customers.html', 'admin/orders.html', 'admin/settings.html',
   'admin/audit.html', 'admin/staff.html', 'admin/more.html'];

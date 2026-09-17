@@ -73,7 +73,9 @@ var YETIPSY_CONFIG = {
     CUSTOMER_PROFILE: 'yt_customer_profile',
     STAFF_TOKEN:      'yt_staff_token',
     STAFF_PROFILE:    'yt_staff_profile',
-    LANGUAGE:         'yt_lang'
+    LANGUAGE:         'yt_lang',
+    /* 2.0 点单：购物车（只存显示用的数字，价格一律由后端重算 §41/§42） */
+    cart:             'yt_cart_v2'
   },
 
   /* ----------------------------------------------------------

@@ -74,6 +74,14 @@ function bootstrap() {
       token: ownerToken
     });
   });
+
+  /* 2.0：播一份示范酒单（只在 Products 是空的时候，不会覆盖既有菜单） */
+  try {
+    api.mutate((DB, sb) => sb.seedDemoMenu());
+  } catch (e) {
+    console.log('[demo] 示范酒单未建立：' + (e && e.message));
+  }
+
   persist();
   console.log('[demo] 已建立资料表与员工账号 owner / manager / staff（密码 yetipsy123）');
 }

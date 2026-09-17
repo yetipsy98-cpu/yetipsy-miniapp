@@ -38,6 +38,7 @@ const DESC = {
   'Wallet.gs': '钱包储值 / 抵扣 / 上限（金额一律 sen）',
   'Customers.gs': '★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料',
   'Orders.gs': '消费纪录与统计',
+  'Menu.gs': '★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到）',
   'Claims.gs': 'QR / 4 位 Code 认领（只存 token 的 hash）',
   'Promotions.gs': '优惠规则',
   'Admin.gs': '员工端：Dashboard、会员查询、手动调整、重设会员密码、设置',

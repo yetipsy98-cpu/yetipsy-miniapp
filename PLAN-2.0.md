@@ -13,17 +13,32 @@
 | Phase | 内容 | 状态 |
 |---|---|---|
 | 1 | 审计现有 1.x（§70） | ✅ 完成 · `docs/AUDIT-1.x.md` |
-| 2 | 数据库升级 `upgradeToV2()`（§71） | ✅ 完成 · 5 张新表 + 10 个新设定，不动旧资料 |
-| 3 | Menu（§72） | ⬜ 未开始 |
-| 4 | Cart（§73） | ⬜ 未开始 |
+| 2 | 数据库升级 `upgradeToV2()`（§71） | ✅ 完成 · 5 张新表 + 12 个新设定，不动旧资料 · `test:upgrade` 142 项 |
+| 3 | Menu（§72） | ✅ 完成 · `Menu.gs` + `menu.html` `product.html` · `test:menu` 139 项 · `test:menuui` 88 项 |
+| 4 | Cart（§73） | 🟡 顾客端购物车完成（`cart.html` + `js/cart.js` LocalStorage）；结帐前的后端验价在 Phase 5 |
 | 5 | Checkout + Quote（§74） | ⬜ 未开始 |
 | 6 | 建立订单（§75） | ⬜ 未开始 |
 | 7 | 员工订单看板（§76） | ⬜ 未开始 |
 | 8 | 会员整合（§77） | ⬜ 未开始 |
 | 9 | Wallet 接入 Checkout（§78） | ⬜ 未开始 |
-| 10 | Owner 菜单管理（§79） | ⬜ 未开始 |
+| 10 | Owner 菜单管理（§79） | 🟡 后端 7 个 action 已就位并通过权限测试；`admin/menu.html` 页面未做 |
 | 11 | Analytics（§80） | ⬜ 未开始 |
 | 12 | 安全审计（§81） | ⬜ 未开始 |
+
+### Phase 3 已验证的规则（不是「看起来对」，是测试跑出来的）
+
+| 规则 | 怎么验的 |
+|---|---|
+| §41 价格只由后端定 | 会员带 `price:1` 呼叫 `getProduct`，回传仍是 Sheet 里的 2200；对外形状没有 `priceSen` 栏位 |
+| §40 促销时间窗由后端判断 | 未开始 / 进行中 / 已过期 / 促销价高于原价 四种情形都测；负数促销价被拒 |
+| §32 Staff 只能改库存 | STAFF 账号可以 `setProductAvailability`，但 `createProduct` `updateProduct` `archiveProduct` `createCategory` `createProductOption` 全部 `UNAUTHORIZED` |
+| §31/§66 售罄 | 员工标售罄 → 顾客端菜单与详情页立刻显示；加入清单按钮停用；硬点也写不进购物车 |
+| §82 缓存 | 第二次 `getMenu` 命中缓存；改商品 / 价格 / 规格后缓存失效；**钱包与积分连续两次读取数值不同（没被缓存）** |
+| §64 营业时间 | 关闭 / 暂停时菜单照常列出，并显示对应横幅；`ORDERING_PAUSED` 可一键切换 |
+| §5/§8 不 Hardcode | 新增一组 `EXTRA` 规格后，详情页立刻多出一个区块 |
+| §34/§35 搜寻筛选 | 中英文都可搜（`mojito` 与「莫希托」都是 2 项）、描述可搜、tag 可筛、可叠加 |
+| 失败不伪装 | 后端回 `UPGRADE_REQUIRED` 时页面显示「酒单载入失败 + 错误码 + 重试」，不是「没有商品」 |
+| 审计留痕 | `CREATE_CATEGORY` `CREATE_PRODUCT` `UPDATE_PRODUCT`（含改前 2200 / 改后 2500）`PRODUCT_SOLD_OUT` `ARCHIVE_PRODUCT` 都写进 AuditLogs |
 
 ---
 

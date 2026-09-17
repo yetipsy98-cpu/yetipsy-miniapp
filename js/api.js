@@ -205,6 +205,28 @@ var API = (function () {
     },
     claimReward: function (rewardId) {
       return call('claimReward', { rewardId: rewardId }, { sessionType: 'customer' });
+    },
+
+    /* ============ 2.0 点单：菜单（Phase 3）============ */
+    /**
+     * 一次拿 Categories + Products + Options（§82）。
+     * filter: { search, tag, categoryId }
+     */
+    getMenu: function (filter) {
+      return call('getMenu', filter || {}, { sessionType: 'customer' });
+    },
+    getCategories: function () {
+      return call('getCategories', {}, { sessionType: 'customer' });
+    },
+    getProducts: function (categoryId) {
+      return call('getProducts', { categoryId: categoryId || '' }, { sessionType: 'customer' });
+    },
+    /** Product Detail：商品 + 规格分组，一次就够 */
+    getProduct: function (productId) {
+      return call('getProduct', { productId: productId }, { sessionType: 'customer' });
+    },
+    getProductOptions: function (productId) {
+      return call('getProductOptions', { productId: productId }, { sessionType: 'customer' });
     }
   };
 
@@ -284,6 +306,36 @@ var API = (function () {
     },
     cancelOrder: function (orderId, reason) {
       return call('cancelOrder', { orderId: orderId, reason: reason || '' }, { sessionType: 'staff' });
+    },
+
+    /* ===== 2.0 点单：库存状态（§61，Staff 唯一的菜单权限 §32）===== */
+    /** @param {boolean} available  false = SOLD OUT */
+    setProductAvailability: function (productId, available) {
+      return call('setProductAvailability',
+        { productId: productId, available: !!available }, { sessionType: 'staff' });
+    },
+
+    /* ===== 2.0 点单：菜单管理（§62，MANAGER / OWNER 限定）===== */
+    createCategory: function (data) {
+      return call('createCategory', data || {}, { sessionType: 'staff' });
+    },
+    updateCategory: function (data) {
+      return call('updateCategory', data || {}, { sessionType: 'staff' });
+    },
+    createProduct: function (data) {
+      return call('createProduct', data || {}, { sessionType: 'staff' });
+    },
+    updateProduct: function (data) {
+      return call('updateProduct', data || {}, { sessionType: 'staff' });
+    },
+    archiveProduct: function (productId) {
+      return call('archiveProduct', { productId: productId }, { sessionType: 'staff' });
+    },
+    createProductOption: function (data) {
+      return call('createProductOption', data || {}, { sessionType: 'staff' });
+    },
+    updateProductOption: function (data) {
+      return call('updateProductOption', data || {}, { sessionType: 'staff' });
     }
   };
 

@@ -3,7 +3,7 @@
    -------------------------------------------------------------
    验证 APPS-SCRIPT-COPY-PASTE.md（顾客拿去贴进 Apps Script 的档案）：
 
-   01 · 15 个区块、顺序对、每一段内容跟 apps-script/*.gs 一模一样、
+   01 · 区块数与顺序对、每一段内容跟 apps-script/*.gs 一模一样、
         标示的 SHA-256 跟内容对得上
    02 · ★ 把「文件里的那些字」直接丢进 Node 执行（不是读 .gs 档），
         走完整流程：setupDatabase → 查号码 → 注册 → 密码错 → 密码对
@@ -37,7 +37,7 @@ function sha16(s) {
   return require('crypto').createHash('sha256').update(s, 'utf8').digest('hex').slice(0, 16);
 }
 
-/* 把 markdown 里的 15 个代码区块抓出来 */
+/* 把 markdown 里的代码区块抓出来（数量以 FILE_ORDER 为准） */
 function extractBlocks(doc) {
   const re = /## (\d+)\. (\S+\.gs)\n([\s\S]*?)```javascript\n([\s\S]*?)\n```/g;
   const out = [];
@@ -61,7 +61,9 @@ suite.group('01 · 文件内容跟 apps-script/*.gs 完全一致', (t) => {
   const blocks = extractBlocks(doc);
   global.__blocks = blocks;
 
-  t.check('抓到 15 个代码区块', blocks.length === 15, blocks.length);
+  /* 档案数跟着 FILE_ORDER 走，不要写死（2.0 加了 Menu.gs） */
+  t.check('抓到 ' + FILE_ORDER.length + ' 个代码区块',
+    blocks.length === FILE_ORDER.length, blocks.length);
   t.check('区块顺序 = demo/load-backend.js 的 FILE_ORDER',
     JSON.stringify(blocks.map((b) => b.file)) === JSON.stringify(FILE_ORDER));
 
@@ -181,7 +183,8 @@ suite.group('03 · 文件里的说明跟实作一致', (t) => {
   const pkg = JSON.parse(read(path.join(ROOT, 'package.json')));
   const cfg = read(path.join(ROOT, 'apps-script', 'Config.gs'));
 
-  t.check('档案数写 15', doc.indexOf('**15 个档案') !== -1);
+  t.check('档案数写 ' + FILE_ORDER.length,
+    doc.indexOf('**' + FILE_ORDER.length + ' 个档案') !== -1);
   t.check('版本号跟 package.json 一致',
     doc.indexOf('版本 ' + pkg.version) !== -1, pkg.version);
   /* group 02 的 sandbox 不在这里的作用域；上面已经读过 cfg（Config.gs 原文），

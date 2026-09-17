@@ -81,7 +81,25 @@ function getHandlers() {
     listStaff: listStaff,
     createStaff: createStaff,
     setStaffStatus: setStaffStatus,
-    resetStaffPassword: resetStaffPassword
+    resetStaffPassword: resetStaffPassword,
+
+    /* ===== 2.0 点单：菜单（Phase 3）===== */
+    /* 顾客端（§60） */
+    getMenu: getMenu,
+    getCategories: getCategories,
+    getProducts: getProducts,
+    getProduct: getProduct,
+    getProductOptions: getProductOptions,
+    /* 员工端（§61）——只能改库存状态 */
+    setProductAvailability: setProductAvailability,
+    /* Owner / Manager（§62） */
+    createCategory: createCategory,
+    updateCategory: updateCategory,
+    createProduct: createProduct,
+    updateProduct: updateProduct,
+    archiveProduct: archiveProduct,
+    createProductOption: createProductOption,
+    updateProductOption: updateProductOption
   };
 }
 

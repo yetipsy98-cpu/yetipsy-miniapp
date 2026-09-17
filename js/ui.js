@@ -182,8 +182,10 @@ var UI = (function () {
      6. 底部导航（会员端）
      ========================================================= */
 
+  /* 2.0（§4）：HOME · MENU · ACTIVITY · WALLET · MEMBER */
   var NAV = [
     { page: 'index.html',    zh: '首页',   en: 'HOME',     icon: 'home' },
+    { page: 'menu.html',     zh: '酒单',   en: 'MENU',     icon: 'menu' },
     { page: 'activity.html', zh: '记录',   en: 'ACTIVITY', icon: 'activity' },
     { page: 'wallet.html',   zh: '钱包',   en: 'WALLET',   icon: 'wallet' },
     { page: 'profile.html',  zh: '我的',   en: 'PROFILE',  icon: 'profile' }
@@ -194,6 +196,7 @@ var UI = (function () {
     activity: '<path d="M4 12h3l2.5-6 3 12L15 12h5"/>',
     wallet: '<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18a1 1 0 0 1 1 1v2"/><path d="M3 7.5V18a1 1 0 0 0 1 1h15a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6"/><circle cx="17" cy="14" r="1.2"/>',
     profile: '<circle cx="12" cy="8" r="3.6"/><path d="M4.5 20c1.2-3.6 4-5.4 7.5-5.4s6.3 1.8 7.5 5.4"/>',
+    menu: '<path d="M5 4.5h6a2.5 2.5 0 0 1 2.5 2.5v12A2 2 0 0 0 11.5 17H5Z"/><path d="M19 4.5h-2.5A2.5 2.5 0 0 0 14 7v12a2 2 0 0 1 2-2H19Z"/>',
     scan: '<path d="M4 8V5.5A1.5 1.5 0 0 1 5.5 4H8"/><path d="M16 4h2.5A1.5 1.5 0 0 1 20 5.5V8"/><path d="M20 16v2.5a1.5 1.5 0 0 1-1.5 1.5H16"/><path d="M8 20H5.5A1.5 1.5 0 0 1 4 18.5V16"/><path d="M4 12h16"/>'
   };
 
