@@ -412,6 +412,55 @@ var UI = (function () {
     return local.length >= 7 && local.length <= 12;
   }
 
+  /**
+   * 规格分组（2.1.16）
+   * ---------------------------------------------------------
+   * 后端 `optionsByProduct[productId]` 给的是「每个规格一笔」的平铺清单：
+   *   [{ optionId, optionGroup:'SIZE', nameEN:'Large', priceAdjustment:400, … }]
+   * 但画面要的是「一群一列」（SIZE → Large / Regular）：
+   *   [{ optionGroup:'SIZE', nameEN:'SIZE', options:[…] }]
+   * 这里把两种形状都吃下来，顺便滤掉已下架的规格。
+   * （以前 menu.js / pos 都直接当成分好群的资料用，结果规格一列都画不出来 → 选规格失效。）
+   */
+  function optionGroups(list) {
+    var out = [], index = {};
+
+    function group(key, en, zh, required) {
+      var k = String(key || '').toUpperCase() || 'OPTION';
+      if (!index[k]) {
+        index[k] = { optionGroup: key || k, nameEN: en || key || k, nameZH: zh || '',
+                     required: !!required, options: [] };
+        out.push(index[k]);
+      }
+      var g = index[k];
+      if (!g.nameEN && en) g.nameEN = en;
+      if (!g.nameZH && zh) g.nameZH = zh;
+      if (required) g.required = true;
+      return g;
+    }
+
+    (list || []).forEach(function (o) {
+      if (!o) return;
+      if (String(o.status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;   // 下架的规格不显示
+
+      /* 已经是「一群」的形状（有的版本这样回）→ 原样收下 */
+      if (o.options && typeof o.options.length === 'number') {
+        var g0 = group(o.optionGroup || o.nameEN, o.nameEN || o.optionGroup, o.nameZH, o.required);
+        (o.options || []).forEach(function (x) {
+          if (!x || String(x.status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;
+          g0.options.push(x);
+          if (x.required) g0.required = true;
+        });
+        return;
+      }
+
+      var g = group(o.optionGroup, o.optionGroupNameEN || o.optionGroup, o.optionGroupNameZH, o.required);
+      g.options.push(o);
+    });
+
+    return out.filter(function (g) { return g.options.length; });
+  }
+
   function confirmDialog(messageZh, messageEn, confirmText) {
     return new Promise(function (resolve) {
       var overlay = document.createElement('div');
@@ -617,6 +666,7 @@ var UI = (function () {
     normalizePhone: normalizePhone,
     isValidPhone: isValidPhone,
     allowedCountryCodes: allowedCountryCodes,
+    optionGroups: optionGroups,
     confirmDialog: confirmDialog
   };
 })();

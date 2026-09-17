@@ -283,12 +283,13 @@ var ADMIN_POS = (function () {
     return list;
   }
 
-  /** 這一款有幾個規格（有的話點下去要先選） */
+  /**
+   * 这一款有几个规格群（有的話點下去要先選）。
+   * 后端给的是平铺清单 → 交给 UI.optionGroups 分组（下架的规格会被滤掉）。
+   */
   function optionGroupsOf(productId) {
     var all = (state.menu && state.menu.optionsByProduct && state.menu.optionsByProduct[productId]) || [];
-    return all.filter(function (o) {
-      return String(o.status || 'ACTIVE').toUpperCase() === 'ACTIVE';
-    });
+    return UI.optionGroups(all);
   }
 
   function renderGrid() {

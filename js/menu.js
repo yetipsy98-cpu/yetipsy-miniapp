@@ -368,8 +368,13 @@ var MENU = (function () {
     return hit;
   }
 
+  /**
+   * 这个商品的规格「群」（SIZE / ICE …）。
+   * 后端给的是平铺清单，交给 UI.optionGroups 分组 —— 以前直接当成分好群的
+   * 资料用，结果一列规格都画不出来（选了也没用）。
+   */
   function optionGroupsOf(productId) {
-    return state.optionsByProduct[productId] || [];
+    return UI.optionGroups(state.optionsByProduct[productId] || []);
   }
 
   function openProduct(productId) {

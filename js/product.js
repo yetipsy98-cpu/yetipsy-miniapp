@@ -60,7 +60,8 @@ var PRODUCT = (function () {
       var hit = null;
       (menu.products || []).forEach(function (p) { if (!hit && p.productId === state.productId) hit = p; });
       if (hit) {
-        applyProduct(hit, (menu.optionsByProduct || {})[state.productId] || []);
+        /* 快取里的规格是「平铺」的（每个规格一笔）→ 交给 UI.optionGroups 分群 */
+        applyProduct(hit, UI.optionGroups((menu.optionsByProduct || {})[state.productId] || []));
       }
     }
 
@@ -71,7 +72,8 @@ var PRODUCT = (function () {
         return;
       }
       state.error = null;
-      applyProduct(res.data.product, res.data.optionGroups || []);
+      /* 后端两种形状都给过 → 一律再分群一次（已经是群的话原样通过） */
+      applyProduct(res.data.product, UI.optionGroups(res.data.optionGroups || []));
     });
   }
 
