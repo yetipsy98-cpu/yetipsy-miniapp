@@ -532,4 +532,103 @@ suite.group('07c · 下架不影响已下的订单', (t) => {
   t.equal('快照单价不变', db.unitPriceSen, 3200);
 });
 
+/* -------------------------------------------------------------
+   08 · totalRewards 恒等于 Rewards 表的列数（跨路径）
+   -------------------------------------------------------------
+   为什么要有：totalRewards 曾经有双重计数 —— claimOrder 在「发出」时
+   +1，claimReward 在「认领」时又 +1，顾客认领一次就被算成两个。
+   五处写入点、三种语义，靠读代码看不出来，只有「发出 → 认领 → 数表里
+   几列」这样跑一遍才会露出来。
+
+   这一组盯住一个不变量：totalRewards 必须恒等于 Rewards 表里
+   这位会员的列数 —— 不管 Reward 是从哪条路径发出的、有没有被认领。
+   ------------------------------------------------------------- */
+
+suite.group('08 · totalRewards 恒等于 Rewards 表列数（三条发出路径 + 认领）', (t) => {
+  const w = grantWorld();
+
+  /*
+   * ★ 数「有效列数」，不是「全部列数」。
+   * cancelOrder 会把 Reward 那一列标成 CANCELLED，但**不会删列**（保留稽核轨迹）。
+   * 所以 totalRewards 对应的是「非 CANCELLED 的列数」。
+   * 这一点是量测出来的：取消后表里仍是 2 列（1 个 AVAILABLE + 1 个 CANCELLED），
+   * 而 totalRewards 正确退回 1 —— 一开始我把期望写成「全部列数」，测出来 3 vs 2，
+   * 查了 cancelOrder 与实际的 status 才确定是期望写错，不是产品 bug。
+   */
+  const rows = () => w.api.inspect((DB) =>
+    DB.rewards.filter((r) => r.customerId === w.customerId &&
+      r.status !== 'CANCELLED').length);
+  const allRows = () => w.api.inspect((DB) =>
+    DB.rewards.filter((r) => r.customerId === w.customerId).length);
+  const counter = () =>
+    call(w, 'getProfile', {}, w.customerToken).data.customer.totalRewards;
+
+  /* 每一步都要同时成立：计数器 == 有效列数，且列数符合期望 */
+  function expectState(label, expected) {
+    const c = counter();
+    const n = rows();
+    t.equal(label + ' → totalRewards', c, expected);
+    t.equal(label + ' → Rewards 有效列数', n, expected);
+    t.check(label + ' → ★ 计数器与有效列数一致', c === n, c + ' vs ' + n);
+  }
+
+  expectState('起点（尚无交易）', 0);
+
+  /* 路径 A：员工扫码进分（RM86 ≥ REWARD_MIN_SPEND RM30 → 会发 Reward） */
+  const a = grant(w, 8600);
+  t.okIs(a, 'A · 扫码进分 RM86');
+  t.check('A · 发出了 Reward', !!a.data.reward, JSON.stringify(a.data.reward));
+  expectState('A 之后（扫码进分发出 1 个）', 1);
+
+  /* 路径 B：Foodcourt Claim → 顾客认领。
+     ★ 这里就是旧 bug 的现场：认领曾经让计数器多 +1，变成 3 / 2。 */
+  const made = call(w, 'createClaim',
+    { source: 'FOODCOURT', externalOrderId: 'CNT-1', amount: 5000 }, w.ownerToken);
+  t.okIs(made, 'B · 建立 Foodcourt Claim');
+  const claimed = call(w, 'claimOrder', { token: made.data.token }, w.customerToken);
+  t.okIs(claimed, 'B · 顾客认领');
+  t.check('B · 发出了 Reward', !!claimed.data.reward,
+    JSON.stringify(claimed.data.reward));
+  expectState('B 之后（认领不重复计数）', 2);
+
+  /* 顾客把 Reward 开掉（进钱包）—— 这是旧 bug 的第二现场 */
+  const pend = call(w, 'getPendingReward', {}, w.customerToken);
+  t.okIs(pend, 'B · 查待开 Reward');
+  if (pend.data && pend.data.reward) {
+    const open = call(w, 'claimReward',
+      { rewardId: pend.data.reward.rewardId }, w.customerToken);
+    t.okIs(open, 'B · 开启 Reward 进钱包');
+    expectState('B 开启 Reward 之后（仍不重复计数）', 2);
+  } else {
+    t.check('B · 应该要有待开 Reward', false, JSON.stringify(pend.data));
+  }
+
+  /* 路径 C：低于门槛（RM20 < RM30）→ 只给积分，不发 Reward */
+  const c = grant(w, 2000);
+  t.okIs(c, 'C · 扫码进分 RM20');
+  t.equal('C · 不发 Reward', c.data.reward, null);
+  expectState('C 之后（低于门槛不增加）', 2);
+
+  /* 取消一单 AVAILABLE 的 Reward 要把计数器退回去 */
+  const d = grant(w, 9000);
+  t.okIs(d, 'D · 再进分 RM90');
+  expectState('D 之后', 3);
+  const cancelled = call(w, 'cancelOrder', { orderId: d.data.orderId }, w.ownerToken);
+  t.okIs(cancelled, 'D · 取消那张单');
+  expectState('D 取消之后（计数器退回）', 2);
+
+  /* 取消不删列，只改状态（保留稽核轨迹） */
+  t.equal('D 取消之后 → 表里总列数（含 CANCELLED）', allRows(), 3);
+  t.equal('D 取消之后 → 被标成 CANCELLED 的列数',
+    w.api.inspect((DB) => DB.rewards.filter((r) =>
+      r.customerId === w.customerId && r.status === 'CANCELLED').length), 1);
+
+  /* 已取消的 Reward 不能再被开掉 */
+  const cancelledId = w.api.inspect((DB) => DB.rewards.filter((r) =>
+    r.customerId === w.customerId && r.status === 'CANCELLED')[0].rewardId);
+  const reopen = call(w, 'claimReward', { rewardId: cancelledId }, w.customerToken);
+  t.check('★ 已取消的 Reward 不能再领', reopen.success === false);
+  t.equal('错误码 REWARD_NOT_FOUND', reopen.error.code, 'REWARD_NOT_FOUND');
+});
+
 suite.run().then((pass) => { process.exit(pass ? 0 : 1); });
