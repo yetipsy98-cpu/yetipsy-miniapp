@@ -7,7 +7,7 @@
      · Wallet / Customer / Staff 任何敏感数据
    ============================================================= */
 
-var CACHE_NAME = 'yetipsy-v1.4.0';   // 改版就 +1，让旧快取自动清掉（见 demo/smoke-ui.js 的版本对照）
+var CACHE_NAME = 'yetipsy-v1.5.0';   // 改版就 +1，让旧快取自动清掉（见 demo/smoke-ui.js 的版本对照）
 
 var SHELL = [
   './',
@@ -26,6 +26,7 @@ var SHELL = [
   './order.html',
   './orders.html',
   './admin/redeem.html',
+  './admin/orderboard.html',
   './css/app.css',
   './css/admin.css',
   './js/config.js',
@@ -43,6 +44,7 @@ var SHELL = [
   './js/product.js',
   './js/cart.js',
   './js/cart-page.js',
+  './js/admin-orderboard.js',
   './js/checkout.js',
   './js/order.js',
   './js/orders.js',

@@ -108,7 +108,18 @@ function getHandlers() {
     getAppOrder: getAppOrder,                   // §17 订单追踪
     getMyOrders: getMyOrders,
     requestOrderCancellation: requestOrderCancellation,   // §53
-    reorder: reorder                            // §37
+    reorder: reorder,                           // §37
+
+    /* ===== 2.0 点单：员工订单看板（Phase 7）===== */
+    getIncomingOrders: getIncomingOrders,       // §19 NEW 栏
+    getActiveOrders: getActiveOrders,           // §20 三栏看板 + §50 今日统计
+    acceptOrder: acceptOrder,
+    startPreparing: startPreparing,
+    markReady: markReady,                       // §18 顾客端会显示取酒提示
+    completeOrder: completeOrder,               // §55 幂等 · §22 这一步才发积分
+    cancelAppOrder: cancelAppOrder,             // §54 已扣钱包要 REVERSAL
+    markPaymentPaid: markPaymentPaid,           // §54 这一步才真的扣钱包
+    setOrderingPaused: setOrderingPaused        // §65 暂停 / 恢复接单
   };
 }
 

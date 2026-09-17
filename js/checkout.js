@@ -30,6 +30,21 @@ var CHECKOUT = (function () {
 
   function init() {
     if (!AUTH.isCustomerLoggedIn()) { AUTH.requireCustomer(); return; }
+
+    /*
+     * §12 桌牌 QR：/checkout.html?table=A12 → 自动带入桌号，不用重打。
+     * 没有 ?table 时预设「柜台自取」——这样一进来就能算价，
+     * 不会先弹一个「请输入桌号」的错误给顾客看。
+     */
+    var qrTable = (UI.getParam('table') || '').toUpperCase().slice(0, 12);
+    if (qrTable) {
+      state.orderType = 'TABLE';
+      state.tableNumber = qrTable;
+    } else {
+      state.orderType = 'COUNTER';
+      state.tableNumber = '';
+    }
+
     bindEvents();
     if (!CART.items().length) {
       renderEmpty();
@@ -51,6 +66,13 @@ var CHECKOUT = (function () {
 
   function loadQuote() {
     state.error = null;
+
+    /* 选了「桌号」但还没输入 → 先请顾客填，不要送一个注定失败的请求 */
+    if (state.orderType === 'TABLE' && !state.tableNumber) {
+      renderAskTable();
+      return;
+    }
+
     renderSkeleton();
 
     API.customer.createCheckoutQuote({
@@ -146,6 +168,43 @@ var CHECKOUT = (function () {
     }
     var cta = document.getElementById('stickyCta');
     if (cta) cta.style.display = 'none';
+  }
+
+  /** 选了桌号但还没输入 → 请顾客填，不要送注定失败的请求（§11） */
+  function renderAskTable() {
+    var box = document.getElementById('checkoutBody');
+    if (!box) return;
+    var cta = document.getElementById('stickyCta');
+    if (cta) cta.style.display = 'none';
+
+    box.innerHTML =
+      '<div class="card" style="text-align:center;padding:24px 16px">' +
+        '<div class="bilingual-zh">你在哪一桌？</div>' +
+        '<div class="bilingual-en">WHICH TABLE ARE YOU AT?</div>' +
+        '<div class="divider"></div>' +
+        '<input class="input" id="askTableInput" placeholder="A12" maxlength="12" ' +
+          'style="text-align:center;font-size:20px;letter-spacing:3px">' +
+        '<div class="tiny muted mt-12">也可以改成柜台自取</div>' +
+        '<button class="btn btn-secondary mt-12" id="askCounterBtn" style="width:100%">' +
+          '柜台自取 COUNTER PICKUP</button>' +
+      '</div>';
+
+    var input = document.getElementById('askTableInput');
+    if (input) {
+      input.focus();
+      input.addEventListener('change', function () {
+        var v = input.value.trim().toUpperCase();
+        if (!v) return;
+        state.tableNumber = v;
+        loadQuote();
+      });
+    }
+    var counter = document.getElementById('askCounterBtn');
+    if (counter) counter.addEventListener('click', function () {
+      state.orderType = 'COUNTER';
+      state.tableNumber = '';
+      loadQuote();
+    });
   }
 
   function renderError() {

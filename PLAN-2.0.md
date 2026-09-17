@@ -18,12 +18,32 @@
 | 4 | Cart（§73） | ✅ 完成 · `cart.html` + `js/cart.js`（LocalStorage，价格最终由后端验证） |
 | 5 | Checkout + Quote（§74） | ✅ 完成 · `Checkout.gs` · Quote 5 分钟 · IdempotencyKey · `test:checkout` 155 项 |
 | 6 | 建立订单（§75） | ✅ 完成 · `AppOrders.gs` · `placeOrder` 幂等 · 订单追踪页 |
-| 7 | 员工订单看板（§76） | ⬜ 未开始 |
-| 8 | 会员整合（§77） | ⬜ 未开始 |
+| 7 | 员工订单看板（§76） | ✅ 完成 · `OrderBoard.gs` · `admin/orderboard.html` · `test:orderboard` 159 项 |
+| 8 | 会员整合（§77） | ✅ 完成 · 完成订单时呼叫 1.x 的 `issuePoints` / `generateReward` / `walletCredit`，没有第二套逻辑 |
 | 9 | Wallet 接入 Checkout（§78） | ⬜ 未开始 |
 | 10 | Owner 菜单管理（§79） | 🟡 后端 7 个 action 已就位并通过权限测试；`admin/menu.html` 页面未做 |
 | 11 | Analytics（§80） | ⬜ 未开始 |
 | 12 | 安全审计（§81） | ⬜ 未开始 |
+
+### Phase 7+8 已验证的规则
+
+| 规则 | 怎么验的 |
+|---|---|
+| §55 幂等 | `completeOrder` 连按两次：第二次回 `alreadyCompleted:true`、`pointsIssued:0`；PointTx / Rewards / 1.x Orders 各只有 1 笔，`COMPLETE_ORDER` 审计只有 1 条 |
+| §12 未收款 | READY 但 UNPAID → `ORDER_NOT_PAID`，积分 0、到店 0、不写 1.x Orders |
+| §12 状态机 | SUBMITTED 不能直接 READY / COMPLETED（`ORDER_STATUS_INVALID`）；不能重复接单；已完成的订单不能再取消（`ORDER_ALREADY_FINAL`） |
+| §54 钱包 | 下单只记 `walletRequested=868`、余额不变；`markPaymentPaid` 才扣（WalletTx 出现 REDEEM）；已收款后取消 → 退回 868、多一笔 REVERSAL、付款状态转 REFUNDED；重复取消不会退第二次 |
+| §56 到店 | 6 小时内两张订单只算 1 次 Visit（消费仍两张都累加）；`VISIT_SESSION_HOURS=0` 时两张各算一次 |
+| §22/§57/§58 | COMPLETED 才发积分（净额 6330 → 63 分）、才产生 Reward；SUBMITTED / 未收款阶段会员数字完全不动 |
+| §24/§51 | 完成时同时写一笔 1.x `Orders`（`orderSource=YETIPSY_APP`、`externalOrderId=YT260917001`、毛额 / 钱包 / 净额 / 积分齐全），AppOrders 用 `ordersTxId` 回指；Foodcourt 认领照旧可用，两条通路积分累加 |
+| §12 权限 | 9 个看板 action 用顾客 token 一律 `INVALID_SESSION`；没带 token 也不行；不存在的订单 `ORDER_NOT_FOUND` |
+| §19/§20/§46/§49/§50 | 看板分栏正确、回传 `pollSeconds=8`、`waitingSeconds` 由 CreatedAt 现算、今日订单数 / 业绩 / 平均客单正确 |
+| §65 暂停 | 暂停后不能报价（`ORDERING_PAUSED`），但现有订单照样接单 / 制作 / 完成；恢复后又能下单；审计记下 PAUSE / RESUME |
+
+**改到 1.x 的一处（需要你知道）**：`Claims.gs` 的 Foodcourt 认领原本无条件 `totalVisits + 1`。
+§56 + §24 要求两条通路共用会员引擎，所以改成呼叫同一个 `shouldCountVisit()` ——
+同一位会员 6 小时内不论是 App 点单还是 Foodcourt 认领，都只算 1 次到店。
+积分、Reward、钱包、Claim Code 的行为完全没变，1.x 的 242 项 API 测试仍然全过。
 
 ### Phase 5+6 已验证的规则
 

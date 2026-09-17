@@ -369,6 +369,43 @@ var API = (function () {
     },
     updateProductOption: function (data) {
       return call('updateProductOption', data || {}, { sessionType: 'staff' });
+    },
+
+    /* ============ 2.0 点单：员工订单看板（Phase 7，§19 §20 §61）============ */
+    getIncomingOrders: function () {
+      return call('getIncomingOrders', {}, { sessionType: 'staff' });
+    },
+    getActiveOrders: function () {
+      return call('getActiveOrders', {}, { sessionType: 'staff' });
+    },
+    acceptOrder: function (appOrderId) {
+      return call('acceptOrder', { appOrderId: appOrderId }, { sessionType: 'staff' });
+    },
+    startPreparing: function (appOrderId) {
+      return call('startPreparing', { appOrderId: appOrderId }, { sessionType: 'staff' });
+    },
+    markReady: function (appOrderId) {
+      return call('markReady', { appOrderId: appOrderId }, { sessionType: 'staff' });
+    },
+    /** §54 这一步才真的扣钱包 */
+    markPaymentPaid: function (appOrderId, paymentMethod, paymentReference) {
+      return call('markPaymentPaid', {
+        appOrderId: appOrderId,
+        paymentMethod: paymentMethod || 'COUNTER',
+        paymentReference: paymentReference || ''
+      }, { sessionType: 'staff' });
+    },
+    /** §55 幂等：连按两次只会发一次积分 */
+    completeOrder: function (appOrderId) {
+      return call('completeOrder', { appOrderId: appOrderId }, { sessionType: 'staff' });
+    },
+    cancelAppOrder: function (appOrderId, reason) {
+      return call('cancelAppOrder',
+        { appOrderId: appOrderId, reason: reason || '' }, { sessionType: 'staff' });
+    },
+    /** §65 暂停 / 恢复接单 */
+    setOrderingPaused: function (paused) {
+      return call('setOrderingPaused', { paused: !!paused }, { sessionType: 'staff' });
     }
   };
 

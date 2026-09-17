@@ -185,7 +185,7 @@ npm run demo          # = node demo/server.js
 ## 4. 测试
 
 ```bash
-npm test                 # 全部 12 套（1510 项检查）
+npm test                 # 全部 14 套（1814 项检查）
 
 npm run test:backend     # 直接执行 apps-script/*.gs（86 项）
 npm run test:api         # 完整 API 测试（242 项）
@@ -199,6 +199,8 @@ npm run test:upgrade     # 2.0 数据库升级：只加不减、幂等、1.x 不
 npm run test:menu        # 2.0 菜单 API：价格只由后端定、促销时间窗、售罄、权限、缓存（139 项）
 npm run test:menuui      # 用 jsdom 真的开 menu/product/cart 三页跑一遍（88 项）
 npm run test:checkout    # 2.0 结帐与订单：后端算价、Quote 过期、幂等、钱包只记录不扣（155 项）
+npm run test:orderboard  # 2.0 员工看板：未收款不能完成、重复完成不重复发、钱包退回、6 小时一次到店（159 项）
+npm run test:orderui     # 用 jsdom 真的开结帐页 / 订单页 / 看板跑一遍（119 项）
 npm run build:copypaste  # 改完 .gs 之后重新产生那份复制贴上文件
 ```
 
@@ -306,7 +308,7 @@ App 内 `PROFILE` 页面有完整隐私说明。
 4. Deploy → New deployment → Web app → 复制 URL
 5. `js/config.js` 贴上 API URL（`REQUIRE_BACKEND: true`）→ push → 开启 GitHub Pages
 
-> 之后改后端只要 `git push`：CI 会先跑 1510 项测试，再用 `clasp` 部署，
+> 之后改后端只要 `git push`：CI 会先跑 1814 项测试，再用 `clasp` 部署，
 > Web App URL 不变，前端不用动。设定方法见 `apps-script/README.md`。
 
 ---
@@ -316,8 +318,8 @@ App 内 `PROFILE` 页面有完整隐私说明。
 2.0 的完整计划书在 [`PLAN-2.0.md`](PLAN-2.0.md)（86 节），1.x 的审计结果在
 [`docs/AUDIT-1.x.md`](docs/AUDIT-1.x.md)。
 
-**进度：Phase 1–6 已完成（审计 · 数据库升级 · Menu · Cart · Checkout · 建立订单）。
-Phase 7（员工订单看板）起尚未开始。**
+**进度：Phase 1–8 已完成（审计 · 数据库升级 · Menu · Cart · Checkout · 建立订单 ·
+员工订单看板 · 会员整合）。Phase 9（钱包压力测试）起尚未开始。**
 
 顾客端完整流程已可用：
 `menu.html`（酒单 + 搜寻 + 分类 + 风味筛选 + 售罄）→
@@ -325,7 +327,8 @@ Phase 7（员工订单看板）起尚未开始。**
 `cart.html`（购物车）→ `checkout.html`（后端报价 + 桌号 + 钱包 + 确认）→
 `order.html`（订单进度追踪）/ `orders.html`（我的订单 + 再点一次）。
 
-后端已就位但还没有员工页面：`acceptOrder` 等看板 action 属 Phase 7。
+员工端：`admin/orderboard.html` —— 三栏看板（NEW / CONFIRMED / PREPARING / READY）、
+等待计时、新单提示音（可 MUTE）、收款、完成、取消、一键暂停接单。
 
 ### 9.1 已经就位的东西
 
@@ -339,7 +342,8 @@ Phase 7（员工订单看板）起尚未开始。**
 | 顾客页面 | `menu.html` `product.html` `cart.html` + `js/menu.js` `js/product.js` `js/cart.js` `js/cart-page.js`（§69） |
 | 结帐后端 | `apps-script/Checkout.gs`（327 行）+ `apps-script/AppOrders.gs`（370 行）：`createCheckoutQuote` `getCheckoutQuote` `placeOrder` `getAppOrder` `getMyOrders` `requestOrderCancellation` `reorder` |
 | 结帐页面 | `checkout.html` `order.html` `orders.html` + `js/checkout.js` `js/order.js` `js/orders.js` |
-| 测试 | `test:upgrade` 142 · `test:menu` 139 · `test:menuui` 88 · `test:checkout` 155 |
+| 员工看板 | `apps-script/OrderBoard.gs`（460 行）：`getIncomingOrders` `getActiveOrders` `acceptOrder` `startPreparing` `markReady` `markPaymentPaid` `completeOrder` `cancelAppOrder` `setOrderingPaused` + `admin/orderboard.html` + `js/admin-orderboard.js` |
+| 测试 | `test:upgrade` 142 · `test:menu` 139 · `test:menuui` 88 · `test:checkout` 155 · `test:orderboard` 159 · `test:orderui` 119 |
 
 ### 9.2 老板怎么升级（**不要重跑 `setupDatabase()`**）
 

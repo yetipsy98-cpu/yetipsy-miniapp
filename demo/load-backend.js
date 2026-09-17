@@ -30,6 +30,7 @@ const FILE_ORDER = [
   'Menu.gs',
   'Checkout.gs',
   'AppOrders.gs',
+  'OrderBoard.gs',
   'Claims.gs',
   'Promotions.gs',
   'Admin.gs',

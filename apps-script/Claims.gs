@@ -302,8 +302,14 @@ function claimOrder(data, token) {
   order.finalAmount = order.billAmount - (order.walletUsed || 0);
 
   customer.totalSpend  = (Number(customer.totalSpend) || 0) + order.billAmount;
-  customer.totalVisits = (Number(customer.totalVisits) || 0) + 1;
-  customer.lastVisitAt = nowISO();
+  /*
+   * §56 6 小时内完成多笔消费只算 1 次到店（与 App 点单共用同一个判断）。
+   * 这里排除 order 自己，否则会永远判定「这次已经到店过了」。
+   */
+  if (shouldCountVisit(customer, null, order.orderId)) {
+    customer.totalVisits = (Number(customer.totalVisits) || 0) + 1;
+    customer.lastVisitAt = nowISO();
+  }
 
   var points = pointsForAmount(order.billAmount, order.walletUsed);
   order.pointsEarned = points;
