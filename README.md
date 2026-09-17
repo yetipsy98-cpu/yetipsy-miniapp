@@ -73,13 +73,16 @@ Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积�
 > · 20 个模组变成同一个档案里的 20 个段落（段落开头都写着
 >   `/* ===== [3/20] Database.gs — … ===== */`，Ctrl+F 搜 `===== [` 就能跳段）
 > · 版本号码只有一组：档案内 `APP_VERSION`、档头、`package.json`、
->   `js/config.js`、`service-worker.js` 快取名全部 = **2.1.7**
+>   `js/config.js`、`service-worker.js` 快取名全部 = **2.1.8**
 > · `npm run check:backend` 会检查「只有一个 .gs / 20 个段落都在 /
 >   action 有没有指向不存在的函数 / 前端用到的 90 个 action 后端是否都有 /
 >   版本号码是否一致 / 用**这个档案**跑一次 POS 进单 + 会员点单端到端」
 > · 员工端 **MORE 页最下方**会显示后端版本：
->   `✓ 后端 v2.1.7 · 已是最新版`，若还贴着旧版会红字提示重新贴 Apps Script
+>   `✓ 后端 v2.1.8 · 已是最新版`，若还贴着旧版会红字提示重新贴 Apps Script
 > · 规则：**任何改动都先更新 GitHub 上这个档案**，再从 GitHub 贴到 Apps Script
+> · 2.1.8 起，所有页面的 css / js 都带版本号（`admin.css?v=2.1.8`）：
+>   改版后员工的浏览器一定抓到新的 css / js，不会看到「还是一样」的旧画面
+>   （**改版时记得连 `?v=` 一起 +1**，`npm run check:backend` 会检查有没有漏）
 
 Foodcourt Claim（1.x 原流程，保留但已移出员工首页、入口在 MORE，仅 MANAGER / OWNER）：
 
@@ -291,8 +294,8 @@ npm run check:backend
 
 **贴完怎么确认是最新版？** 用员工账号进 **MORE 页**，最下面会显示：
 
-- `✓ 后端 v2.1.7 · 已是最新版` → 贴对了
-- `⚠ 后端 vX ≠ 前端 v2.1.7 · 请重新贴 Apps Script` → 还是旧版
+- `✓ 后端 v2.1.8 · 已是最新版` → 贴对了
+- `⚠ 后端 vX ≠ 前端 v2.1.8 · 请重新贴 Apps Script` → 还是旧版
 
 （这个版本号来自 `ping` 回的 `APP_VERSION`，也就是档案里第 52 行那一行。）
 

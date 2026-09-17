@@ -208,15 +208,20 @@ var ADMIN_POS = (function () {
         if (!ADMIN.handleError(res.error) && verbose) UI.toast(res.error.message, 'error');
         return;
       }
+      var allProducts = res.data.products || [];
       state.menu = {
         categories: (res.data.categories || []).filter(function (c) {
           return String(c.status || 'ACTIVE').toUpperCase() === 'ACTIVE';
         }),
-        products: (res.data.products || []).filter(function (p) {
+        products: allProducts.filter(function (p) {
           return String(p.status || 'ACTIVE').toUpperCase() === 'ACTIVE';
         }),
         /* ★ 规格也要留着：点商品才知道要不要先选 Size / ICE */
-        optionsByProduct: res.data.optionsByProduct || {}
+        optionsByProduct: res.data.optionsByProduct || {},
+        /* 已下架的商品数（商品格看不到，菜单管理可以重新上架） */
+        hiddenCount: allProducts.filter(function (p) {
+          return String(p.status || 'ACTIVE').toUpperCase() !== 'ACTIVE';
+        }).length
       };
       renderCats();
       renderGrid();
@@ -275,14 +280,22 @@ var ADMIN_POS = (function () {
     var status = document.getElementById('kioskStatus');
     if (status) {
       status.className = 'a-sub';
-      status.textContent = state.menu
-        ? '点商品加入这张单 · 共 ' + list.length + ' 款'
-        : '载入酒单…';
+      if (!state.menu) {
+        status.textContent = '载入酒单…';
+      } else {
+        var hidden = Number(state.menu.hiddenCount) || 0;
+        status.textContent = '点商品加入这张单 · 共 ' + list.length + ' 款' +
+          (hidden ? '（另有 ' + hidden + ' 款已下架 → 更多 → 菜单管理 可上架）' : '');
+      }
     }
 
     if (!list.length) {
-      el.grid.innerHTML = '<div class="a-empty" style="padding:20px">酒单还没有商品<br>' +
-        '<span class="tiny">到「更多 → 菜单管理」新增</span></div>';
+      var hiddenToo = (state.menu && Number(state.menu.hiddenCount)) || 0;
+      el.grid.innerHTML = '<div class="a-empty" style="padding:20px">' +
+        (hiddenToo
+          ? '商品全部下架了（' + hiddenToo + ' 款）<br><span class="tiny">到「更多 → 菜单管理」按一下重新上架</span>'
+          : '酒单还没有商品<br><span class="tiny">到「更多 → 菜单管理」新增</span>') +
+        '</div>';
       return;
     }
 

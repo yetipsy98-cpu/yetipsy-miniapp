@@ -517,3 +517,20 @@ body.admin.has-admin-nav { padding-bottom: calc(66px + env(safe-area-inset-botto
 .mh-main { flex: 1 1 auto; min-width: 0; }
 .mh-name { font-size: 14px; font-weight: 650; }
 .mh-row .chip { flex: 0 0 auto; }
+
+/* =============================================================
+   2.1.8 · 点餐台的「结账」列被底部导览挡住了
+   -------------------------------------------------------------
+   .kiosk-bar 原本 z-index 55 / bottom 0，
+   .admin-nav 是 z-index 60 / bottom 0（不透明）→ 整条结账列
+   躲在导览后面，员工只看得到「加商品」，看不到「明细 / 结账」。
+   这里把结账列抬到导览之上（bottom 让开导览高度）。
+   ============================================================= */
+body.admin.has-admin-nav .kiosk-bar {
+  bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+  z-index: 61;
+  padding-bottom: 10px;            /* safe-area 已经由导览负责，不要加两次 */
+  box-shadow: 0 -10px 22px rgba(0,0,0,.45);
+}
+/* 结账列浮起来之后，点餐台最后一行商品要留出空间，别被挡住 */
+body.admin.has-admin-nav .pos-page { padding-bottom: 132px; }

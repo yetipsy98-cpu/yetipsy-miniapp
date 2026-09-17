@@ -151,6 +151,25 @@ function checkVersions(files) {
     src.slice(0, 1200).indexOf('版本 ' + appVersion) >= 0 &&
     src.slice(0, 1200).indexOf('MINI APP ' + appVersion) >= 0);
 
+  /* 页面上的 css / js 都带版本号（改版时一定抓到新档，不会看到旧画面） */
+  const pages = fs.readdirSync(ROOT, { withFileTypes: true })
+    .filter((d) => d.isFile() && d.name.endsWith('.html')).map((d) => d.name)
+    .concat(fs.readdirSync(path.join(ROOT, 'admin'))
+      .filter((f) => f.endsWith('.html')).map((f) => 'admin/' + f));
+  const bad = [];
+  let stamped = 0;
+  pages.forEach((page) => {
+    const html = read(page);
+    const re = /(?:href|src)="[^"]*\.(?:css|js)\?v=([^"&]+)"/g;
+    let m;
+    while ((m = re.exec(html))) {
+      stamped += 1;
+      if (m[1] !== pkgVersion) bad.push(page + ' → ?v=' + m[1]);
+    }
+  });
+  check('页面 css / js 的 ?v= 都是 ' + pkgVersion + '（' + stamped + ' 个连结）',
+    bad.length === 0 && stamped > 0, bad.slice(0, 5).join(' / '));
+
   return appVersion;
 }
 
@@ -216,6 +235,29 @@ function checkEndToEnd() {
     JSON.stringify(menuOptions.map((o) => o.priceAdjustment)));
   check('规格有状态栏位（点餐台只显示 ACTIVE）',
     menuOptions.every((o) => String(o.status || 'ACTIVE').toUpperCase() === 'ACTIVE'));
+
+  /* --- 2.1.8：从 Sheet 直接新增（Status 空白）的商品，点餐台也要看得到 ---
+     员工以前在 Google Sheets 加了商品，点餐台却没出现（因为这里以前只认
+     明码写 ACTIVE 的 Status）。现在两边同一个判断：空白 = 上架。 */
+  const blankId = api.mutate(function (DB, sb) {
+    DB.products.push({
+      productId: 'PRD9001', categoryId: cat && cat.category.categoryId,
+      nameEN: 'Sheet Only', nameZH: '只有表单列', priceSen: 1500,
+      status: '', available: 'TRUE', sortOrder: 99
+    });
+    DB.products.push({
+      productId: 'PRD9002', categoryId: cat && cat.category.categoryId,
+      nameEN: 'Hidden One', nameZH: '已下架', priceSen: 1500,
+      status: 'ARCHIVED', available: 'TRUE', sortOrder: 100
+    });
+    sb.clearMenuCache();
+    return 'PRD9001';
+  });
+  const menu2 = okData(post('getMenu', {}, custToken), 'getMenu（含 Sheet 新增商品）');
+  const menuIds = ((menu2 && menu2.products) || []).map((p) => p.productId);
+  check('Status 空白的商品算上架（点餐台看得到）', menuIds.indexOf(blankId) !== -1,
+    menuIds.join(','));
+  check('Status = ARCHIVED 的商品不会出现', menuIds.indexOf('PRD9002') === -1);
 
   /* --- 2.1 POS：点餐台单据（items）→ 队列 --- */
   const ticket = okData(post('createPosTicket', {

@@ -252,6 +252,10 @@ var ADMIN_MENU = (function () {
 
       field('价格（RM） PRICE', 'fPrice',
         product ? (product.price / 100).toFixed(2) : '', '22.00', 'number') +
+      /* 常见的填错：RM 22 写成 22 → 变成 RM 0.22（Sheet 存的是「分」） */
+      '<div class="tiny muted-2" style="margin:-6px 2px 10px">' +
+        '这里填 RM（22 = RM 22.00）。若直接在 Google Sheets 改，栏位 PriceSen 是「分」：RM 22 要填 2200' +
+      '</div>' +
       field('排序 SORT ORDER', 'fSort', product ? (product.sortOrder || 0) : '0', '0', 'number') +
 
       '<div class="a-divider"></div>' +
