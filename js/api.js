@@ -110,6 +110,14 @@ var API = (function () {
   };
 
   /* 轮询用：快取比这个还新就不要再问后端（省掉一半以上的请求 → 现场稳很多） */
+  /* 这几个动作是「现场即时状态」：
+     绝对不要先把快取画出来（旧的栏位会让员工看到卡片跳回去），
+     一律等后端；连线失败才用快取当后备。 */
+  var LIVE_ONLY = {
+    getActiveOrders: 1,
+    getPosQueue:     1
+  };
+
   var FRESH_MS = {
     /* 看板 / 待进单：每次轮询都往后端问一次。
        新订单早一秒看到就是早一秒开始做 —— 这两个动作本来就只有
@@ -250,6 +258,16 @@ var API = (function () {
     newScope();                       // 换一组 scope：旧资料绝对读不回来
   }
 
+  /**
+   * 给页面用：把刚拿到的「权威资料」写进快取。
+   * 例：员工按了「接单并制作」，后端回传最新看板快照 →
+   *     顺手写进快取，之后任何快取优先的显示都会是新状态，
+   *     不会又跳出旧的栏位。
+   */
+  function cachePut(action, data, value) {
+    try { cacheWrite(cacheKey(action, data), value); } catch (e) {}
+  }
+
   /** 给页面用：同步拿快取（酒单页要立刻画清单与规格） */
   function cachePeek(action, data, ttlMs) {
     return cacheRead(cacheKey(action, data), ttlMs || READ_TTL[action] || 120000);
@@ -298,7 +316,7 @@ var API = (function () {
 
     var live = {
       then: function (onFulfilled) {
-        if (cached) {
+        if (cached && !options.noCachedEmit) {
           var first = { success: true, data: cached, error: null, cached: true };
           Promise.resolve().then(function () { if (onFulfilled) onFulfilled(first); });
         }
@@ -318,6 +336,13 @@ var API = (function () {
     options = options || {};
     if (options.cache) {
       var ttl = options.cacheTtl || READ_TTL[action] || 120000;
+      if (LIVE_ONLY[action]) {
+        /* 复制一份设定，不要动到呼叫端传进来的物件 */
+        var liveOpts = {};
+        for (var k in options) if (options.hasOwnProperty(k)) liveOpts[k] = options[k];
+        liveOpts.noCachedEmit = true;
+        options = liveOpts;
+      }
       return liveCall(action, data, options, cacheKey(action, data), ttl);
     }
     return send(action, data, options);
@@ -338,13 +363,20 @@ var API = (function () {
     }
   }
 
-  function withSlot(task) {
+  /**
+   * 排队等一个发送名额。
+   * priority = true（写动作：接单 / 做好了 / 收款…）→ 不排队，直接送，
+   * 免得员工的点击卡在轮询后面等好几秒。
+   */
+  function withSlot(task, priority) {
     return new Promise(function (resolve) {
-      waiting.push(function () {
+      function run() {
         running += 1;
         task().then(function (v) { running -= 1; pump(); resolve(v); },
                     function () { running -= 1; pump(); resolve({ success: false, data: null, error: NETWORK_ERROR }); });
-      });
+      }
+      if (priority) { run(); return; }
+      waiting.push(run);
       pump();
     });
   }
@@ -354,7 +386,7 @@ var API = (function () {
   }
 
   /** 送一次（不含重试） */
-  function attempt(payload, timeoutMs) {
+  function attempt(payload, timeoutMs, priority) {
     var action = payload.action;
     return withSlot(function () {
       return fetch(YETIPSY_CONFIG.getApiUrl(), {
@@ -389,7 +421,7 @@ var API = (function () {
           log('[API] error', action, err);
           return { success: false, data: null, error: NETWORK_ERROR };
         });
-    });
+    }, priority);
   }
 
   /**
@@ -436,8 +468,11 @@ var API = (function () {
     var key = action + '|' + JSON.stringify(data || {});
     if (retries > 0 && inflight[key]) return inflight[key];
 
+    /* 写动作（不在 RETRY_SAFE 里）优先送，不跟轮询抢名额 */
+    var priority = !RETRY_SAFE[action];
+
     var run = function (left, attemptNo) {
-      return attempt(payload, timeoutMs).then(function (res) {
+      return attempt(payload, timeoutMs, priority).then(function (res) {
         if (res.success) {
           netEmit('ok');
           return res;
@@ -1062,6 +1097,7 @@ var API = (function () {
       clear: cacheClear,
       prefetch: prefetchCustomer,
       prefetchStaff: prefetchStaff,
+      write: cachePut,
       TTL: READ_TTL
     },
     customer: customer,

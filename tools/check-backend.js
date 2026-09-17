@@ -359,7 +359,18 @@ function checkEndToEnd() {
     !!accepted && !!accepted.snapshot && !!accepted.snapshot.lanes,
     accepted && Object.keys(accepted.snapshot || {}).join(','));
 
+  /* 2.1.11 幂等：员工重复点（或另一位员工先按了）不能报错 */
+  const acceptAgain = okData(post('acceptOrder',
+    { appOrderId: appOrderId, startPreparing: true }, staffToken), '再接一次单');
+  check('重复按接单不会报错（幂等，回 idempotent）',
+    !!acceptAgain && acceptAgain.idempotent === true && acceptAgain.order.orderStatus === 'PREPARING',
+    acceptAgain && (acceptAgain.idempotent + ' / ' + (acceptAgain.order && acceptAgain.order.orderStatus)));
+
   const ready = okData(post('markReady', { appOrderId: appOrderId }, staffToken), 'markReady');
+  const readyAgain = okData(post('markReady', { appOrderId: appOrderId }, staffToken), '再按一次做好了');
+  check('重复按「做好了」也不会报错（幂等）',
+    !!readyAgain && readyAgain.idempotent === true && readyAgain.order.orderStatus === 'READY',
+    readyAgain && (readyAgain.idempotent + ' / ' + (readyAgain.order && readyAgain.order.orderStatus)));
   check('做好了回传也带快照',
     !!ready && !!ready.snapshot && !!ready.snapshot.lanes && ready.order.orderStatus === 'READY',
     ready && ready.order && ready.order.orderStatus);

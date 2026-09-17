@@ -1,5 +1,5 @@
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Code.gs（唯一的后端档案）
+   YETIPSY MINI APP 2.1.11 — Code.gs（唯一的后端档案）
    -------------------------------------------------------------
    ★ 这就是整个后端。GitHub 上的位置：apps-script/Code.gs
      这份档案 = 你贴到 Google Apps Script 的那一份，两边一模一样。
@@ -10,9 +10,9 @@
         —— 留着旧档案会跟这份的定义打架，行为会不确定
      3. 打开 Code 档案 → Ctrl+A 全选 → 贴上这份的全部内容 → 💾 储存
      4. 部署 → 管理部署 → 编辑(✏️) → 版本：建立新版本 → 部署
-     5. 回员工端「MORE」页最下面看：✓ 后端 v2.1.10 · 已是最新版
+     5. 回员工端「MORE」页最下面看：✓ 后端 v2.1.11 · 已是最新版
 
-   版本 2.1.10 · 改完跑 npm run check:backend（会用这份档案跑一次端到端）
+   版本 2.1.11 · 改完跑 npm run check:backend（会用这份档案跑一次端到端）
 
    段落（Ctrl+F 搜 "===== [" 可以跳段）：
      [1/20] Config.gs   所有设定 + 17 张表定义（要改规则改这一段）
@@ -39,7 +39,7 @@
 
 /* ===== [1/20] Config.gs — 所有设定 + 17 张表定义（要改规则改这一段） ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Config.gs
+   YETIPSY MINI APP 2.1.11 — Config.gs
    -------------------------------------------------------------
    所有「会变的东西」都放这里：Sheet 名称、栏位、默认设置。
    业务逻辑不应该 hardcode 任何栏位名称。
@@ -49,7 +49,7 @@
    ============================================================= */
 
 /** 版本（ping 会回传，方便确认线上跑的是哪一版） */
-var APP_VERSION = '2.1.10';
+var APP_VERSION = '2.1.11';
 
 /**
  * 资料表定义。
@@ -503,7 +503,7 @@ var ORDER_SOURCES = ['FOODCOURT', 'DIRECT', 'YETIPSY_APP', 'MANUAL', 'FOODCOURT_
 
 /* ===== [2/20] Utils.gs — 公用工具：电话 E.164、错误码、日期、金额、回应格式 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Utils.gs
+   YETIPSY MINI APP 2.1.11 — Utils.gs
    -------------------------------------------------------------
    时间 · 金额(SEN) · Hash · ID · 电话号码规范化 · 错误讯息
    ============================================================= */
@@ -758,7 +758,7 @@ function err(key, customMessage) {
 
 /* ===== [3/20] Database.gs — Sheets 存取层：setupDatabase / upgradeToV2 / bootstrapOwner / dedupeCustomers ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Database.gs
+   YETIPSY MINI APP 2.1.11 — Database.gs
    -------------------------------------------------------------
    Google Sheets 存取层。
 
@@ -1530,7 +1530,7 @@ function reportUpgradeStatus() {
 
 /* ===== [4/20] Security.gs — Session token、角色权限、Rate limit、登入锁定 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Security.gs
+   YETIPSY MINI APP 2.1.11 — Security.gs
    -------------------------------------------------------------
    Session · 角色权限 · Rate limit
    （Token 一律只存 SHA-256 hash，资料库里没有明文 token）
@@ -1640,7 +1640,7 @@ function rateLimitLocked(key) {
 
 /* ===== [5/20] Audit.gs — Audit Log ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Audit.gs
+   YETIPSY MINI APP 2.1.11 — Audit.gs
    所有重要动作都写一条记录（AuditLogs Sheet，最多保留 5000 条）
    ============================================================= */
 
@@ -1660,7 +1660,7 @@ function audit(userId, userType, action, targetType, targetId, oldValue, newValu
 
 /* ===== [6/20] Points.gs — 积分累计 / 等级门槛 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Points.gs
+   YETIPSY MINI APP 2.1.11 — Points.gs
    积分 / 等级（Threshold 全部读 Settings，不 hardcode）
    ============================================================= */
 
@@ -1745,7 +1745,7 @@ function pointsForAmount(billAmount, walletUsed) {
 
 /* ===== [7/20] Rewards.gs — 奖励产生与状态 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Rewards.gs
+   YETIPSY MINI APP 2.1.11 — Rewards.gs
    奖励只能由后端产生（前端不允许 Math.random）
    每日预算用完 → 停止发放；接近上限 → LOW_REWARD_MODE
    ============================================================= */
@@ -1817,7 +1817,7 @@ function generateReward(customer, order, amountSen) {
 
 /* ===== [8/20] Wallet.gs — 钱包储值 / 抵扣 / 上限 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Wallet.gs
+   YETIPSY MINI APP 2.1.11 — Wallet.gs
    钱包余额只由后端改动，每一笔都留 WalletTx 明细。
    ============================================================= */
 
@@ -2010,7 +2010,7 @@ function manualWalletAdjustment(data, token) {
 
 /* ===== [9/20] Customers.gs — 会员：查号码 / 注册 / 密码登录 / 改密码 / 会员条码 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Customers.gs
+   YETIPSY MINI APP 2.1.11 — Customers.gs
    -------------------------------------------------------------
    会员注册 / 登录 / 资料
 
@@ -2607,7 +2607,7 @@ function consumeMemberVerify(verifyToken) {
 
 /* ===== [10/20] Orders.gs — 消费纪录与统计 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Orders.gs
+   YETIPSY MINI APP 2.1.11 — Orders.gs
    -------------------------------------------------------------
    「已验证会员消费记录」= 积分的唯一来源。
    未来接 Foodcourt API / Webhook / CSV 汇入，也走 createMemberTransaction()。
@@ -2749,7 +2749,7 @@ function cancelOrder(data, token) {
 
 /* ===== [11/20] Menu.gs — 酒单：分类 / 商品 / 规格 / 售罄 / 菜单快取 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Menu.gs（2.0 Phase 3）
+   YETIPSY MINI APP 2.1.11 — Menu.gs（2.0 Phase 3）
    -------------------------------------------------------------
    酒单：分类 / 商品 / 规格（§5–§8）
 
@@ -2850,7 +2850,7 @@ function publicOption(o) {
    ------------------------------------------------------------- */
 
 /**
- * 2.1.10 · 「上架」判定
+ * 2.1.11 · 「上架」判定
  * -------------------------------------------------------------
  * 员工端菜单管理页一直把「Status 空白」当成上架（可以直接按「下架」），
  * 但这里以前要求 Status 必须写 ACTIVE → 直接从 Sheet 新增、
@@ -3594,7 +3594,7 @@ function setProductStatus(data, token) {
 
 /* ===== [12/20] Checkout.gs — 结帐报价：后端重算价格、钱包上限、Quote 5 分钟、防重复下单 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Checkout.gs（2.0 Phase 5）
+   YETIPSY MINI APP 2.1.11 — Checkout.gs（2.0 Phase 5）
    -------------------------------------------------------------
    结帐报价（§42 / §43 / §44）
 
@@ -3928,7 +3928,7 @@ function getCheckoutQuote(data, token) {
 
 /* ===== [13/20] AppOrders.gs — 订单：placeOrder（幂等）、查询、取消、再点一次 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — AppOrders.gs（2.0 Phase 6）
+   YETIPSY MINI APP 2.1.11 — AppOrders.gs（2.0 Phase 6）
    -------------------------------------------------------------
    建立订单 / 查询订单 / 取消请求（§60 / §75）
 
@@ -4300,7 +4300,7 @@ function reorder(data, token) {
 
 /* ===== [14/20] OrderBoard.gs — 员工看板：接单 / 制作 / 完成（幂等）、收款才扣钱包、6 小时到店判定 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — OrderBoard.gs（2.0 Phase 7）
+   YETIPSY MINI APP 2.1.11 — OrderBoard.gs（2.0 Phase 7）
    -------------------------------------------------------------
    员工端订单看板（§16 §19 §20 §21 §22 §46 §48 §49 §54 §55 §56 §61）
 
@@ -4389,7 +4389,7 @@ function getIncomingOrders(data, token) {
 }
 
 /**
- * 2.1.10 · 看板快照
+ * 2.1.11 · 看板快照
  * -------------------------------------------------------------
  * 看板要的 4 个栏位 + 今日统计 + 接单开关 + 轮询秒数，一次算完。
  * getActiveOrders 用它；状态推进的 action（接单 / 制作 / 好了 / 完成 /
@@ -4445,7 +4445,7 @@ function getActiveOrders(data, token) {
   return ok(boardSnapshot());
 }
 
-/** 旧版内联写法（保留给需要看历史的读者；2.1.10 起改用 boardSnapshot） */
+/** 旧版内联写法（保留给需要看历史的读者；2.1.11 起改用 boardSnapshot） */
 function getActiveOrdersLegacy(data, token) {
   var ctx = requireStaff(token);
   if (ctx.error) return ctx.error;
@@ -4499,6 +4499,23 @@ function acceptOrder(data, token) {
   var found = findBoardOrder(data, token);
   if (found.error) return found.error;
   var o = found.order, staff = found.ctx.staff;
+  var wantStart = !!(data && (data.startPreparing === true ||
+                              data.startPreparing === 'TRUE' || data.startPreparing === 1));
+
+  /* 2.1.11 幂等：员工重按、或另一位员工先按了 → 不要报错，
+     直接回最新状态（现场最讨厌「按了说我做错了」）。 */
+  if (o.orderStatus === 'PREPARING' ||
+      (o.orderStatus === 'CONFIRMED' && !wantStart)) {
+    return ok({ order: boardOrder(o), idempotent: true, snapshot: boardSnapshot() });
+  }
+  if (o.orderStatus === 'CONFIRMED' && wantStart) {
+    o.orderStatus = 'PREPARING';
+    o.startedAt = nowISO();
+    o.updatedAt = nowISO();
+    audit(staff.staffId, 'STAFF', 'START_PREPARING', 'APP_ORDER', o.appOrderId,
+          'CONFIRMED', 'PREPARING');
+    return ok({ order: boardOrder(o), startPreparing: true, idempotent: true, snapshot: boardSnapshot() });
+  }
 
   var bad = assertTransition(o, 'CONFIRMED');
   if (bad) return bad;
@@ -4511,10 +4528,10 @@ function acceptOrder(data, token) {
   audit(staff.staffId, 'STAFF', 'ACCEPT_ORDER', 'APP_ORDER', o.appOrderId,
         'SUBMITTED', 'CONFIRMED');
 
-  /* 2.1.10 员工要的流程是「按一下就进制作」：
+  /* 2.1.11 员工要的流程是「按一下就进制作」：
      data.startPreparing = true 时，同一个请求直接接到 PREPARING。
      省掉第二个来回，现场按下去就是「制作中」。 */
-  if (data && (data.startPreparing === true || data.startPreparing === 'TRUE' || data.startPreparing === 1)) {
+  if (wantStart) {
     o.orderStatus = 'PREPARING';
     o.startedAt = nowISO();
     o.updatedAt = nowISO();
@@ -4531,6 +4548,11 @@ function startPreparing(data, token) {
   var found = findBoardOrder(data, token);
   if (found.error) return found.error;
   var o = found.order, staff = found.ctx.staff;
+
+  /* 2.1.11 幂等：已经制作中 / 已经做好 → 重复点不要报错 */
+  if (o.orderStatus === 'PREPARING' || o.orderStatus === 'READY') {
+    return ok({ order: boardOrder(o), idempotent: true, snapshot: boardSnapshot() });
+  }
 
   /* 员工从 SUBMITTED 直接按 START 也接受（§20 的看板就是这样用的） */
   if (o.orderStatus === 'SUBMITTED') {
@@ -4554,6 +4576,11 @@ function markReady(data, token) {
   var found = findBoardOrder(data, token);
   if (found.error) return found.error;
   var o = found.order, staff = found.ctx.staff;
+
+  /* 2.1.11 幂等：已经可取酒 / 已完成 → 重复点不要报错 */
+  if (o.orderStatus === 'READY' || o.orderStatus === 'COMPLETED') {
+    return ok({ order: boardOrder(o), idempotent: true, snapshot: boardSnapshot() });
+  }
 
   if (o.orderStatus === 'CONFIRMED') o.orderStatus = 'PREPARING';   // 允许跳一步
   var bad = assertTransition(o, 'READY');
@@ -4837,7 +4864,7 @@ function setOrderingPaused(data, token) {
 
 /* ===== [15/20] Analytics.gs — 业绩：今日统计、通路业绩、热销商品、会员分析 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Analytics.gs（2.0 Phase 11）
+   YETIPSY MINI APP 2.1.11 — Analytics.gs（2.0 Phase 11）
    -------------------------------------------------------------
    业绩分析（§50 §51 §52 §62）
 
@@ -5147,7 +5174,7 @@ function getMemberAnalytics(data, token) {
 
 /* ===== [16/20] Claims.gs — Claim QR / Code、认领；2.1 POS 进单（createPosTicket / getPosQueue / bindPosTicket / cancelPosTicket） ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Claims.gs
+   YETIPSY MINI APP 2.1.11 — Claims.gs
    -------------------------------------------------------------
    一笔消费 → 一个 Claim（QR + 4 位 Code）→ 顾客认领 → 积分 + 奖励
 
@@ -5754,7 +5781,7 @@ function createPosTicket(data, token) {
   var staffNote = String((data && data.note) || '').slice(0, 120);
   var summary = posItemsText(items);
 
-  /* 2.1.10 结账：付款方式也写进 Note（AUDIT 有纪录；Orders 表不加栏位） */
+  /* 2.1.11 结账：付款方式也写进 Note（AUDIT 有纪录；Orders 表不加栏位） */
   var pay = String((data && data.paymentMethod) || '').toUpperCase();
   if (POS_PAYMENT_METHODS.indexOf(pay) === -1) pay = '';
 
@@ -6025,7 +6052,7 @@ function cancelPosTicket(data, token) {
 
 /* ===== [17/20] Promotions.gs — 优惠规则 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Promotions.gs
+   YETIPSY MINI APP 2.1.11 — Promotions.gs
    ============================================================= */
 
 /** 会员端：只回传今天有效的活动 */
@@ -6181,7 +6208,7 @@ function reportPromotions() {
 
 /* ===== [18/20] Admin.gs — 员工端：Dashboard、会员查询、手动调整、重设密码、设置 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Admin.gs
+   YETIPSY MINI APP 2.1.11 — Admin.gs
    设置 · 积分调整 · Audit Log · 员工账号（Manager / Owner）
    ============================================================= */
 
@@ -6392,7 +6419,7 @@ function resetCustomerPassword(data, token) {
 
 /* ===== [19/20] Auth.gs — ping / getPublicSettings / staffLogin / staffLogout ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Auth.gs
+   YETIPSY MINI APP 2.1.11 — Auth.gs
    -------------------------------------------------------------
    系统 ping · 员工登录（Salted Hash + 失败锁定）
    会员登录在 Customers.gs（因为要处理「同一个号码只注册一次」）
@@ -6483,7 +6510,7 @@ function getStaffSession(data, token) {
 
 /* ===== [20/20] Code.gs — 唯一入口 doPost() / doGet()：action 白名单、参数解析、交易锁、错误包装 ===== */
 /* =============================================================
-   YETIPSY MINI APP 2.1.10 — Code.gs
+   YETIPSY MINI APP 2.1.11 — Code.gs
    -------------------------------------------------------------
    Web App 入口。
 

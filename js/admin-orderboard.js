@@ -27,8 +27,21 @@ var ADMIN_ORDERBOARD = (function () {
     knownIds: null,       // 第一次载入不响铃，否则一开页面就吵
     busy: {},             // appOrderId → true，避免连点
     ticking: 0,
-    laneSig: {}           // 每一栏的内容指纹：没变就不重画（现场反应快很多）
+    todaySig: '',
+    laneSig: {},          // 每一栏的内容指纹：没变就不重画（现场反应快很多）
+    /* 2.1.11 防「卡片跳回去」：
+       mutationAt = 员工最后一次动状态的时间（比它还早发出的读取一律丢掉，
+       因为那些回应是「动之前」的资料）；
+       expect     = 我们刚把这张单放到哪一栏（后端旧资料不许把它搬回去） */
+    mutationAt: 0,
+    mutating: 0,
+    expect: {}
   };
+
+  /* 状态高低顺序：数字大的比较新。后端回来的比我们刚才做的旧 → 不采信 */
+  var RANK = { SUBMITTED: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, COMPLETED: 4, CANCELLED: 4 };
+  var LANE_OF_STATUS = { SUBMITTED: 'NEW', CONFIRMED: 'CONFIRMED', PREPARING: 'PREPARING', READY: 'READY' };
+  var GUARD_MS = 25000;    // 这么久的「保护期」内不让旧资料把卡片搬回去
 
   var poller = null;
   var tickTimer = null;
@@ -79,7 +92,11 @@ var ADMIN_ORDERBOARD = (function () {
      --------------------------------------------------------- */
 
   function load(first) {
+    var startedAt = Date.now();
     return API.staff.getActiveOrders().then(function (res) {
+      /* 这个请求是在员工按下去之前发出的 → 它带回来的是旧状态，
+         直接丢掉，不要用它把卡片搬回原本那一栏。 */
+      if (!first && res.success && startedAt < state.mutationAt) return res;
       if (!res.success) {
         state.errorCode = res.error.code;
         state.loading = false;
@@ -97,7 +114,7 @@ var ADMIN_ORDERBOARD = (function () {
       state.loading = false;
       state.loadFailed = false;
       UI.netPill(false, 'ok');
-      state.lanes = res.data.lanes;
+      state.lanes = reconcile(res.data.lanes);
       state.today = res.data.today;
       state.ordering = res.data.ordering;
       state.pollSeconds = Number(res.data.pollSeconds) || 8;
@@ -127,6 +144,70 @@ var ADMIN_ORDERBOARD = (function () {
     });
   }
 
+  /**
+   * 对帐：把「员工刚动过的」保护起来
+   * ---------------------------------------------------------
+   * 现场会发生：员工按了「接单并制作」→ 卡片立刻移到制作中 →
+   * 但这时候可能有一个「按之前就发出去」的读取回来（或快取优先的
+   * 旧资料）→ 内容还是 CONFIRMED → 卡片就跳回「已确认」，员工得
+   * 再按一次。这里用 RANK 判断：后端回来的比我们刚做的还旧，
+   * 就维持我们刚放的位置；等后端跟上（或超过保护期）才放行。
+   */
+  function reconcile(lanes) {
+    var now = Date.now();
+    var out = { NEW: [], CONFIRMED: [], PREPARING: [], READY: [] };
+    var blocked = 0;
+
+    ['NEW', 'CONFIRMED', 'PREPARING', 'READY'].forEach(function (key) {
+      (lanes[key] || []).forEach(function (o) {
+        var exp = state.expect[o.appOrderId];
+        if (!exp) { out[key].push(o); return; }
+
+        if (now - exp.at > GUARD_MS) { delete state.expect[o.appOrderId]; out[key].push(o); return; }
+
+        var expLane = LANE_OF_STATUS[exp.status];
+        if (RANK[exp.status] === undefined) {   // 记到看不懂的状态 → 不挡
+          delete state.expect[o.appOrderId];
+          out[key].push(o);
+          return;
+        }
+        if (!expLane) {                      // 我们预期它应该消失（完成 / 取消）
+          blocked += 1;                      // 旧资料还想显示它 → 忽略
+          return;
+        }
+        if (RANK[key === 'NEW' ? 'SUBMITTED' : key] >= RANK[exp.status]) {
+          delete state.expect[o.appOrderId];  // 后端跟上了（或更新）→ 放行
+          out[key].push(o);
+          return;
+        }
+        /* 后端资料比我们刚做的旧 → 维持我们刚放的位置 */
+        o.orderStatus = exp.status;
+        out[expLane].push(o);
+        blocked += 1;
+      });
+    });
+
+    if (blocked && !state.refreshSoon) {
+      /* 有旧资料被挡掉：稍微晚一点再问一次后端，拿到真正的状态 */
+      state.refreshSoon = setTimeout(function () {
+        state.refreshSoon = null;
+        load(false);
+      }, 1200);
+    }
+    return out;
+  }
+
+  /** 目前这一张单在前端看到的状态（用来记「保护」用） */
+  function cardStatus(appOrderId) {
+    var found = null;
+    Object.keys(state.lanes).forEach(function (key) {
+      (state.lanes[key] || []).forEach(function (o) {
+        if (o.appOrderId === appOrderId) found = o.orderStatus;
+      });
+    });
+    return found;
+  }
+
   function allIds() {
     var out = [];
     ['NEW', 'CONFIRMED', 'PREPARING', 'READY'].forEach(function (k) {
@@ -138,7 +219,11 @@ var ADMIN_ORDERBOARD = (function () {
   /* §46 轮询：上一次跑完才排下一次（不重叠）+ 失败自动退避 */
   function startPolling() {
     if (poller) return;
-    poller = API.poll(Math.max(5, state.pollSeconds), function () { return load(false); });
+    poller = API.poll(Math.max(5, state.pollSeconds), function () {
+      /* 员工刚按下去、还在等后端 → 这一次轮询跳过（不要跟写动作抢） */
+      if (state.mutating) return Promise.resolve({ success: true });
+      return load(false);
+    });
   }
 
   /* §49 等待秒数每秒 +1（基准来自后端的 waitingSeconds） */
@@ -282,14 +367,28 @@ var ADMIN_ORDERBOARD = (function () {
   /** 后端回来的快照：直接画，不用第二个请求 */
   function applySnapshot(snap) {
     if (!snap || !snap.lanes) return false;
+
+    /* 后端刚给的是「权威」状态：用它更新每一张「刚动过的单」的保护，
+       并写进快取，之后任何快取显示都会是新状态 */
+    Object.keys(state.expect).forEach(function (id) {
+      var found = null;
+      ['NEW', 'CONFIRMED', 'PREPARING', 'READY'].forEach(function (key) {
+        (snap.lanes[key] || []).forEach(function (o) {
+          if (o.appOrderId === id) found = o.orderStatus;
+        });
+      });
+      /* 快照里已经没有它 = 完成 / 取消 → 之后旧资料也别让它跑回来 */
+      state.expect[id] = { status: found || 'CANCELLED', at: Date.now() };
+    });
+
+    API.cache.write('getActiveOrders', {}, snap);   // 快取跟着更新
     state.lanes = snap.lanes;
     state.today = snap.today;
     state.ordering = snap.ordering;
     if (snap.pollSeconds) state.pollSeconds = Number(snap.pollSeconds) || state.pollSeconds;
     state.ticking = 0;
     state.knownIds = allIds();               // 自己刚处理过的单不算「新订单」
-    state.laneSig = {};                      // 快照来了就整块重画一次（很快）
-    render();
+    render();                                // 只有内容真的变的栏位会重画
     return true;
   }
 
@@ -299,6 +398,13 @@ var ADMIN_ORDERBOARD = (function () {
     var moved = null;
 
     state.busy[appOrderId] = true;
+    state.mutating += 1;
+    state.mutationAt = Date.now();               // 比这时间早发出的读取一律丢掉
+    /* 先记下「我们把这张单放到哪一栏」：等一下任何旧资料（慢回应、旧快取）
+       回来都不淮把它搬回去。后端回传的权威快照会再更新这张保护卡。 */
+    if (target && target !== 'DONE') {
+      state.expect[appOrderId] = { status: target, at: Date.now(), guess: true };
+    }
     if (target) moved = moveCardLocal(appOrderId, target);
     setCardBusy(appOrderId, true, label);
     render();
@@ -310,9 +416,12 @@ var ADMIN_ORDERBOARD = (function () {
 
     call.then(function (res) {
       state.busy[appOrderId] = false;
+      state.mutating = Math.max(0, state.mutating - 1);
       if (!res.success) {
         /* 失败：搬回原位（可能已经被别人改过，所以重抓最准） */
+        delete state.expect[appOrderId];
         UI.toast(res.error.message, 'error', 3500);
+        state.mutationAt = Date.now();           // 之前的读取也一起作废
         state.laneSig = {};
         load(false);
         return;
@@ -326,6 +435,12 @@ var ADMIN_ORDERBOARD = (function () {
       }
       /* 后端回传的最新看板直接用（没有就自己抓一次） */
       if (!applySnapshot(res.data && res.data.snapshot)) {
+        /* 后端没给快照：至少把这一张单钉在我们刚放的位置，等下次轮询对上 */
+        var snapOrder = res.data && res.data.order;
+        state.expect[appOrderId] = {
+          status: (snapOrder && snapOrder.orderStatus) || (target === 'DONE' ? 'CANCELLED' : target),
+          at: Date.now()
+        };
         state.laneSig = {};
         load(false);
       }
@@ -338,10 +453,17 @@ var ADMIN_ORDERBOARD = (function () {
       '确认收款 CONFIRM').then(function (yes) {
       if (!yes) return;
       state.busy[appOrderId] = true;
+      state.mutating += 1;
+      state.mutationAt = Date.now();
       setCardBusy(appOrderId, true, '收款中…');
       dropOrdersCache();
       API.staff.markPaymentPaid(appOrderId, 'COUNTER').then(function (res) {
         state.busy[appOrderId] = false;
+        state.mutating = Math.max(0, state.mutating - 1);
+        if (res.success) {
+          var known = cardStatus(appOrderId);
+          state.expect[appOrderId] = { status: known || 'CONFIRMED', at: Date.now() };
+        }
         if (!res.success) {
           setCardBusy(appOrderId, false);
           UI.toast(res.error.message, 'error', 3500);
@@ -360,10 +482,14 @@ var ADMIN_ORDERBOARD = (function () {
       '取消订单 CANCEL').then(function (yes) {
       if (!yes) return;
       state.busy[appOrderId] = true;
+      state.mutating += 1;
+      state.mutationAt = Date.now();
       setCardBusy(appOrderId, true, '取消中…');
       dropOrdersCache();
       API.staff.cancelAppOrder(appOrderId, 'Cancelled by staff').then(function (res) {
         state.busy[appOrderId] = false;
+        state.mutating = Math.max(0, state.mutating - 1);
+        if (res.success) { state.expect[appOrderId] = { status: 'CANCELLED', at: Date.now() }; moveCardLocal(appOrderId, 'DONE'); render(); }
         if (!res.success) {
           setCardBusy(appOrderId, false);
           UI.toast(res.error.message, 'error', 3500);
@@ -446,6 +572,32 @@ var ADMIN_ORDERBOARD = (function () {
     return null;
   }
 
+  /**
+   * 等待秒数：后端每次都会给新的 waitingSeconds，但卡片不会因此重画
+   * （重画才是「卡」的原因）。所以这里只更新 data-wait 基准 + 文字，
+   * 每秒的 tick 会接着往上加。
+   */
+  function refreshWaitBases() {
+    var map = {};
+    Object.keys(state.lanes).forEach(function (key) {
+      (state.lanes[key] || []).forEach(function (o) {
+        map[o.appOrderId] = Number(o.waitingSeconds) || 0;
+      });
+    });
+    var cards = document.querySelectorAll('.board-card[data-card]');
+    for (var i = 0; i < cards.length; i++) {
+      var id = cards[i].getAttribute('data-card');
+      var base = map[id];
+      if (base === undefined) continue;
+      var node = cards[i].querySelector('.bc-wait');
+      if (!node) continue;
+      if (node.getAttribute('data-wait') !== String(base)) {
+        node.setAttribute('data-wait', base);
+        node.textContent = fmtWait(base + state.ticking);
+      }
+    }
+  }
+
   function render() {
     var box = document.getElementById('boardBody');
     if (!box) return;
@@ -480,8 +632,15 @@ var ADMIN_ORDERBOARD = (function () {
       var count = section.querySelector('.lane-count');
       if (count) count.textContent = list.length;
 
-      var sig = JSON.stringify(list) + '|' +
-        list.map(function (o) { return state.busy[o.appOrderId] ? 1 : 0; }).join('');
+      /* ★ 指纹只算「真正会影响画面」的栏位。
+         waitingSeconds 每次轮询都会变，如果算进去，每 8 秒每一栏都会
+         整块重画（现场感觉就是「很卡」）。等待时间交给每秒的 tick 更新。 */
+      var sig = list.map(function (o) {
+        return [o.appOrderId, o.orderStatus, o.paymentStatus, o.itemCount,
+                o.finalAmount, o.walletRequested || 0, o.customerNote || '',
+                (o.customer && o.customer.name) || '',
+                state.busy[o.appOrderId] ? 'B' : ''].join('~');
+      }).join('|');
       if (state.laneSig[lane.key] === sig) return;
       state.laneSig[lane.key] = sig;
 
@@ -490,6 +649,8 @@ var ADMIN_ORDERBOARD = (function () {
         ? list.map(function (o) { return card(o, lane.key); }).join('')
         : '<div class="a-empty" style="padding:14px">—</div>';
     });
+
+    refreshWaitBases();       // 没重画的卡片也要把等待基准对上后端
   }
 
   function renderTopbar() {
@@ -504,7 +665,9 @@ var ADMIN_ORDERBOARD = (function () {
       el.className = 'a-sub' + (o.paused || !o.open ? ' warn' : '');
     }
     var stat = document.getElementById('boardToday');
-    if (stat && state.today) {
+    var statSig = state.today ? JSON.stringify(state.today) : '';
+    if (stat && state.today && state.todaySig !== statSig) {
+      state.todaySig = statSig;
       stat.innerHTML =
         '<div class="dash-card"><div class="dc-label">今日订单 ORDERS</div>' +
           '<div class="dc-value">' + state.today.orders + '</div></div>' +
