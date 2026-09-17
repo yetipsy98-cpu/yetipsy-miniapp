@@ -105,9 +105,40 @@ function patchConfigForDemo(source) {
     .replace(/ENVIRONMENT:\s*'[^']*'/, "ENVIRONMENT: 'demo'");
 }
 
+/*
+ * ★ 请求路径要能容忍畸形输入。
+ * `new URL('//', base)` 会抛错（`//` 被当成 protocol-relative URL），
+ * 而请求处理器里一个没接住的例外会把整个服务器进程杀掉 ——
+ * 代理转发、路径拼接不当、或有人手动请求 `//foo` 都会让 demo 直接死掉。
+ */
+function safePathname(rawUrl) {
+  let raw = String(rawUrl || '/');
+  /* 把重复的斜线压成一个，并保证以 / 开头 */
+  raw = raw.replace(/^([a-z][a-z0-9+.-]*:)?\/\//i, '/');
+  while (raw.indexOf('//') !== -1) raw = raw.replace('//', '/');
+  if (raw.charAt(0) !== '/') raw = '/' + raw;
+  try {
+    return decodeURIComponent(new URL(raw, 'http://localhost').pathname);
+  } catch (e) {
+    return '/';
+  }
+}
+
 const server = http.createServer((req, res) => {
-  const url = new URL(req.url, 'http://localhost');
-  let pathname = decodeURIComponent(url.pathname);
+  /* 任何一个坏请求都只回 400，不能把服务器带走 */
+  try {
+    return handleRequest(req, res);
+  } catch (e) {
+    if (!res.headersSent) {
+      res.writeHead(400, { 'Content-Type': 'text/plain; charset=utf-8' });
+    }
+    res.end('400 bad request: ' + e.message);
+    return undefined;
+  }
+});
+
+function handleRequest(req, res) {
+  let pathname = safePathname(req.url);
 
   /* ---- API ---- */
   if (pathname === '/api' || pathname === '/api/') {
@@ -162,6 +193,17 @@ const server = http.createServer((req, res) => {
     });
     res.end(payload);
   });
+}
+
+/*
+ * 最后一道防护：就算有没接住的异步例外，也只记一笔不要整个死掉。
+ * demo 服务器死掉的话，手机上的页面就全部 404，很难查。
+ */
+process.on('uncaughtException', (e) => {
+  console.error('[demo] 未接住的例外（已忽略，服务器继续跑）：', e && e.message);
+});
+process.on('unhandledRejection', (e) => {
+  console.error('[demo] 未处理的 Promise（已忽略）：', e && e.message);
 });
 
 bootstrap();
