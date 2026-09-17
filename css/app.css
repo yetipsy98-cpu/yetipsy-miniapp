@@ -1182,3 +1182,50 @@ body.sheet-open { overflow: hidden; }
   color: #E5B769; border: 1px solid rgba(229,183,105,.45);
   border-radius: 999px; padding: 4px 10px;
 }
+
+/* ============================================================
+   2.1.12 结帐大抽屉（cart.html 底部滑上来）
+   ------------------------------------------------------------
+   顾客按「结帐」不用换页 —— 抽屉直接滑上来，金额通常是早就
+   算好的（购物车变动时已经预载报价）。
+   ============================================================ */
+body.sheet-open { overflow: hidden; }
+
+.sheet {
+  position: fixed; inset: 0; z-index: 95;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.sheet-backdrop {
+  position: absolute; inset: 0;
+  background: rgba(0, 0, 0, .62);
+  animation: sheet-fade .16s ease;
+}
+.sheet-inner {
+  position: relative;
+  width: 100%; max-width: 520px; max-height: 92vh;
+  display: flex; flex-direction: column;
+  background: var(--card);
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: 22px 22px 0 0;
+  padding: 14px 14px calc(12px + env(safe-area-inset-bottom, 0px));
+  animation: sheet-up .2s cubic-bezier(.2, .9, .3, 1);
+}
+@keyframes sheet-up { from { transform: translateY(46px); } to { transform: none; } }
+@keyframes sheet-fade { from { opacity: 0; } to { opacity: 1; } }
+
+.sheet-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.sheet-titles { flex: 1 1 auto; min-width: 0; }
+.sheet-close {
+  flex: 0 0 auto; width: 34px; height: 34px; border-radius: 11px;
+  border: 1px solid var(--line); background: rgba(255,255,255,.04);
+  color: var(--muted); font-size: 14px; cursor: pointer;
+}
+.sheet-body {
+  flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch;
+  padding-bottom: 6px;
+}
+.sheet-foot { padding-top: 10px; border-top: 1px solid var(--line); }
+.sheet-foot .btn { width: 100%; }
+/* 抽屉里的品项清单不要额外圆角外框，跟着抽屉走比较省空间 */
+.sheet-body .list { border-radius: 14px; overflow: hidden; }

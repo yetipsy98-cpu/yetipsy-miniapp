@@ -20,7 +20,7 @@ var YETIPSY_CONFIG = {
      APP_VERSION 一致；员工端「MORE」页会拿它跟后端比，不一样就提示
      要重新贴 Apps Script。检查：npm run check:backend
      ---------------------------------------------------------- */
-  APP_VERSION: '2.1.11',
+  APP_VERSION: '2.1.12',
 
   /* ----------------------------------------------------------
      1) API 地址（Google Apps Script Web App）

@@ -5,6 +5,12 @@
 
    流程：Cart → createCheckoutQuote() → 显示确认 → PLACE ORDER
 
+   2.1.12 起有两种呈现方式（同一套逻辑）：
+   · 页面：checkout.html（桌牌 QR 的 ?table= 连结还是走这里）
+   · 大抽屉：cart.html 底部滑上来的结帐抽屉（顾客最常走的路）
+     抽屉不用换页 → 不会重新载入脚本；而且购物车一有变动就先在
+     背景把报价算好（见 prefetch），所以按「结帐」几乎是立刻打开。
+
    规则：
    · 页面上每个金额都来自后端 Quote，前端不做任何价格判断（§41/§42）
    · Quote 有期限，过期就重新报价（§43），不假装还能用
@@ -25,8 +31,20 @@ var CHECKOUT = (function () {
     orderId: null
   };
 
-  var POLL_MS = 20000;          // 报价剩馀时间的显示刷新（不向后端要资料）
   var timer = null;
+
+  /* 呈现方式：'page'（checkout.html）或 'sheet'（cart.html 的大抽屉） */
+  var host = { mode: 'page' };
+
+  /**
+   * 预先算好的报价（2.1.12）
+   * ---------------------------------------------------------
+   * 购物车一有变动就在背景呼叫 createCheckoutQuote，
+   * 报价只存在后端的快取里（不会写 Sheet），所以多算几次没有负担。
+   * 顾客按「结帐」时，如果购物车没变、报价还没过期 → 直接用，
+   * 打开抽屉就是「已经有金额」的状态，不用等。
+   */
+  var memo = { sig: '', quote: null, at: 0 };
 
   function init() {
     if (!AUTH.isCustomerLoggedIn()) { AUTH.requireCustomer(); return; }
@@ -60,22 +78,79 @@ var CHECKOUT = (function () {
     if (retry) retry.addEventListener('click', loadQuote);
   }
 
+  function bodyEl() { return document.getElementById('checkoutBody'); }
+
+  /**
+   * 「下单」按钮所在的页脚。抽屉模式一定要指到抽屉自己的 #sheetCta，
+   * 否则「请填桌号 / 报错」时藏的是购物车底栏，抽屉底下旧金额的
+   * PLACE ORDER 还露着，顾客会按到过期的报价。
+   */
+  function ctaWrap() {
+    var sheetCta = document.getElementById('sheetCta');
+    if (host.mode === 'sheet') return sheetCta || document.getElementById('checkoutSheet');
+    return document.getElementById('stickyCta') || sheetCta ||
+           document.getElementById('checkoutSheet');
+  }
+  function showCta(on) {
+    var node = ctaWrap();
+    if (node && node.id !== 'checkoutSheet') node.style.display = on ? '' : 'none';
+  }
+
   /* ---------------------------------------------------------
-     报价（§42 / §43）
+     报价预载（2.1.12 让「结帐」不用等）
      --------------------------------------------------------- */
 
-  function loadQuote() {
-    state.error = null;
+  /** 现在购物车 + 取餐方式 + 钱包选择的指纹：变了就代表报价要重算 */
+  function cartSig() {
+    try {
+      return JSON.stringify({
+        items: CART.items().map(function (it) {
+          return [it.productId, it.quantity, (it.options || []).map(function (o) { return o.optionId; }), it.note || ''];
+        }),
+        t: state.orderType,
+        table: state.tableNumber,
+        w: !!state.useWallet
+      });
+    } catch (e) { return ''; }
+  }
 
-    /* 选了「桌号」但还没输入 → 先请顾客填，不要送一个注定失败的请求 */
-    if (state.orderType === 'TABLE' && !state.tableNumber) {
-      renderAskTable();
-      return;
-    }
+  /**
+   * 先在背景把报价算好。顾客还在看购物车的时候，后端就已经算完了。
+   * 没有商品 / 需要桌号 / 还没登录 → 不做，不要浪费请求。
+   */
+  function prefetch() {
+    if (!AUTH.isCustomerLoggedIn()) return;
+    if (!CART.items().length) { memo = { sig: '', quote: null, at: 0 }; return; }
+    if (state.orderType === 'TABLE' && !state.tableNumber) return;
 
-    renderSkeleton();
+    var sig = cartSig();
+    if (memo.sig === sig && memo.quote) return;          // 已经算过了
 
-    API.customer.createCheckoutQuote({
+    API.customer.createCheckoutQuote(quoteRequest()).then(function (res) {
+      if (!res.success) return;                          // 预载失败就算了，打开时再算一次
+      if (cartSig() !== sig) return;                     // 这中间购物车又变了 → 丢掉
+      memo = { sig: sig, quote: res.data, at: Date.now() };
+    });
+  }
+
+  /** 购物车变了：把预载的报价丢掉（马上会再算一次） */
+  function invalidate() {
+    memo = { sig: '', quote: null, at: 0 };
+  }
+
+  /** 预载的报价还能用吗？（没过期 + 购物车没变） */
+  function memoQuote() {
+    if (!memo.quote) return null;
+    if (memo.sig !== cartSig()) return null;
+    var minutes = Number(memo.quote.expiresInMinutes) || 0;
+    if (minutes <= 0) return null;
+    var ageMin = (Date.now() - memo.at) / 60000;
+    if (ageMin > minutes - 0.5) return null;             // 剩不到 30 秒就重算
+    return memo.quote;
+  }
+
+  function quoteRequest() {
+    return {
       items: CART.items().map(function (it) {
         return {
           productId: it.productId,
@@ -88,13 +163,55 @@ var CHECKOUT = (function () {
       tableNumber: state.tableNumber,
       useWallet: state.useWallet,
       customerNote: state.note
-    }).then(function (res) {
+    };
+  }
+
+  /* ---------------------------------------------------------
+     报价（§42 / §43）
+     --------------------------------------------------------- */
+
+  /** 这笔报价还是现在购物车算出来的吗？抽屉开着还能改数量，别拿旧金额下单 */
+  function quoteFresh() {
+    if (!state.quote) return false;
+    if (state.quote.orderType !== state.orderType) return false;
+    if ((state.quote.tableNumber || '') !== (state.tableNumber || '')) return false;
+    if (state.quoteSig && state.quoteSig !== cartSig()) return false;
+    return true;
+  }
+
+  function loadQuote() {
+    state.error = null;
+    /* 旧报价立刻作废：这次算不出来就是算不出来，
+       留着它会让抽屉底下那颗（已经藏起来的）PLACE ORDER 还能按出旧金额 */
+    state.quote = null;
+    state.quoteSig = null;
+
+    /* 选了「桌号」但还没输入 → 先请顾客填，不要送一个注定失败的请求 */
+    if (state.orderType === 'TABLE' && !state.tableNumber) {
+      renderAskTable();
+      return;
+    }
+
+    /* 已经预载好的报价 → 立刻画，不必等后端（顾客按「结帐」的体感） */
+    var ready = memoQuote();
+    if (ready) {
+      state.quote = ready;
+      state.quoteSig = cartSig();
+      render();
+      return;
+    }
+
+    renderSkeleton();
+
+    API.customer.createCheckoutQuote(quoteRequest()).then(function (res) {
       if (!res.success) {
         state.error = res.error;
         if (!AUTH.handleSessionError(res.error)) renderError();
         return;
       }
       state.quote = res.data;
+      state.quoteSig = cartSig();
+      memo = { sig: state.quoteSig, quote: res.data, at: Date.now() };
       render();
     });
   }
@@ -105,6 +222,15 @@ var CHECKOUT = (function () {
 
   function onPlaceOrder() {
     if (state.placing || !state.quote) return;
+
+    /* 抽屉里改了数量 / 换了取餐方式 → 这张报价已经不能用了 */
+    if (!quoteFresh()) {
+      UI.toast('购物车刚有变动，正在重新算价…', 'info', 2400);
+      invalidate();
+      loadQuote();
+      return;
+    }
+
     state.placing = true;
     setPlacing(true);
 
@@ -134,10 +260,14 @@ var CHECKOUT = (function () {
       }
 
       state.orderId = res.data.order.appOrderId;
+      var newOrder = res.data.order;
       CART.clear();                                   // 下单成功才清车
+      invalidate();                                   // 车空了 → 预载报价作废
       API.cache.clear();                              // 积分 / 订单 / 钱包都变了 → 下次重新抓
+      /* 刚下单的订单先写进快取：订单页一开就有画面，不用等后端 */
+      API.cache.write('getAppOrder', { appOrderId: state.orderId }, { order: newOrder });
       if (timer) { clearInterval(timer); timer = null; }
-      UI.go('order.html?id=' + encodeURIComponent(res.data.order.appOrderId));
+      UI.go('order.html?id=' + encodeURIComponent(state.orderId));
     });
   }
 
@@ -154,29 +284,27 @@ var CHECKOUT = (function () {
      --------------------------------------------------------- */
 
   function renderSkeleton() {
-    var box = document.getElementById('checkoutBody');
+    var box = bodyEl();
     if (box) {
       box.innerHTML = '<div class="menu-skeleton"></div>'.repeat(4);
     }
   }
 
   function renderEmpty() {
-    var box = document.getElementById('checkoutBody');
+    var box = bodyEl();
     if (box) {
       box.innerHTML = UI.emptyState('购物车是空的', 'YOUR CART IS EMPTY', 'wallet') +
         '<a class="btn btn-primary mt-12" href="menu.html" style="display:block;text-align:center">' +
         '<span>去看看酒单<span class="btn-sub-label">VIEW MENU</span></span></a>';
     }
-    var cta = document.getElementById('stickyCta');
-    if (cta) cta.style.display = 'none';
+    showCta(false);
   }
 
   /** 选了桌号但还没输入 → 请顾客填，不要送注定失败的请求（§11） */
   function renderAskTable() {
-    var box = document.getElementById('checkoutBody');
+    var box = bodyEl();
     if (!box) return;
-    var cta = document.getElementById('stickyCta');
-    if (cta) cta.style.display = 'none';
+    showCta(false);
 
     box.innerHTML =
       '<div class="card" style="text-align:center;padding:24px 16px">' +
@@ -209,7 +337,7 @@ var CHECKOUT = (function () {
   }
 
   function renderError() {
-    var box = document.getElementById('checkoutBody');
+    var box = bodyEl();
     if (!box) return;
     var code = state.error && state.error.code ? state.error.code : 'ERROR';
     var hint = '';
@@ -234,8 +362,7 @@ var CHECKOUT = (function () {
           '回购物车 BACK TO CART</a>' +
       '</div>';
 
-    var cta = document.getElementById('stickyCta');
-    if (cta) cta.style.display = 'none';
+    showCta(false);
 
     var retry = document.getElementById('quoteRetryBtn');
     if (retry) retry.addEventListener('click', loadQuote);
@@ -243,11 +370,11 @@ var CHECKOUT = (function () {
 
   function render() {
     var q = state.quote;
-    var box = document.getElementById('checkoutBody');
+    var box = bodyEl();
     if (!box) return;
 
-    var cta = document.getElementById('stickyCta');
-    if (cta) cta.style.display = '';
+    showCta(true);
+    setSheetSubtitle(q);
 
     /* 品项 */
     var lines = q.lines.map(function (l) {
@@ -343,6 +470,13 @@ var CHECKOUT = (function () {
     startTimer();
   }
 
+  /** 抽屉标题下面那行小字（页面模式没有这个元素，会自动忽略） */
+  function setSheetSubtitle(q) {
+    var node = document.getElementById('sheetSubtitle');
+    if (!node || !q) return;
+    node.textContent = q.itemCount + ' 杯 · 应付 ' + UI.money(q.finalAmount);
+  }
+
   function row(zhEn, value, color, big) {
     var label = zhEn.split(' ');
     return '<div class="row-between" style="padding:5px 0">' +
@@ -354,7 +488,7 @@ var CHECKOUT = (function () {
   }
 
   function bindPickup() {
-    var box = document.getElementById('checkoutBody');
+    var box = bodyEl();
     if (!box) return;
     Array.prototype.forEach.call(box.querySelectorAll('[data-type]'), function (el) {
       el.addEventListener('click', function () {
@@ -418,6 +552,68 @@ var CHECKOUT = (function () {
     timer = setInterval(tick, 1000);
   }
 
+  /* ---------------------------------------------------------
+     大抽屉（cart.html）：不用换页的结帐
+     --------------------------------------------------------- */
+
+  /**
+   * 在购物车页准备好抽屉。会先把取餐方式设好（?table= 自动带入），
+   * 并按需要预载报价。
+   */
+  function initSheet() {
+    if (!AUTH.isCustomerLoggedIn()) { AUTH.requireCustomer(); return; }
+
+    var sheet = document.getElementById('checkoutSheet');
+    if (!sheet) return;
+    host = { mode: 'sheet' };
+
+    /* §12 桌牌 QR 也带进抽屉（cart.html?table=A12）；
+       没有 ?table 就预设「柜台自取」——这样一按结帐就能马上算价，
+       不会先问一个「你在哪一桌」。 */
+    var qrTable = (UI.getParam('table') || '').toUpperCase().slice(0, 12);
+    if (qrTable) { state.orderType = 'TABLE'; state.tableNumber = qrTable; }
+    else { state.orderType = 'COUNTER'; state.tableNumber = ''; }
+
+    /* #checkoutBtn 由 cart-page.js 绑（那边还要照顾没抽屉时的 fallback），
+       这里不要再绑一次，否则一次点击 openSheet / loadQuote 会跑两遍 */
+    var close = document.getElementById('sheetCloseBtn');
+    if (close) close.addEventListener('click', closeSheet);
+    var backdrop = document.getElementById('sheetBackdrop');
+    if (backdrop) backdrop.addEventListener('click', closeSheet);
+    var place = document.getElementById('placeOrderBtn');
+    if (place) place.addEventListener('click', onPlaceOrder);
+    var retry = document.getElementById('quoteRetryBtn');
+    if (retry) retry.addEventListener('click', loadQuote);
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape' && sheet.style.display !== 'none') closeSheet();
+    });
+
+    prefetch();                       // 顾客还在看购物车就已经在算价
+  }
+
+  function openSheet() {
+    var sheet = document.getElementById('checkoutSheet');
+    if (!sheet) return;
+    if (!CART.items().length) { UI.toast('购物车是空的 / Cart is empty', 'error'); return; }
+    sheet.style.display = '';
+    document.body.classList.add('sheet-open');
+    state.error = null;
+    loadQuote();                      // 有预载 → 瞬间画好；没有 → 骨架 + 后端
+  }
+
+  function closeSheet() {
+    var sheet = document.getElementById('checkoutSheet');
+    if (!sheet) return;
+    sheet.style.display = 'none';
+    document.body.classList.remove('sheet-open');
+  }
+
+  function isSheetOpen() {
+    var sheet = document.getElementById('checkoutSheet');
+    return !!sheet && sheet.style.display !== 'none';
+  }
+
   function debugState() {
     return {
       hasQuote: !!state.quote,
@@ -437,6 +633,12 @@ var CHECKOUT = (function () {
 
   return {
     init: init,
+    initSheet: initSheet,
+    openSheet: openSheet,
+    closeSheet: closeSheet,
+    isSheetOpen: isSheetOpen,
+    prefetch: prefetch,
+    invalidate: invalidate,
     loadQuote: loadQuote,
     debugState: debugState
   };

@@ -29,7 +29,7 @@ var ADMIN_ORDERBOARD = (function () {
     ticking: 0,
     todaySig: '',
     laneSig: {},          // 每一栏的内容指纹：没变就不重画（现场反应快很多）
-    /* 2.1.11 防「卡片跳回去」：
+    /* 2.1.12 防「卡片跳回去」：
        mutationAt = 员工最后一次动状态的时间（比它还早发出的读取一律丢掉，
        因为那些回应是「动之前」的资料）；
        expect     = 我们刚把这张单放到哪一栏（后端旧资料不许把它搬回去） */
@@ -414,18 +414,20 @@ var ADMIN_ORDERBOARD = (function () {
       ? API.staff.acceptOrder(appOrderId, { startPreparing: true })
       : API.staff[action](appOrderId);
 
-    call.then(function (res) {
+    function failed(res) {
       state.busy[appOrderId] = false;
       state.mutating = Math.max(0, state.mutating - 1);
-      if (!res.success) {
-        /* 失败：搬回原位（可能已经被别人改过，所以重抓最准） */
-        delete state.expect[appOrderId];
-        UI.toast(res.error.message, 'error', 3500);
-        state.mutationAt = Date.now();           // 之前的读取也一起作废
-        state.laneSig = {};
-        load(false);
-        return;
-      }
+      delete state.expect[appOrderId];
+      UI.toast(res.error.message, 'error', 3500);
+      state.mutationAt = Date.now();             // 之前的读取也一起作废
+      state.laneSig = {};
+      load(false);
+    }
+
+    function done(res) {
+      state.busy[appOrderId] = false;
+      state.mutating = Math.max(0, state.mutating - 1);
+
       if (action === 'completeOrder') {
         var d = res.data;
         UI.toast(d.alreadyCompleted
@@ -433,17 +435,38 @@ var ADMIN_ORDERBOARD = (function () {
           : '完成 · +' + d.pointsIssued + ' 积分' + (d.reward ? ' · 有 Reward' : ''),
           'success', 3200);
       }
+
       /* 后端回传的最新看板直接用（没有就自己抓一次） */
-      if (!applySnapshot(res.data && res.data.snapshot)) {
-        /* 后端没给快照：至少把这一张单钉在我们刚放的位置，等下次轮询对上 */
-        var snapOrder = res.data && res.data.order;
-        state.expect[appOrderId] = {
-          status: (snapOrder && snapOrder.orderStatus) || (target === 'DONE' ? 'CANCELLED' : target),
-          at: Date.now()
-        };
-        state.laneSig = {};
-        load(false);
+      if (applySnapshot(res.data && res.data.snapshot)) return;
+
+      /* 后端没给快照（旧版后端）：把这一张单钉在我们刚放的位置，等轮询对上 */
+      var snapOrder = res.data && res.data.order;
+      state.expect[appOrderId] = {
+        status: (snapOrder && snapOrder.orderStatus) || (target === 'DONE' ? 'CANCELLED' : target),
+        at: Date.now()
+      };
+      state.laneSig = {};
+      load(false);
+    }
+
+    call.then(function (res) {
+      if (!res.success) { failed(res); return; }
+
+      /* ★ 「确认后一定要进制作中」
+         万一后端还没有支援一步到位（旧的 Code.gs 会把单停在 CONFIRMED），
+         这里立刻自己补第二个请求把它推进 PREPARING —— 员工只按一次，
+         卡片也不会停在「已确认」。 */
+      if (action === 'acceptAndStart' && target === 'PREPARING') {
+        var st = res.data && res.data.order && res.data.order.orderStatus;
+        if (st === 'CONFIRMED' || st === 'SUBMITTED') {
+          API.staff.startPreparing(appOrderId).then(function (res2) {
+            if (!res2.success) { failed(res2); return; }
+            done(res2);
+          });
+          return;
+        }
       }
+      done(res);
     });
   }
 
