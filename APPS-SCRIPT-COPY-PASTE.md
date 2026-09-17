@@ -42,7 +42,7 @@
 | 13 | `AppOrders` | 370 | ★ 2.0 订单：placeOrder（幂等）、订单查询、取消、再点一次、名称与单价快照 |
 | 14 | `OrderBoard` | 463 | ★ 2.0 员工看板：接单 / 制作 / 完成（幂等）、收款才扣钱包、取消退回、6 小时内只算一次到店 |
 | 15 | `Analytics` | 308 | ★ 2.0 业绩分析：今日统计、通路业绩（App / Foodcourt 分得开且不重复计算）、热销商品、会员分析 |
-| 16 | `Claims` | 781 | QR / 4 位 Code 认领（只存 token 的 hash） |
+| 16 | `Claims` | 817 | QR / 4 位 Code 认领（只存 token 的 hash） |
 | 17 | `Promotions` | 154 | 优惠规则 |
 | 18 | `Admin` | 209 | 员工端：Dashboard、会员查询、手动调整、重设会员密码、设置 |
 | 19 | `Auth` | 89 | ping / getPublicSettings / staffLogin / staffLogout |
@@ -5197,7 +5197,7 @@ function getMemberAnalytics(data, token) {
 ## 16. Claims.gs
 
 > Apps Script 里的档案名称：**`Claims`**（不要打 .gs）
-> QR / 4 位 Code 认领（只存 token 的 hash） · 781 行 · SHA-256 `6aeda0646acce1d0`
+> QR / 4 位 Code 认领（只存 token 的 hash） · 817 行 · SHA-256 `de98dc5b7973433b`
 
 ```javascript
 /* =============================================================
@@ -5774,7 +5774,13 @@ function openPosTickets(limit) {
 
 /**
  * createPosTicket —— 员工录入一张 foodcourt 单据（这时还不知道是谁）。
- * @param {object} data { amount(sen), externalOrderId?, source?, note? }
+ *
+ * 金额一律由员工确认（收据上的数字才是真的：折扣 / 税都在 foodcourt 算好了）。
+ * items 只是「这张单据卖了什么」的纪录（POS 点餐台点出来的清单），
+ * 不影响积分计算 —— 积分只跟金额有关（§57）。
+ *
+ * @param {object} data { amount(sen), externalOrderId?, source?, note?,
+ *                        items? = [{ nameEN, nameZH, quantity, unitPriceSen }] }
  */
 function createPosTicket(data, token) {
   var ctx = requireStaff(token);
@@ -5794,17 +5800,47 @@ function createPosTicket(data, token) {
     return err('DUPLICATE_EXTERNAL_ORDER');
   }
 
+  /* 点餐台点出来的品项 → 写成一行字放进 Note（Orders 表不加栏位，升级无痛） */
+  var items = posItemsClean(data && data.items);
+  var staffNote = String((data && data.note) || '').slice(0, 120);
+  var summary = posItemsText(items);
+  var note = summary ? (staffNote ? summary + ' · ' + staffNote : summary) : staffNote;
+
   var order = createMemberTransaction({
     source:          source,
     externalOrderId: externalOrderId,
     amount:          amount,
     createdBy:       ctx.staff.staffId,
     actorType:       'STAFF',
-    note:            String((data && data.note) || '').slice(0, 200)
+    note:            note.slice(0, 200)
   });
 
   audit(ctx.staff.staffId, 'STAFF', 'POS_TICKET', 'ORDER', order.orderId, '', amount);
-  return ok({ ticket: posTicketView(order) });
+  return ok({ ticket: posTicketView(order), items: items });
+}
+
+/** 把点餐台送上来的清单洗干净（数量、字数、项数都设上限） */
+function posItemsClean(raw) {
+  if (!raw || !raw.length) return [];
+  return raw.slice(0, 30).map(function (it) {
+    var nameZH = String((it && it.nameZH) || '').slice(0, 24);
+    var nameEN = String((it && it.nameEN) || '').slice(0, 24);
+    return {
+      nameZH: nameZH,
+      nameEN: nameEN,
+      name: (nameZH || nameEN),
+      quantity: Math.max(1, Math.min(99, Math.round(Number(it && it.quantity) || 1))),
+      unitPriceSen: Math.max(0, Math.round(Number(it && it.unitPriceSen) || 0))
+    };
+  });
+}
+
+/** 清单变一行字：Mojito×2 · Long Island×1 */
+function posItemsText(items) {
+  if (!items || !items.length) return '';
+  return items.map(function (it) {
+    return (it.name || '?') + '×' + it.quantity;
+  }).join(' · ').slice(0, 160);
 }
 
 /**

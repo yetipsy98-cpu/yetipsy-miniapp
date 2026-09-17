@@ -1,20 +1,20 @@
 /* =============================================================
-   YETIPSY — admin-pos.js（员工端 POS 进单台）
+   YETIPSY — admin-pos.js（员工端 POS 点餐台 + 进单）
    -------------------------------------------------------------
-   现场动线（foodcourt 通路）：
+   现场动线（foodcourt 通路）——像 POS 机一样：
 
-     ① 照 foodcourt 单据用键盘录入（单号选填 + 金额）→ 进「待进单」队列
-     ② 顾客出示会员码 → 扫码
-     ③ 确认会员 → 进分（积分 / Reward / 到店次数）
+     ① 点餐台：商品格 → 点商品 → 清单（可改数量 / 手动改金额）
+     ② 记录单据 → 进「待进单」队列
+     ③ 顾客出示会员码 → 扫码 → 确认 → 进分
 
-   为什么是这个顺序（跟旧的「输金额 → 扫会员码」不一样）：
-     · 单是 foodcourt 出的，金额以单据为准，员工不该再抄第二次
-     · 值班时可以先把三五张单录进队列，顾客来了才逐张扫码
-     · 扫码只是「这张单是谁的」，付款早在 foodcourt 完成了
+   为什么金额还是员工确认：
+     收据上的数字才是真的（折扣 / 税在 foodcourt 算好了）。
+     清单只是「这张单卖了什么」的纪录；积分只看金额（§57）。
+     金额不对就在清单里手动输入（勾「手动输入金额」）。
 
-   为什么扫到码还要按一下确认：
-     积分与 Reward 会动到会员资料，扫错人（隔壁客人的码）代价大，
-     多点一下比事后改帐便宜。
+   为什么先记录再扫码：
+     值班时可以先把三五张单录进队列，顾客来了才逐张扫码。
+     扫码只是回答「这张单是谁的」，付款早在 foodcourt 完成了。
 
    Mini app 的订单不走这里 —— 顾客在 App 下单，员工完成订单时
    系统就会自动进分（admin/orderboard.html）。
@@ -22,10 +22,13 @@
 
 var ADMIN_POS = (function () {
 
-  var PAD_KEY = 'yt_pos_pad_open';
-
   var state = {
-    step: 'queue',           // queue | scan | confirm | result
+    tab: 'kiosk',            // kiosk | queue | scan | confirm | result
+    menu: null,              // { categories, products }
+    categoryId: '',
+    lines: [],               // 目前这张单：{productId,nameZH,nameEN,unitPrice,qty}
+    manualAmountSen: 0,
+    useManualAmount: false,
     tickets: [],
     today: null,
     selected: null,
@@ -37,9 +40,6 @@ var ADMIN_POS = (function () {
     errorCode: null,
     busy: false,
     pollSeconds: 8,
-    padOpen: false,
-    pad: '0',
-    padDecimal: false,
     signature: ''
   };
 
@@ -52,42 +52,48 @@ var ADMIN_POS = (function () {
      --------------------------------------------------------- */
 
   function init() {
-    el.stepQueue   = document.getElementById('stepQueue');
-    el.stepScan    = document.getElementById('stepScan');
-    el.stepConfirm = document.getElementById('stepConfirm');
-    el.stepResult  = document.getElementById('stepResult');
-    el.scanBox     = document.getElementById('scanBox');
-    el.video       = document.getElementById('scanVideo');
-    el.hint        = document.getElementById('scanHint');
-    el.support     = document.getElementById('scanSupport');
-    el.padBody     = document.getElementById('padBody');
+    el.kiosk      = document.getElementById('stepKiosk');
+    el.queue      = document.getElementById('stepQueue');
+    el.scan       = document.getElementById('stepScan');
+    el.confirm    = document.getElementById('stepConfirm');
+    el.result     = document.getElementById('stepResult');
+    el.grid       = document.getElementById('kioskGrid');
+    el.cats       = document.getElementById('kioskCats');
+    el.scanBox    = document.getElementById('scanBox');
+    el.video      = document.getElementById('scanVideo');
+    el.hint       = document.getElementById('scanHint');
+    el.support    = document.getElementById('scanSupport');
+    el.sheet      = document.getElementById('ticketSheet');
+    el.lines      = document.getElementById('ticketLines');
 
+    on('tabKiosk', function () { show('kiosk'); });
+    on('tabQueue', function () { show('queue'); });
+    on('kioskRefreshBtn', function () { loadMenu(true); });
     on('refreshBtn', function () { loadQueue(true); });
-    on('padToggle', function () { togglePad(); });
+    on('kioskOpenTicket', openTicketSheet);
+    on('kioskTicketBtn', openTicketSheet);
+    on('ticketSheetClose', closeTicketSheet);
+    on('ticketClearBtn', clearLines);
     on('saveTicketBtn', saveTicket);
+    on('manualAmountToggle', toggleManualAmount);
     on('manualBtn', function () { handleCode(txt('manualInput')); });
     on('manualInput', null, function (e) { if (e.key === 'Enter') handleCode(txt('manualInput')); });
     on('startScanBtn', startCamera);
     on('stopScanBtn', function () { MEMBER_SCANNER.stop(); });
     on('confirmBtn', confirm);
-    on('rescanBtn', function () { if (state.selected) pickTicket(state.selected.orderId); });
-    on('backToQueueBtn', backToQueue);
-    on('nextTicketBtn', backToQueue);
+    on('rescanBtn', function () { if (state.selected) beginScan(state.selected); });
+    on('backToQueueBtn', backToKiosk);
+    on('nextTicketBtn', backToKiosk);
 
-    bindPad();
+    bindGrid();
 
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) { stopPolling(); MEMBER_SCANNER.stop(); }
-      else if (state.step === 'queue') { loadQueue(false); startPolling(); }
+      else if (state.tab === 'queue') { loadQueue(false); startPolling(); }
     });
 
-    /* 键盘预设：没有待进单时自动打开（员工一眼知道下一步） */
-    var saved = null;
-    try { saved = localStorage.getItem(PAD_KEY); } catch (e) {}
-    state.padOpen = saved === null ? true : saved === '1';
-    renderPad();
-
-    show('queue');
+    show('kiosk');
+    loadMenu(false);
     loadQueue(false);
   }
 
@@ -112,27 +118,348 @@ var ADMIN_POS = (function () {
     if (node) node.style.display = visible ? '' : 'none';
   }
 
-  function show(step) {
-    state.step = step;
-    if (el.stepQueue)   el.stepQueue.style.display   = step === 'queue'   ? '' : 'none';
-    if (el.stepScan)    el.stepScan.style.display    = step === 'scan'    ? '' : 'none';
-    if (el.stepConfirm) el.stepConfirm.style.display = step === 'confirm' ? '' : 'none';
-    if (el.stepResult)  el.stepResult.style.display  = step === 'result'  ? '' : 'none';
+  function show(tab) {
+    state.tab = tab;
+    if (el.kiosk)   el.kiosk.style.display   = (tab === 'kiosk')   ? '' : 'none';
+    if (el.queue)   el.queue.style.display   = (tab === 'queue')   ? '' : 'none';
+    if (el.scan)    el.scan.style.display    = (tab === 'scan')    ? '' : 'none';
+    if (el.confirm) el.confirm.style.display = (tab === 'confirm') ? '' : 'none';
+    if (el.result)  el.result.style.display  = (tab === 'result')  ? '' : 'none';
 
-    Array.prototype.forEach.call(document.querySelectorAll('.pos-steps .ps'), function (n) {
-      var key = n.getAttribute('data-step');
-      var on = (step === 'queue' && key === 'queue') ||
-               (step === 'scan' && key === 'scan') ||
-               ((step === 'confirm' || step === 'result') && key === 'result');
-      n.className = 'ps' + (on ? ' on' : '');
-    });
+    var tabKiosk = document.getElementById('tabKiosk');
+    var tabQueue = document.getElementById('tabQueue');
+    if (tabKiosk) tabKiosk.className = 'pt' + (tab === 'kiosk' ? ' on' : '');
+    if (tabQueue) tabQueue.className = 'pt' + (tab === 'queue' ? ' on' : '');
+    var tabs = document.querySelector('.pos-tabs');
+    if (tabs) tabs.style.display = (tab === 'scan' || tab === 'confirm' || tab === 'result') ? 'none' : '';
 
-    if (step === 'queue') startPolling(); else stopPolling();
+    if (tab === 'queue') startPolling(); else stopPolling();
     window.scrollTo(0, 0);
   }
 
   /* ---------------------------------------------------------
-     待进单队列（不变就不重画：避免闪动、滚动位置被吃掉）
+     点餐台：商品格
+     --------------------------------------------------------- */
+
+  function loadMenu(verbose) {
+    var status = document.getElementById('kioskStatus');
+    if (status && !state.menu) status.textContent = '载入酒单…';
+
+    API.staff.getAdminMenu().then(function (res) {
+      if (!res.success) {
+        if (status) { status.textContent = '酒单载入失败 ' + res.error.code; status.className = 'a-sub warn'; }
+        if (!ADMIN.handleError(res.error) && verbose) UI.toast(res.error.message, 'error');
+        return;
+      }
+      state.menu = {
+        categories: (res.data.categories || []).filter(function (c) {
+          return String(c.status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+        }),
+        products: (res.data.products || []).filter(function (p) {
+          return String(p.status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+        })
+      };
+      renderCats();
+      renderGrid();
+    });
+  }
+
+  function renderCats() {
+    if (!el.cats) return;
+    var cats = [{ categoryId: '', nameZH: '全部', nameEN: 'ALL' }].concat(state.menu ? state.menu.categories : []);
+    el.cats.innerHTML = cats.map(function (c) {
+      var active = (c.categoryId || '') === state.categoryId ? ' active' : '';
+      return '<div class="cat-chip' + active + '" data-cat="' + UI.esc(c.categoryId || '') + '">' +
+        (c.nameZH ? UI.esc(c.nameZH) : UI.esc(c.nameEN)) + '</div>';
+    }).join('');
+
+    Array.prototype.forEach.call(el.cats.querySelectorAll('.cat-chip'), function (node) {
+      node.addEventListener('click', function () {
+        var next = node.getAttribute('data-cat') || '';
+        state.categoryId = (state.categoryId === next) ? '' : next;
+        renderCats();
+        renderGrid();
+      });
+    });
+  }
+
+  function gridProducts() {
+    var list = (state.menu && state.menu.products) || [];
+    if (!state.categoryId) return list;
+    return list.filter(function (p) { return (p.categoryId || '') === state.categoryId; });
+  }
+
+  function renderGrid() {
+    if (!el.grid) return;
+    var list = gridProducts();
+
+    var status = document.getElementById('kioskStatus');
+    if (status) {
+      status.className = 'a-sub';
+      status.textContent = state.menu
+        ? '点商品加入这张单 · 共 ' + list.length + ' 款'
+        : '载入酒单…';
+    }
+
+    if (!list.length) {
+      el.grid.innerHTML = '<div class="a-empty" style="padding:20px">酒单还没有商品<br>' +
+        '<span class="tiny">到「更多 → 菜单管理」新增</span></div>';
+      return;
+    }
+
+    el.grid.innerHTML = list.map(function (p) {
+      var sold = p.available === false;
+      var qty = qtyOf(p.productId);
+      return '<button class="k-tile' + (sold ? ' is-sold' : '') + (qty ? ' in-cart' : '') +
+        '" data-product="' + UI.esc(p.productId) + '"' + (sold ? ' disabled' : '') + '>' +
+        (qty ? '<span class="kt-qty">' + qty + '</span>' : '') +
+        '<span class="kt-name">' + UI.esc(p.nameZH || p.nameEN) + '</span>' +
+        '<span class="kt-en">' + UI.esc(p.nameEN) + '</span>' +
+        '<span class="kt-price">' + (sold ? '售罄 SOLD OUT' : UI.money(p.price)) + '</span>' +
+      '</button>';
+    }).join('');
+  }
+
+  /** 事件只绑一次（委派）：商品格重画也不用重新绑 */
+  function bindGrid() {
+    if (!el.grid || el.grid.getAttribute('data-bound') === '1') return;
+    el.grid.setAttribute('data-bound', '1');
+    el.grid.addEventListener('click', function (e) {
+      var node = closest(e.target, '[data-product]');
+      if (!node || node.disabled) return;
+      addProduct(node.getAttribute('data-product'));
+    });
+  }
+
+  function closest(node, selector) {
+    while (node && node.nodeType === 1) {
+      if (node.matches ? node.matches(selector) : false) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  /* ---------------------------------------------------------
+     这张单（清单）
+     --------------------------------------------------------- */
+
+  function findProduct(productId) {
+    var hit = null;
+    ((state.menu && state.menu.products) || []).forEach(function (p) {
+      if (!hit && p.productId === productId) hit = p;
+    });
+    return hit;
+  }
+
+  function qtyOf(productId) {
+    var q = 0;
+    state.lines.forEach(function (l) { if (l.productId === productId) q += l.qty; });
+    return q;
+  }
+
+  function addProduct(productId) {
+    var p = findProduct(productId);
+    if (!p || p.available === false) return;
+
+    var line = null;
+    state.lines.forEach(function (l) { if (!line && l.productId === productId) line = l; });
+
+    if (line) {
+      if (line.qty >= 99) return;
+      line.qty += 1;
+    } else {
+      state.lines.push({
+        productId: p.productId,
+        nameZH: p.nameZH || '',
+        nameEN: p.nameEN || '',
+        unitPrice: Number(p.price) || 0,
+        qty: 1
+      });
+    }
+
+    renderGrid();          // 只更新数量角标
+    renderKioskBar();
+    renderTicketLines();
+  }
+
+  function setLineQty(productId, qty) {
+    var next = Math.round(Number(qty) || 0);
+    if (next <= 0) {
+      state.lines = state.lines.filter(function (l) { return l.productId !== productId; });
+    } else {
+      state.lines.forEach(function (l) {
+        if (l.productId === productId) l.qty = Math.min(99, next);
+      });
+    }
+    renderGrid();
+    renderKioskBar();
+    renderTicketLines();
+  }
+
+  function linesTotalSen() {
+    return state.lines.reduce(function (sum, l) {
+      return sum + (Number(l.unitPrice) || 0) * (Number(l.qty) || 0);
+    }, 0);
+  }
+
+  function clearLines() {
+    state.lines = [];
+    state.manualAmountSen = 0;
+    state.useManualAmount = false;
+    var toggle = document.getElementById('manualAmountToggle');
+    if (toggle) toggle.checked = false;
+    var manual = document.getElementById('manualAmountInput');
+    if (manual) { manual.value = ''; manual.style.display = 'none'; }
+    renderGrid();
+    renderKioskBar();
+    renderTicketLines();
+  }
+
+  function renderKioskBar() {
+    var bar = document.getElementById('kioskBar');
+    var n = state.lines.reduce(function (s, l) { return s + l.qty; }, 0);
+    set('kbCount', n);
+    set('kbTotal', UI.money(linesTotalSen()));
+    if (bar) bar.style.display = n > 0 ? '' : 'none';
+  }
+
+  /* ---------------------------------------------------------
+     清单抽屉
+     --------------------------------------------------------- */
+
+  function openTicketSheet() {
+    renderTicketLines();
+    if (el.sheet) {
+      el.sheet.style.display = '';
+      document.body.classList.add('sheet-open');
+    }
+  }
+
+  function closeTicketSheet() {
+    if (el.sheet) el.sheet.style.display = 'none';
+    document.body.classList.remove('sheet-open');
+  }
+
+  function renderTicketLines() {
+    if (!el.lines) return;
+
+    set('ticketSub', state.lines.length
+      ? state.lines.length + ' 项 · ' + UI.money(linesTotalSen())
+      : '空的 · 从商品格点选');
+
+    if (!state.lines.length) {
+      el.lines.innerHTML = '<div class="a-empty" style="padding:18px">清单是空的<br>' +
+        '<span class="tiny">回点餐台点商品</span></div>';
+    } else {
+      el.lines.innerHTML = state.lines.map(function (l) {
+        return '<div class="ps-line" data-line="' + UI.esc(l.productId) + '">' +
+          '<div class="psl-main">' +
+            '<div class="psl-name">' + UI.esc(l.nameZH || l.nameEN) + '</div>' +
+            '<div class="psl-price">' + UI.money(l.unitPrice) + ' × ' + l.qty +
+              ' = <b>' + UI.money(l.unitPrice * l.qty) + '</b></div>' +
+          '</div>' +
+          '<div class="psl-qty">' +
+            '<button class="qty-btn" data-dec="' + UI.esc(l.productId) + '">−</button>' +
+            '<span class="qty-value">' + l.qty + '</span>' +
+            '<button class="qty-btn" data-inc="' + UI.esc(l.productId) + '">+</button>' +
+          '</div>' +
+        '</div>';
+      }).join('');
+    }
+
+    set('ticketTotal', UI.money(state.useManualAmount ? state.manualAmountSen : linesTotalSen()));
+
+    Array.prototype.forEach.call(el.lines.querySelectorAll('[data-inc]'), function (node) {
+      node.addEventListener('click', function () {
+        var id = node.getAttribute('data-inc');
+        setLineQty(id, qtyOf(id) + 1);
+      });
+    });
+    Array.prototype.forEach.call(el.lines.querySelectorAll('[data-dec]'), function (node) {
+      node.addEventListener('click', function () {
+        var id = node.getAttribute('data-dec');
+        setLineQty(id, qtyOf(id) - 1);
+      });
+    });
+
+    var save = document.getElementById('saveTicketBtn');
+    if (save) save.disabled = !state.lines.length && !state.manualAmountSen;
+  }
+
+  function toggleManualAmount() {
+    var toggle = document.getElementById('manualAmountToggle');
+    var input = document.getElementById('manualAmountInput');
+    state.useManualAmount = !!(toggle && toggle.checked);
+    if (input) {
+      input.style.display = state.useManualAmount ? '' : 'none';
+      if (state.useManualAmount) input.focus();
+    }
+    state.manualAmountSen = state.useManualAmount ? parseAmountSen(input ? input.value : '') : 0;
+    set('ticketTotal', UI.money(state.useManualAmount ? state.manualAmountSen : linesTotalSen()));
+  }
+
+  /** "86" / "86.5" / "RM 86.00" → sen */
+  function parseAmountSen(raw) {
+    var n = parseFloat(String(raw || '').replace(/[^0-9.]/g, ''));
+    if (!isFinite(n) || n < 0) return 0;
+    return Math.round(n * 100);
+  }
+
+  /* ---------------------------------------------------------
+     记录单据
+     --------------------------------------------------------- */
+
+  function billSen() {
+    if (state.useManualAmount) return state.manualAmountSen;
+    return linesTotalSen();
+  }
+
+  function saveTicket() {
+    if (state.busy) return;
+
+    var amount = billSen();
+    if (amount <= 0) {
+      UI.toast('请先点商品，或勾「手动输入金额」输入收据金额', 'error');
+      return;
+    }
+
+    state.busy = true;
+    var btn = document.getElementById('saveTicketBtn');
+    UI.setLoading(btn, true, 'SAVING');
+
+    API.staff.createPosTicket({
+      amount: amount,
+      externalOrderId: txt('ticketNoInput'),
+      note: txt('ticketNoteInput'),
+      items: state.lines.map(function (l) {
+        return { nameZH: l.nameZH, nameEN: l.nameEN, quantity: l.qty, unitPriceSen: l.unitPrice };
+      })
+    }).then(function (res) {
+      state.busy = false;
+      UI.setLoading(btn, false);
+
+      if (!res.success) {
+        if (!ADMIN.handleError(res.error)) UI.toast(res.error.message, 'error');
+        return;
+      }
+
+      var ticket = res.data.ticket;
+      ['ticketNoInput', 'ticketNoteInput'].forEach(function (id) {
+        var node = document.getElementById(id);
+        if (node) node.value = '';
+      });
+      clearLines();
+      closeTicketSheet();
+      UI.toast('已记录 ' + UI.money(ticket.amount) + ' · 请扫顾客会员码', 'success');
+
+      /* 直接接着扫码（现场最常见的顺序），队列也会同步更新 */
+      loadQueue(false);
+      beginScan(ticket);
+    });
+  }
+
+  /* ---------------------------------------------------------
+     待进单队列
      --------------------------------------------------------- */
 
   function loadQueue(verbose) {
@@ -153,11 +480,10 @@ var ADMIN_POS = (function () {
     });
   }
 
-  /* §46 轮询：只在队列页、页面开着的时候刷新 */
   function startPolling() {
     stopPolling();
     pollTimer = setInterval(function () {
-      if (document.hidden || state.step !== 'queue') return;
+      if (document.hidden || state.tab !== 'queue') return;
       loadQueue(false);
     }, Math.max(5, state.pollSeconds) * 1000);
   }
@@ -174,17 +500,14 @@ var ADMIN_POS = (function () {
     set('statBound', state.today ? state.today.bound : 0);
     set('statPoints', state.today ? UI.points(state.today.points) : 0);
     set('queueCount', state.tickets.length);
+    set('tabQueueCount', state.tickets.length);
 
     var status = document.getElementById('queueStatus');
     if (status) {
       status.textContent = state.errorCode
         ? '载入失败 ' + state.errorCode
-        : (state.tickets.length ? state.tickets.length + ' 张单据等着进单' : '目前没有待进单 · 用下面键盘录入第一张');
+        : (state.tickets.length ? state.tickets.length + ' 张单据等着进单' : '目前没有待进单 · 去点餐台录一张');
       status.className = 'a-sub' + (state.errorCode ? ' warn' : '');
-    }
-
-    if (!state.tickets.length && !state.errorCode) {
-      if (typeof state.padOpen === 'boolean') { state.padOpen = true; renderPad(); }
     }
 
     var sig = JSON.stringify([state.errorCode, state.tickets, state.today]);
@@ -198,12 +521,15 @@ var ADMIN_POS = (function () {
       on('retryBtn', function () { loadQueue(true); });
     } else if (!state.tickets.length) {
       box.innerHTML = '<div class="a-empty" style="padding:20px">' +
-        '还没有待进单<br><span class="tiny">顾客在 foodcourt 付完款 → 用下面键盘录入单据</span></div>';
+        '还没有待进单<br><span class="tiny">顾客在 foodcourt 付完款 → 去点餐台录单</span></div>';
     } else {
       box.innerHTML = state.tickets.map(ticketCard).join('');
       Array.prototype.forEach.call(box.querySelectorAll('[data-scan]'), function (node) {
         node.addEventListener('click', function () {
-          pickTicket(node.getAttribute('data-scan'));
+          var id = node.getAttribute('data-scan');
+          var hit = null;
+          state.tickets.forEach(function (t) { if (!hit && t.orderId === id) hit = t; });
+          if (hit) beginScan(hit);
         });
       });
       Array.prototype.forEach.call(box.querySelectorAll('[data-cancel]'), function (node) {
@@ -222,8 +548,8 @@ var ADMIN_POS = (function () {
         '<span class="tk-num">' + UI.esc(t.orderNumber) + '</span>' +
         '<span class="tk-amt">' + UI.money(t.amount) + '</span>' +
       '</div>' +
-      '<div class="tk-meta">' + UI.esc(t.source) + ' · ' + UI.esc(UI.timeOnly(t.createdAt)) +
-        (t.note ? ' · ' + UI.esc(t.note) : '') + '</div>' +
+      (t.note ? '<div class="tk-note">' + UI.esc(t.note) + '</div>' : '') +
+      '<div class="tk-meta">' + UI.esc(t.source) + ' · ' + UI.esc(UI.timeOnly(t.createdAt)) + '</div>' +
       '<div class="tk-actions">' +
         '<button class="big-action" data-scan="' + UI.esc(t.orderId) + '">' +
           '扫会员码进单 SCAN MEMBER</button>' +
@@ -253,139 +579,11 @@ var ADMIN_POS = (function () {
     }).join('') + '</div>';
   }
 
-  /* ---------------------------------------------------------
-     POS 键盘（金额）
-     --------------------------------------------------------- */
-
-  function bindPad() {
-    var keys = document.getElementById('padKeys');
-    if (keys) {
-      keys.addEventListener('click', function (e) {
-        var btn = e.target.closest ? e.target.closest('[data-key]') : null;
-        if (!btn) return;
-        padPress(btn.getAttribute('data-key'));
-      });
-    }
-    on('padClear', function () { padQuick('clear'); });
-    on('ticketNoInput', null, function (e) { if (e.key === 'Enter') saveTicket(); });
-  }
-
-  function padValue() {
-    var n = parseFloat(state.pad);
-    if (!isFinite(n) || n < 0) n = 0;
-    return Math.round(n * 100);
-  }
-
-  function padPress(key) {
-    if (key === 'del') {
-      state.pad = state.pad.length > 1 ? state.pad.slice(0, -1) : '0';
-      if (state.pad === '' || state.pad === '.') state.pad = '0';
-      if (state.pad.indexOf('.') === -1) state.padDecimal = false;
-      updatePad();
-      return;
-    }
-
-    if (key === '.') {
-      if (!state.padDecimal) {
-        state.padDecimal = true;
-        if (state.pad.indexOf('.') === -1) state.pad += '.';
-      }
-      updatePad();
-      return;
-    }
-
-    if (state.padDecimal) {
-      var dec = (state.pad.split('.')[1] || '');
-      if (dec.length >= 2) return;
-      state.pad += String(key);
-    } else {
-      if (state.pad === '0') state.pad = String(key);
-      else if (state.pad.replace('.', '').length < 7) state.pad += String(key);
-    }
-    updatePad();
-  }
-
-  function padQuick(what) {
-    if (what === 'clear') {
-      state.pad = '0'; state.padDecimal = false;
-    } else {
-      state.pad = String(what); state.padDecimal = false;
-    }
-    updatePad();
-  }
-
-  function updatePad() {
-    var money = UI.money(padValue());
-    set('padAmount', money.replace(/^RM\s*/, ''));
-    set('padPeek', money);
-  }
-
-  function renderPad() {
-    if (el.padBody) el.padBody.style.display = state.padOpen ? '' : 'none';
-    var caret = document.querySelector('.pad-caret');
-    if (caret) caret.textContent = state.padOpen ? '▴' : '▾';
-    try { localStorage.setItem(PAD_KEY, state.padOpen ? '1' : '0'); } catch (e) {}
-    updatePad();
-  }
-
-  function togglePad(force) {
-    state.padOpen = typeof force === 'boolean' ? force : !state.padOpen;
-    renderPad();
-    if (state.padOpen) {
-      var no = document.getElementById('ticketNoInput');
-      if (no && !no.value) no.focus();
-    }
-  }
-
-  /* ---------------------------------------------------------
-     录入单据
-     --------------------------------------------------------- */
-
-  function saveTicket() {
-    if (state.busy) return;
-
-    var sen = padValue();
-    if (sen <= 0) {
-      UI.toast('请输入金额 / Enter the amount', 'error');
-      togglePad(true);
-      return;
-    }
-
-    state.busy = true;
-    UI.setLoading(document.getElementById('saveTicketBtn'), true, 'ADDING');
-
-    API.staff.createPosTicket({
-      amount: sen,
-      externalOrderId: txt('ticketNoInput'),
-      note: txt('ticketNoteInput')
-    }).then(function (res) {
-      state.busy = false;
-      UI.setLoading(document.getElementById('saveTicketBtn'), false);
-
-      if (!res.success) {
-        if (!ADMIN.handleError(res.error)) UI.toast(res.error.message, 'error');
-        return;
-      }
-
-      ['ticketNoInput', 'ticketNoteInput'].forEach(function (id) {
-        var node = document.getElementById(id);
-        if (node) node.value = '';
-      });
-      state.pad = '0'; state.padDecimal = false;
-      updatePad();
-
-      UI.toast('已加入待进单 ' + UI.money(res.data.ticket.amount), 'success');
-      loadQueue(false);
-
-      var no = document.getElementById('ticketNoInput');
-      if (no) no.focus();
-    });
-  }
-
   function cancelTicket(orderId) {
-    var t = findTicket(orderId);
+    var hit = null;
+    state.tickets.forEach(function (t) { if (!hit && t.orderId === orderId) hit = t; });
     UI.confirmDialog(
-      '取消单据 ' + (t ? t.orderNumber : '') + '？',
+      '取消单据 ' + (hit ? hit.orderNumber : '') + '？',
       'Cancel this ticket?（还没进分才可以取消）',
       '取消 CANCEL'
     ).then(function (yes) {
@@ -404,21 +602,12 @@ var ADMIN_POS = (function () {
     });
   }
 
-  function findTicket(orderId) {
-    var hit = null;
-    state.tickets.forEach(function (t) { if (!hit && t.orderId === orderId) hit = t; });
-    return hit;
-  }
-
   /* ---------------------------------------------------------
-     扫码
+     扫码 → 确认 → 进分
      --------------------------------------------------------- */
 
-  function pickTicket(orderId) {
-    var t = findTicket(orderId);
-    if (!t) { UI.toast('找不到这张单据，请刷新 / Refresh the queue', 'error'); loadQueue(false); return; }
-
-    state.selected = t;
+  function beginScan(ticket) {
+    state.selected = ticket;
     state.customer = null;
     state.verifyToken = '';
     state.result = null;
@@ -427,11 +616,11 @@ var ADMIN_POS = (function () {
     if (box) {
       box.innerHTML =
         '<div class="tk-top">' +
-          '<span class="tk-num">' + UI.esc(t.orderNumber) + '</span>' +
-          '<span class="tk-amt">' + UI.money(t.amount) + '</span>' +
+          '<span class="tk-num">' + UI.esc(ticket.orderNumber) + '</span>' +
+          '<span class="tk-amt">' + UI.money(ticket.amount) + '</span>' +
         '</div>' +
-        '<div class="tk-meta">' + UI.esc(t.source) +
-          (t.note ? ' · ' + UI.esc(t.note) : '') + '</div>';
+        (ticket.note ? '<div class="tk-note">' + UI.esc(ticket.note) + '</div>' : '') +
+        '<div class="tk-meta">' + UI.esc(ticket.source) + '</div>';
     }
 
     var manual = document.getElementById('manualInput');
@@ -439,7 +628,6 @@ var ADMIN_POS = (function () {
 
     show('scan');
 
-    /* 点「扫会员码进单」本身就是使用者手势，可以直接开相机 */
     if (el.hint) el.hint.textContent = '请顾客出示会员码（条码，或条码下方的 QR）';
     if (MEMBER_SCANNER.hasCamera()) startCamera();
     else if (el.hint) el.hint.textContent = '这台装置没有相机 · 请用下面的手动输入';
@@ -452,9 +640,7 @@ var ADMIN_POS = (function () {
         el.scanBox.style.display = '';
         showBtn('startScanBtn', false);
         showBtn('stopScanBtn', true);
-        el.hint.textContent = hasBarcode
-          ? '把顾客的会员条码对准框内'
-          : '请扫会员条码下方的 QR';
+        el.hint.textContent = hasBarcode ? '把顾客的会员条码对准框内' : '请扫会员条码下方的 QR';
       },
       onCode: handleCode,
       onError: function (why) {
@@ -475,7 +661,7 @@ var ADMIN_POS = (function () {
   function handleCode(text) {
     text = String(text || '').trim();
     if (!text) return;
-    if (!state.selected) { UI.toast('请先选一张单据 / Pick a ticket first', 'error'); backToQueue(); return; }
+    if (!state.selected) { UI.toast('请先选一张单据 / Pick a ticket first', 'error'); backToKiosk(); return; }
     MEMBER_SCANNER.stop();
     UI.showLoading('VERIFYING');
 
@@ -543,7 +729,7 @@ var ADMIN_POS = (function () {
       if (state.verifyLeft <= 0) {
         stopCountdown();
         UI.toast('验证已过期，请重新扫码 / Verification expired', 'error');
-        if (state.selected) pickTicket(state.selected.orderId);
+        if (state.selected) beginScan(state.selected);
       }
     }, 1000);
   }
@@ -552,24 +738,20 @@ var ADMIN_POS = (function () {
     if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
   }
 
-  function backToQueue() {
+  function backToKiosk() {
     stopCountdown();
     MEMBER_SCANNER.stop();
     state.selected = null;
     state.customer = null;
     state.verifyToken = '';
     state.result = null;
-    show('queue');
+    show('kiosk');
     loadQueue(false);
   }
 
-  /* ---------------------------------------------------------
-     进分
-     --------------------------------------------------------- */
-
   function confirm() {
     if (state.busy) return;
-    if (!state.selected) { UI.toast('请先选一张单据 / Pick a ticket first', 'error'); backToQueue(); return; }
+    if (!state.selected) { UI.toast('请先选一张单据 / Pick a ticket first', 'error'); backToKiosk(); return; }
     if (!state.verifyToken) { UI.toast('请先扫顾客的会员码 / Scan the member code first', 'error'); return; }
 
     state.busy = true;
@@ -592,9 +774,9 @@ var ADMIN_POS = (function () {
         if (res.error.code === 'MEMBER_VERIFY_EXPIRED' ||
             res.error.code === 'MEMBER_VERIFY_REQUIRED' ||
             res.error.code === 'MEMBER_VERIFY_MISMATCH') {
-          if (state.selected) pickTicket(state.selected.orderId);
+          if (state.selected) beginScan(state.selected);
         } else if (res.error.code === 'TICKET_ALREADY_BOUND') {
-          backToQueue();
+          backToKiosk();
         }
         return;
       }
@@ -631,27 +813,35 @@ var ADMIN_POS = (function () {
 
   function debugState() {
     return {
-      step: state.step,
+      tab: state.tab,
+      menuProducts: state.menu ? state.menu.products.length : 0,
+      categoryId: state.categoryId,
+      lines: state.lines.map(function (l) { return l.productId + '×' + l.qty; }),
+      linesTotal: linesTotalSen(),
+      bill: billSen(),
+      useManualAmount: state.useManualAmount,
       queueCount: state.tickets.length,
       selectedOrderId: state.selected ? state.selected.orderId : null,
       hasVerifyToken: !!state.verifyToken,
       customerId: state.customer ? state.customer.customerId : null,
       pointsEarned: state.result ? state.result.pointsEarned : null,
       errorCode: state.errorCode,
-      busy: state.busy,
-      pad: state.pad,
-      padValue: padValue(),
-      padOpen: state.padOpen
+      busy: state.busy
     };
   }
 
   return {
     init: init,
+    loadMenu: loadMenu,
     loadQueue: loadQueue,
     handleCode: handleCode,
-    padPress: padPress,
+    addProduct: addProduct,
+    setLineQty: setLineQty,
+    clearLines: clearLines,
     saveTicket: saveTicket,
-    togglePad: togglePad,
+    beginScan: beginScan,
+    toggleManualAmount: toggleManualAmount,
+    show: show,
     debugState: debugState
   };
 })();

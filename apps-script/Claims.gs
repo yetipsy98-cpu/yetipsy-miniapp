@@ -572,7 +572,13 @@ function openPosTickets(limit) {
 
 /**
  * createPosTicket —— 员工录入一张 foodcourt 单据（这时还不知道是谁）。
- * @param {object} data { amount(sen), externalOrderId?, source?, note? }
+ *
+ * 金额一律由员工确认（收据上的数字才是真的：折扣 / 税都在 foodcourt 算好了）。
+ * items 只是「这张单据卖了什么」的纪录（POS 点餐台点出来的清单），
+ * 不影响积分计算 —— 积分只跟金额有关（§57）。
+ *
+ * @param {object} data { amount(sen), externalOrderId?, source?, note?,
+ *                        items? = [{ nameEN, nameZH, quantity, unitPriceSen }] }
  */
 function createPosTicket(data, token) {
   var ctx = requireStaff(token);
@@ -592,17 +598,47 @@ function createPosTicket(data, token) {
     return err('DUPLICATE_EXTERNAL_ORDER');
   }
 
+  /* 点餐台点出来的品项 → 写成一行字放进 Note（Orders 表不加栏位，升级无痛） */
+  var items = posItemsClean(data && data.items);
+  var staffNote = String((data && data.note) || '').slice(0, 120);
+  var summary = posItemsText(items);
+  var note = summary ? (staffNote ? summary + ' · ' + staffNote : summary) : staffNote;
+
   var order = createMemberTransaction({
     source:          source,
     externalOrderId: externalOrderId,
     amount:          amount,
     createdBy:       ctx.staff.staffId,
     actorType:       'STAFF',
-    note:            String((data && data.note) || '').slice(0, 200)
+    note:            note.slice(0, 200)
   });
 
   audit(ctx.staff.staffId, 'STAFF', 'POS_TICKET', 'ORDER', order.orderId, '', amount);
-  return ok({ ticket: posTicketView(order) });
+  return ok({ ticket: posTicketView(order), items: items });
+}
+
+/** 把点餐台送上来的清单洗干净（数量、字数、项数都设上限） */
+function posItemsClean(raw) {
+  if (!raw || !raw.length) return [];
+  return raw.slice(0, 30).map(function (it) {
+    var nameZH = String((it && it.nameZH) || '').slice(0, 24);
+    var nameEN = String((it && it.nameEN) || '').slice(0, 24);
+    return {
+      nameZH: nameZH,
+      nameEN: nameEN,
+      name: (nameZH || nameEN),
+      quantity: Math.max(1, Math.min(99, Math.round(Number(it && it.quantity) || 1))),
+      unitPriceSen: Math.max(0, Math.round(Number(it && it.unitPriceSen) || 0))
+    };
+  });
+}
+
+/** 清单变一行字：Mojito×2 · Long Island×1 */
+function posItemsText(items) {
+  if (!items || !items.length) return '';
+  return items.map(function (it) {
+    return (it.name || '?') + '×' + it.quantity;
+  }).join(' · ').slice(0, 160);
 }
 
 /**

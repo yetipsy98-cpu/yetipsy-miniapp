@@ -13,15 +13,40 @@
 
 <div class="a-page pos-page">
 
-  <!-- 步骤指示 -->
-  <div class="pos-steps" id="posSteps">
-    <span class="ps on" data-step="queue">① 录单 ENTER</span>
-    <span class="ps"    data-step="scan">② 扫码 SCAN</span>
-    <span class="ps"    data-step="result">③ 进分 GRANT</span>
+  <!-- 分页：点餐台（像 POS 机）/ 待进单队列 -->
+  <div class="pos-tabs">
+    <button class="pt on" id="tabKiosk">
+      点餐台 <span class="pt-en">KIOSK</span>
+    </button>
+    <button class="pt" id="tabQueue">
+      待进单 <span class="pt-en">QUEUE</span>
+      <span class="pt-badge" id="tabQueueCount">0</span>
+    </button>
   </div>
 
-  <!-- ===================== ① 队列 + 键盘 ===================== -->
-  <div id="stepQueue">
+  <!-- ================= ① 点餐台：商品格 → 清单 → 记录单据 ================= -->
+  <div id="stepKiosk">
+
+    <div class="pos-bar">
+      <span class="a-sub" id="kioskStatus">载入中…</span>
+      <button class="chip" id="kioskRefreshBtn">刷新 REFRESH</button>
+    </div>
+
+    <div class="cat-strip kiosk-cats" id="kioskCats"></div>
+    <div class="kiosk-grid" id="kioskGrid"></div>
+
+    <!-- 底部：目前这张单 -->
+    <div class="kiosk-bar" id="kioskBar" style="display:none">
+      <button class="kb-main" id="kioskOpenTicket">
+        <span class="kb-count" id="kbCount">0</span>
+        <span class="kb-text">已点 <span class="kb-total" id="kbTotal">RM 0.00</span></span>
+      </button>
+      <button class="kb-go" id="kioskTicketBtn">清单 TICKET</button>
+    </div>
+  </div>
+
+  <!-- ================= ② 待进单队列 ================= -->
+  <div id="stepQueue" style="display:none">
 
     <div class="pos-stats">
       <div class="dash-card">
@@ -48,63 +73,11 @@
     </div>
     <div id="queueBody"></div>
 
-    <!-- POS 键盘：录入 foodcourt 单据（单号 / 金额照单据抄一次） -->
-    <div class="pad" id="pad">
-      <button class="pad-head" id="padToggle">
-        <span class="pad-head-left">
-          <span class="a-label" style="margin:0">记录 FOODCOURT 单据</span>
-          <span class="pad-hint">照收据抄一次 · 不是帮顾客点单</span>
-        </span>
-        <span class="pad-head-right">
-          <span class="pad-peek" id="padPeek">RM 0.00</span>
-          <span class="pad-caret">▾</span>
-        </span>
-      </button>
-
-      <div class="pad-body" id="padBody">
-        <input class="a-input" id="ticketNoInput" placeholder="单据编号（收据上那串）FC8231"
-               maxlength="30" autocomplete="off" inputmode="text">
-
-        <div class="pad-amount">
-          <span class="pa-cur">RM</span>
-          <span class="pa-val" id="padAmount">0.00</span>
-          <button class="pad-clr" id="padClear">清空 CLR</button>
-        </div>
-
-        <div class="pad-keys" id="padKeys">
-          <button class="pk" data-key="1">1</button>
-          <button class="pk" data-key="2">2</button>
-          <button class="pk" data-key="3">3</button>
-          <button class="pk" data-key="4">4</button>
-          <button class="pk" data-key="5">5</button>
-          <button class="pk" data-key="6">6</button>
-          <button class="pk" data-key="7">7</button>
-          <button class="pk" data-key="8">8</button>
-          <button class="pk" data-key="9">9</button>
-          <button class="pk" data-key=".">
-            <span class="pk-sub">POINT</span>.
-          </button>
-          <button class="pk" data-key="0">0</button>
-          <button class="pk back" data-key="del">⌫</button>
-        </div>
-
-        <div class="pad-fields">
-          <input class="a-input" id="ticketNoteInput" placeholder="备注（选填）4 号桌"
-                 maxlength="60" autocomplete="off">
-        </div>
-
-        <button class="big-action" id="saveTicketBtn">
-          记录单据 SAVE RECEIPT
-          <span class="ba-sub">进「待进单」队列 · 顾客出示会员码时才进分</span>
-        </button>
-      </div>
-    </div>
-
     <div class="a-section-title">今日已进单 TODAY</div>
     <div id="todayBody"></div>
   </div>
 
-  <!-- ===================== ② 扫会员码 ===================== -->
+  <!-- ================= ③ 扫会员码 ================= -->
   <div id="stepScan" style="display:none">
     <div class="a-section-title" style="margin-top:0">② 扫顾客会员码 SCAN MEMBER</div>
 
@@ -131,7 +104,7 @@
     <button class="btn btn-ghost mt-16" id="backToQueueBtn" style="width:100%">← 回待进单 BACK</button>
   </div>
 
-  <!-- ===================== ③ 确认进分 ===================== -->
+  <!-- ================= ④ 确认进分 ================= -->
   <div id="stepConfirm" style="display:none">
     <div class="a-section-title" style="margin-top:0">③ 确认进分 CONFIRM</div>
 
@@ -147,7 +120,7 @@
     <button class="btn btn-ghost mt-8" id="rescanBtn" style="width:100%">重新扫码 RESCAN</button>
   </div>
 
-  <!-- ===================== ④ 结果 ===================== -->
+  <!-- ================= ⑤ 结果 ================= -->
   <div id="stepResult" style="display:none">
     <div class="a-section-title" style="margin-top:0">✓ 已进单 DONE</div>
 
@@ -172,6 +145,46 @@
     <button class="btn btn-primary mt-16" id="nextTicketBtn" style="width:100%">下一张 NEXT TICKET</button>
   </div>
 
+</div>
+
+<!-- ================= 清单抽屉（POS 机的订单清单） ================= -->
+<div class="pos-sheet" id="ticketSheet" style="display:none">
+  <div class="pos-sheet-inner">
+    <div class="ps-head">
+      <div>
+        <div class="ps-title">清单 <span class="tiny muted-2">TICKET</span></div>
+        <div class="a-sub" id="ticketSub">—</div>
+      </div>
+      <button class="ps-close" id="ticketSheetClose">✕</button>
+    </div>
+
+    <div class="ps-body" id="ticketLines"></div>
+
+    <div class="ps-total">
+      <span>合计 TOTAL</span>
+      <b id="ticketTotal">RM 0.00</b>
+    </div>
+
+    <div class="ps-fields">
+      <input class="a-input" id="ticketNoInput" placeholder="单据编号（选填）FC8231"
+             maxlength="30" autocomplete="off">
+      <input class="a-input" id="ticketNoteInput" placeholder="备注（选填）4 号桌"
+             maxlength="60" autocomplete="off">
+    </div>
+
+    <label class="ps-check">
+      <input type="checkbox" id="manualAmountToggle">
+      <span>收据金额跟这里不同？手动输入收据上的金额</span>
+    </label>
+    <input class="a-input" id="manualAmountInput" inputmode="decimal"
+           placeholder="例如 86.00" style="display:none">
+
+    <button class="big-action" id="saveTicketBtn">
+      记录单据 SAVE RECEIPT
+      <span class="ba-sub">进「待进单」→ 顾客出示会员码时才进分</span>
+    </button>
+    <button class="chip ps-clear" id="ticketClearBtn">清空清单 CLEAR</button>
+  </div>
 </div>
 
 <script src="../js/config.js"></script>
