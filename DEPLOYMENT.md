@@ -1,4 +1,4 @@
-# YETIPSY MINI APP 2.1.9 — 部署教学（零基础版）
+# YETIPSY MINI APP 2.1.10 — 部署教学（零基础版）
 
 > 这份文件假设你 **完全不会写程式**。
 > 只要照着做，每一步都做了什么都会说明。
@@ -88,7 +88,7 @@ YETIPSY MINI APP DATABASE
 > 一个档案里已经包含 Config / Database / Menu / Claims …全部 20 个段落
 > （每个段落开头写着 `/* ===== [n/20] Xxx.gs ===== */`，Ctrl+F 搜 `===== [` 可跳段）。
 
-贴完之后检查：档案最上面写着 `YETIPSY MINI APP 2.1.9` 就对了。
+贴完之后检查：档案最上面写着 `YETIPSY MINI APP 2.1.10` 就对了。
 
 ## B3. 建立资料库
 
@@ -630,8 +630,8 @@ https://你的账号.github.io/yetipsy-miniapp/
 **贴完怎么知道是不是最新版？**
 用员工账号进 **MORE（更多）页** → 最下面会写后端版本：
 
-- `✓ 后端 v2.1.9 · 已是最新版`
-- `⚠ 后端 vX ≠ 前端 v2.1.9 · 请重新贴 Apps Script`（X 是还在跑的旧版）
+- `✓ 后端 v2.1.10 · 已是最新版`
+- `⚠ 后端 vX ≠ 前端 v2.1.10 · 请重新贴 Apps Script`（X 是还在跑的旧版）
 
 > ⚠️ 只有在 Apps Script 里直接改程式码，GitHub 上的版本就会跟线上不同步。
 > 建议一律「改 GitHub → push」，让 GitHub 永远是唯一来源。
@@ -739,7 +739,7 @@ Android：设定 → 清除浏览器快取，或重新加入主画面。
 > `npm run check:backend` 会顾着两者不要脱节。
 
 ```
-YETIPSY MINI APP 2.1.9 · FOODCOURT POS EDITION
+YETIPSY MINI APP 2.1.10 · FOODCOURT POS EDITION
 Mobile ordering + retention. 价格一律由后端决定。
 ```
 

@@ -47,6 +47,8 @@ var ADMIN_POS = (function () {
     pollSeconds: 8,
     paymentMethod: 'CASH',
     hits: [],                // 搜到的会员（顾客没有会员码时用）
+    knownTickets: null,      // 待进单看过的单据（新的才播报「您有新订单」）
+    muted: false,
     signature: ''
   };
 
@@ -130,10 +132,22 @@ var ADMIN_POS = (function () {
 
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) { stopPolling(); MEMBER_SCANNER.stop(); }
-      else if (state.tab === 'queue') startPolling();
+      else if (state.tab === 'kiosk' || state.tab === 'queue') startPolling();
     });
 
     /* 连线状态：不稳的时候只显示一个小提示，不要把整页变错误 */
+    /* 2.1.10 待进单有新的也要「听得到」：跟订单看板共用同一个静音开关 */
+    state.muted = localStorage.getItem('yt_board_mute') === '1';
+    UI.setVoice(!state.muted);
+    on('posMuteBtn', function () {
+      state.muted = !state.muted;
+      localStorage.setItem('yt_board_mute', state.muted ? '1' : '0');
+      UI.setVoice(!state.muted);
+      renderMuteBtn();
+      UI.toast(state.muted ? '已静音 MUTED' : '声音开启 SOUND ON', 'success', 1600);
+    });
+    renderMuteBtn();
+
     /* 连线提示 = 这一页自己的载入结果 + 全局网络状态（见 UI.netPill） */
     API.onNetwork(function (st) { UI.netPill(state.loadFailed, st); });
 
@@ -190,7 +204,11 @@ var ADMIN_POS = (function () {
     var tabs = document.querySelector('.pos-tabs');
     if (tabs) tabs.style.display = (tab === 'scan' || tab === 'confirm' || tab === 'result') ? 'none' : '';
 
-    if (tab === 'queue') startPolling(); else stopPolling();
+    /* 2.1.10 点餐台也要顾到「待进单」：一直轮询（看不到就 1 秒后再看），
+       有新单据才会播报「您有新订单」；只有扫会员码 / 确认 / 结果那几步停下来，
+       避免员工正在处理时被打断。 */
+    if (tab === 'scan' || tab === 'confirm' || tab === 'result') stopPolling();
+    else startPolling();
     window.scrollTo(0, 0);
   }
 
@@ -827,7 +845,18 @@ var ADMIN_POS = (function () {
       state.errorCode = null;
       state.loadFailed = false;
       UI.netPill(false, 'ok');
-      state.tickets = res.data.pending || [];
+
+      var pending = res.data.pending || [];
+      var ids = pending.map(function (t) { return t.orderId; });
+      if (state.knownTickets === null) {
+        state.knownTickets = ids;              // 第一次载入不播报，不然一开页面就吵
+      } else {
+        var fresh = ids.filter(function (id) { return state.knownTickets.indexOf(id) === -1; });
+        state.knownTickets = ids;
+        if (fresh.length && !state.muted && !document.hidden) UI.announceNewOrder(fresh.length);
+      }
+
+      state.tickets = pending;
       state.today = res.data.today || null;
       state.pollSeconds = Number(res.data.pollSeconds) || 8;
       renderQueue(false);
@@ -1251,6 +1280,13 @@ var ADMIN_POS = (function () {
 
   /* ---------------- 测试用 ---------------- */
 
+  function renderMuteBtn() {
+    var btn = document.getElementById('posMuteBtn');
+    if (!btn) return;
+    btn.innerHTML = state.muted ? '🔇 静音 MUTED' : '🔔 声音 SOUND';
+    btn.className = 'chip' + (state.muted ? '' : ' chip-on');
+  }
+
   function debugState() {
     return {
       tab: state.tab,
@@ -1267,6 +1303,7 @@ var ADMIN_POS = (function () {
       hasVerifyToken: !!state.verifyToken,
       paymentMethod: state.paymentMethod,
       memberHits: state.hits.length,
+      muted: state.muted,
       customerId: state.customer ? state.customer.customerId : null,
       pointsEarned: state.result ? state.result.pointsEarned : null,
       errorCode: state.errorCode,

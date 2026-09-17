@@ -36,6 +36,7 @@ var ADMIN_ORDERBOARD = (function () {
 
   function init() {
     state.muted = localStorage.getItem(MUTE_KEY) === '1';
+    UI.setVoice(!state.muted);
     /* 连线提示 = 这一页自己的载入结果 + 全局网络状态（见 UI.netPill） */
     API.onNetwork(function (st) { UI.netPill(state.loadFailed, st); });
     bindEvents();
@@ -50,6 +51,15 @@ var ADMIN_ORDERBOARD = (function () {
 
     var pause = document.getElementById('pauseBtn');
     if (pause) pause.addEventListener('click', onPauseToggle);
+
+    var test = document.getElementById('testVoiceBtn');
+    if (test) test.addEventListener('click', function () {
+      UI.unlockVoice();
+      var spoke = UI.say('您有新订单', { force: true });
+      UI.voiceBanner('🔔 您有新订单');
+      if (!spoke) { beep(1); UI.toast('这支装置不能念中文，改用提示音 / Using beep', 'error', 2600); }
+      else UI.toast('有声音吗？没有的话把装置的媒体音量打开', 'success', 2600);
+    });
 
     var refresh = document.getElementById('refreshBtn');
     if (refresh) refresh.addEventListener('click', function () {
@@ -101,7 +111,13 @@ var ADMIN_ORDERBOARD = (function () {
           return state.knownIds && state.knownIds.indexOf(id) === -1;
         });
         state.knownIds = allIds();
-        if (fresh.length && !state.muted && !document.hidden) beep(fresh.length);
+        if (fresh.length && !state.muted && !document.hidden) {
+          /* 2.1.10 新订单要「听得到 + 看得到」：
+             先讲「您有新订单」＋跳大字横幅；浏览器讲不出话（没有语音
+             合成 / 还没解锁）才退回哔声，所以一定有提示。 */
+          var spoke = UI.announceNewOrder(fresh.length);
+          if (!spoke) beep(fresh.length);
+        }
       }
 
       render();
@@ -182,6 +198,7 @@ var ADMIN_ORDERBOARD = (function () {
     var btn = document.getElementById('muteBtn');
     if (!btn) return;
     btn.innerHTML = state.muted ? '🔇 静音 MUTED' : '🔔 声音 SOUND';
+    UI.setVoice(!state.muted);
     btn.className = 'chip' + (state.muted ? '' : ' chip-on');
   }
 
@@ -214,18 +231,90 @@ var ADMIN_ORDERBOARD = (function () {
     }
   }
 
+  /**
+   * 状态推进（2.1.10 起「按下去立刻动」）
+   * ---------------------------------------------------------
+   * 以前：按一下 → 按钮锁住 → 等后端 → 再抓一次看板（两个来回，
+   *       现场要等 1~3 秒，感觉就是「点了会延迟」）。
+   * 现在：① 立刻把卡片移到下一栏（乐观更新，画面马上反应）
+   *       ② 一个请求
+   *       ③ 后端把最新看板快照一起回传 → 直接用，不再多抓一次
+   *       ④ 只有失败才回头重抓（可能别的员工改过了）
+   */
+  var LANE_OF_ACTION = {
+    acceptOrder: 'CONFIRMED',
+    acceptAndStart: 'PREPARING',
+    startPreparing: 'PREPARING',
+    markReady: 'READY',
+    completeOrder: 'DONE',
+    cancelAppOrder: 'DONE'
+  };
+
+  /** 把一张卡片先搬到目标栏（回传旧的栏位，失败时搬回去） */
+  function moveCardLocal(appOrderId, toLane) {
+    var from = null, item = null;
+    Object.keys(state.lanes).forEach(function (key) {
+      var list = state.lanes[key] || [];
+      for (var i = 0; i < list.length; i++) {
+        if (list[i].appOrderId === appOrderId) {
+          from = key;
+          item = list[i];
+          list.splice(i, 1);
+          break;
+        }
+      }
+    });
+    if (!item) return null;
+    if (toLane === 'DONE') {
+      state.laneSig[from] = null;              // 强制重画那一栏
+      return { from: from, item: item };
+    }
+    /* 搬过去时先把状态改成目标状态，计时 / 徽章才会跟着对 */
+    item.orderStatus = toLane === 'CONFIRMED' ? 'CONFIRMED'
+                     : toLane === 'PREPARING' ? 'PREPARING' : 'READY';
+    state.lanes[toLane] = state.lanes[toLane] || [];
+    state.lanes[toLane].unshift(item);
+    state.laneSig[from] = null;
+    state.laneSig[toLane] = null;
+    return { from: from, item: item };
+  }
+
+  /** 后端回来的快照：直接画，不用第二个请求 */
+  function applySnapshot(snap) {
+    if (!snap || !snap.lanes) return false;
+    state.lanes = snap.lanes;
+    state.today = snap.today;
+    state.ordering = snap.ordering;
+    if (snap.pollSeconds) state.pollSeconds = Number(snap.pollSeconds) || state.pollSeconds;
+    state.ticking = 0;
+    state.knownIds = allIds();               // 自己刚处理过的单不算「新订单」
+    state.laneSig = {};                      // 快照来了就整块重画一次（很快）
+    render();
+    return true;
+  }
+
   function act(appOrderId, action, label) {
     if (state.busy[appOrderId]) return;
+    var target = LANE_OF_ACTION[action];
+    var moved = null;
+
     state.busy[appOrderId] = true;
+    if (target) moved = moveCardLocal(appOrderId, target);
     setCardBusy(appOrderId, true, label);
+    render();
 
     dropOrdersCache();
-    API.staff[action](appOrderId).then(function (res) {
+    var call = action === 'acceptAndStart'
+      ? API.staff.acceptOrder(appOrderId, { startPreparing: true })
+      : API.staff[action](appOrderId);
+
+    call.then(function (res) {
       state.busy[appOrderId] = false;
       if (!res.success) {
-        setCardBusy(appOrderId, false);
+        /* 失败：搬回原位（可能已经被别人改过，所以重抓最准） */
         UI.toast(res.error.message, 'error', 3500);
-        load(false);                 // 状态可能已被别的员工改过
+        state.laneSig = {};
+        load(false);
         return;
       }
       if (action === 'completeOrder') {
@@ -235,7 +324,11 @@ var ADMIN_ORDERBOARD = (function () {
           : '完成 · +' + d.pointsIssued + ' 积分' + (d.reward ? ' · 有 Reward' : ''),
           'success', 3200);
       }
-      load(false);
+      /* 后端回传的最新看板直接用（没有就自己抓一次） */
+      if (!applySnapshot(res.data && res.data.snapshot)) {
+        state.laneSig = {};
+        load(false);
+      }
     });
   }
 
@@ -257,7 +350,7 @@ var ADMIN_ORDERBOARD = (function () {
         UI.toast(res.data.walletUsed > 0
           ? '已收款 · 钱包扣 ' + UI.money(res.data.walletUsed)
           : '已收款 PAID', 'success');
-        load(false);
+        if (!applySnapshot(res.data && res.data.snapshot)) { state.laneSig = {}; load(false); }
       });
     });
   }
@@ -278,7 +371,7 @@ var ADMIN_ORDERBOARD = (function () {
         }
         UI.toast(res.data.refunded > 0
           ? '已取消 · 退回 ' + UI.money(res.data.refunded) : '已取消 CANCELLED', 'success');
-        load(false);
+        if (!applySnapshot(res.data && res.data.snapshot)) { state.laneSig = {}; load(false); }
       });
     });
   }
@@ -387,7 +480,8 @@ var ADMIN_ORDERBOARD = (function () {
       var count = section.querySelector('.lane-count');
       if (count) count.textContent = list.length;
 
-      var sig = JSON.stringify(list);
+      var sig = JSON.stringify(list) + '|' +
+        list.map(function (o) { return state.busy[o.appOrderId] ? 1 : 0; }).join('');
       if (state.laneSig[lane.key] === sig) return;
       state.laneSig[lane.key] = sig;
 
@@ -447,7 +541,8 @@ var ADMIN_ORDERBOARD = (function () {
     /* §19 每栏一个主要动作，按钮大、一次点击 */
     var main = '';
     if (lane === 'NEW') {
-      main = '<button class="big-action" data-act="acceptOrder">接单 ACCEPT</button>';
+      /* 2.1.10 员工要的是「确认后直接进制作」：一次按下去 = 接单 + 制作中 */
+      main = '<button class="big-action" data-act="acceptAndStart">接单并制作 ACCEPT &amp; START</button>';
     } else if (lane === 'CONFIRMED') {
       main = '<button class="big-action" data-act="startPreparing">开始制作 START</button>';
     } else if (lane === 'PREPARING') {
@@ -458,7 +553,13 @@ var ADMIN_ORDERBOARD = (function () {
         : '<button class="big-action" data-pay="1">收款并标记 PAID</button>';
     }
 
-    return '<article class="board-card" data-card="' + UI.esc(o.appOrderId) + '">' +
+    var busy = !!state.busy[o.appOrderId];
+    if (busy) {
+      main = '<button class="big-action" disabled>处理中…</button>';
+    }
+
+    return '<article class="board-card' + (busy ? ' is-busy' : '') +
+      '" data-card="' + UI.esc(o.appOrderId) + '">' +
       '<div class="bc-top">' +
         '<span class="bc-num">' + UI.esc(o.orderNumber) + '</span>' +
         '<span class="bc-wait" data-wait="' + (o.waitingSeconds || 0) + '">' +
@@ -497,6 +598,7 @@ var ADMIN_ORDERBOARD = (function () {
       salesToday: state.today ? state.today.sales : 0,
       pollSeconds: state.pollSeconds,
       muted: state.muted,
+      voice: !!(window.speechSynthesis),
       polling: !!poller,
       paused: !!(state.ordering && state.ordering.paused)
     };
@@ -505,8 +607,10 @@ var ADMIN_ORDERBOARD = (function () {
   return {
     init: init,
     load: load,
+    act: act,
     stopTimers: stopTimers,
     toggleMute: toggleMute,
+    announceTest: function () { return UI.announceNewOrder(1); },
     debugState: debugState
   };
 

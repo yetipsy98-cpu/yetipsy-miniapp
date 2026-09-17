@@ -441,6 +441,120 @@ var UI = (function () {
   }
 
   /* =========================================================
+     语音播报 + 大字提示（2.1.10）
+     ---------------------------------------------------------
+     新订单来的时候员工要「听得到 + 看得到」：
+       UI.say('您有新订单')        → 讲出来（浏览器的语音合成，免下载）
+       UI.announceNewOrder(2)     → 讲「您有 2 个新订单」＋画面跳大字横幅
+     浏览器规则：语音通常要页面先被点过才准出声，
+     所以 UI.say 会在第一次点画面时自动「解锁」（讲一个空白字串）。
+     ========================================================= */
+  var voiceOn = true;          // 页面可以用 UI.setVoice(false) 关掉
+  var unlocked = false;
+
+  function speech() {
+    return (typeof window !== 'undefined' && window.speechSynthesis) || null;
+  }
+
+  /** 挑一个中文声音；没有就随便挑一个（英文声音唸中文数字也还能懂） */
+  function pickVoice() {
+    var syn = speech();
+    if (!syn || !syn.getVoices) return null;
+    var list = syn.getVoices() || [];
+    if (!list.length) return null;
+    var want = ['zh-CN', 'zh-TW', 'zh-HK', 'zh'];
+    for (var w = 0; w < want.length; w++) {
+      for (var i = 0; i < list.length; i++) {
+        if (String(list[i].lang || '').toLowerCase().indexOf(want[w].toLowerCase()) === 0) return list[i];
+      }
+    }
+    for (var j = 0; j < list.length; j++) {
+      if (String(list[j].lang || '').toLowerCase().indexOf('zh') === 0) return list[j];
+    }
+    return null;
+  }
+
+  /** 第一次点画面时把语音解锁（Chrome 要这个动作才肯出声） */
+  function unlockVoice() {
+    if (unlocked) return;
+    unlocked = true;
+    var syn = speech();
+    if (!syn) return;
+    try {
+      var u = new window.SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      u.lang = 'zh-CN';
+      syn.speak(u);
+    } catch (e) {}
+    document.removeEventListener('touchstart', unlockVoice);
+    document.removeEventListener('pointerdown', unlockVoice);
+    document.removeEventListener('keydown', unlockVoice);
+  }
+
+  function bindUnlock() {
+    try {
+      document.addEventListener('touchstart', unlockVoice, { passive: true });
+      document.addEventListener('pointerdown', unlockVoice);
+      document.addEventListener('keydown', unlockVoice);
+    } catch (e) {}
+  }
+
+  function setVoice(on) { voiceOn = !!on; }
+
+  /**
+   * 讲一句话。成功回 true；浏览器没有语音（或说不出话）回 false，
+   * 呼叫方可以改用「哔」声。
+   */
+  function say(text, options) {
+    var syn = speech();
+    if (!syn || !window.SpeechSynthesisUtterance) return false;
+    if (options && options.force !== true && !voiceOn) return false;
+    try {
+      if (syn.speaking) { syn.cancel(); }          // 不要排队排到天边
+      var u = new window.SpeechSynthesisUtterance(String(text));
+      var v = pickVoice();
+      u.lang = (v && v.lang) || 'zh-CN';
+      if (v) u.voice = v;
+      u.rate = (options && options.rate) || 1;
+      u.pitch = 1;
+      u.volume = 1;
+      syn.speak(u);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** 大字横幅：🔔 您有新订单（3.5 秒后自己收） */
+  function banner(text) {
+    var node = document.getElementById('voiceBanner');
+    if (!node) {
+      node = document.createElement('div');
+      node.id = 'voiceBanner';
+      node.className = 'voice-banner';
+      document.body.appendChild(node);
+    }
+    node.innerHTML = '<div class="vb-text">' + esc(text) + '</div>';
+    node.classList.add('on');
+    if (node._t) clearTimeout(node._t);
+    node._t = setTimeout(function () { node.classList.remove('on'); }, 3500);
+  }
+
+  /**
+   * 新订单：讲出来 + 跳横幅。
+   * count 1 → 「您有新订单」／多于 1 → 「您有 N 个新订单」
+   */
+  function announceNewOrder(count) {
+    var n = Math.max(1, Number(count) || 1);
+    var text = n > 1 ? '您有 ' + n + ' 个新订单' : '您有新订单';
+    var spoke = say(text);
+    banner(n > 1 ? '🔔 ' + text + '（' + n + '）' : '🔔 ' + text);
+    return spoke;
+  }
+
+  bindUnlock();
+
+  /* =========================================================
      连线提示（每页一个 #netPill）
      ---------------------------------------------------------
      pageFailed = 这一页自己最后一次载入有没有失败
@@ -468,6 +582,11 @@ var UI = (function () {
   }
 
   return {
+    say: say,
+    announceNewOrder: announceNewOrder,
+    setVoice: setVoice,
+    unlockVoice: unlockVoice,
+    voiceBanner: banner,
     netPill: netPill,
     money: money,
     moneyPlain: moneyPlain,

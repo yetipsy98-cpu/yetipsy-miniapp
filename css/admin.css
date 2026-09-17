@@ -570,3 +570,31 @@ body.admin.has-admin-nav .pos-page { padding-bottom: 132px; }
   .oi-btns { flex: 0 0 auto; }
   .oi-btns .chip { flex: 0 0 auto; }
 }
+
+/* =============================================================
+   2.1.10 · 新订单语音提示 + 状态切换立刻反应
+   ============================================================= */
+
+/* 大字横幅：新订单来的时候整页看得到（3.5 秒后自己收） */
+.voice-banner {
+  position: fixed; left: 0; right: 0; top: 0; z-index: 200;
+  display: none; justify-content: center;
+  padding: 14px 12px calc(14px + env(safe-area-inset-top, 0px));
+  background: linear-gradient(180deg, rgba(229,183,105,.97), rgba(229,183,105,.86));
+  color: #14100A; text-align: center;
+  box-shadow: 0 12px 30px rgba(0,0,0,.5);
+  animation: vb-drop .22s cubic-bezier(.2,.9,.3,1);
+  pointer-events: none;
+}
+.voice-banner.on { display: flex; }
+.voice-banner .vb-text {
+  font-size: 24px; font-weight: 800; letter-spacing: 2px;
+  animation: vb-pulse .7s ease-in-out infinite alternate;
+}
+@keyframes vb-drop { from { transform: translateY(-100%); } to { transform: none; } }
+@keyframes vb-pulse { from { transform: scale(1); } to { transform: scale(1.045); } }
+
+/* 正在送状态的那张卡：看得出来在忙，但位置已经先移好了 */
+.board-card.is-busy { opacity: .62; }
+.board-card.is-busy .big-action { animation: bc-wait .9s ease-in-out infinite alternate; }
+@keyframes bc-wait { from { opacity: .55; } to { opacity: 1; } }

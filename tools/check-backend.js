@@ -349,9 +349,20 @@ function checkEndToEnd() {
     return;
   }
 
-  okData(post('acceptOrder', { appOrderId: appOrderId }, staffToken), 'acceptOrder');
-  okData(post('startPreparing', { appOrderId: appOrderId }, staffToken), 'startPreparing');
-  okData(post('markReady', { appOrderId: appOrderId }, staffToken), 'markReady');
+  /* 2.1.10 员工按一下 = 接单 + 进制作（一个请求），而且回传最新看板快照 */
+  const accepted = okData(post('acceptOrder',
+    { appOrderId: appOrderId, startPreparing: true }, staffToken), 'acceptOrder（直接进制作）');
+  check('接单带 startPreparing → 状态直接是 PREPARING（不用按第二次）',
+    !!accepted && accepted.order && accepted.order.orderStatus === 'PREPARING',
+    accepted && accepted.order && accepted.order.orderStatus);
+  check('接单回传里带看板快照（前端不用再抓一次）',
+    !!accepted && !!accepted.snapshot && !!accepted.snapshot.lanes,
+    accepted && Object.keys(accepted.snapshot || {}).join(','));
+
+  const ready = okData(post('markReady', { appOrderId: appOrderId }, staffToken), 'markReady');
+  check('做好了回传也带快照',
+    !!ready && !!ready.snapshot && !!ready.snapshot.lanes && ready.order.orderStatus === 'READY',
+    ready && ready.order && ready.order.orderStatus);
   /* §54：收款（这一步才会动钱包）→ 完成（这一步才发积分） */
   okData(post('markPaymentPaid', { appOrderId: appOrderId, paymentMethod: 'CASH' }, staffToken),
     'markPaymentPaid（收款）');

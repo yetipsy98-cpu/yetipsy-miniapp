@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#0B0B0B">
 <title>YETIPSY STAFF — 订单看板</title>
 <link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
-<link rel="stylesheet" href="../css/app.css?v=2.1.9">
-<link rel="stylesheet" href="../css/admin.css?v=2.1.9">
+<link rel="stylesheet" href="../css/app.css?v=2.1.10">
+<link rel="stylesheet" href="../css/admin.css?v=2.1.10">
 <style>
 /* ---- 看板（§19 三栏，大按钮） ---- */
 .board-bar {
@@ -72,6 +72,8 @@
   <div class="board-bar">
     <span class="a-sub" id="boardStatus">载入中…</span>
     <button class="chip" id="muteBtn" style="margin-left:auto">🔔 声音 SOUND</button>
+    <!-- 试听：按一下会念「您有新订单」（顺便解锁浏览器语音） -->
+    <button class="chip" id="testVoiceBtn">🔊 试听 TEST</button>
     <span class="net-pill" id="netPill" style="display:none"></span>
     <button class="chip" id="refreshBtn">刷新 REFRESH</button>
     <button class="chip" id="pauseBtn">暂停接单 PAUSE</button>
@@ -83,12 +85,12 @@
 
 </div>
 
-<script src="../js/config.js?v=2.1.9"></script>
-<script src="../js/api.js?v=2.1.9"></script>
-<script src="../js/auth.js?v=2.1.9"></script>
-<script src="../js/ui.js?v=2.1.9"></script>
-<script src="../js/admin.js?v=2.1.9"></script>
-<script src="../js/admin-orderboard.js?v=2.1.9"></script>
+<script src="../js/config.js?v=2.1.10"></script>
+<script src="../js/api.js?v=2.1.10"></script>
+<script src="../js/auth.js?v=2.1.10"></script>
+<script src="../js/ui.js?v=2.1.10"></script>
+<script src="../js/admin.js?v=2.1.10"></script>
+<script src="../js/admin-orderboard.js?v=2.1.10"></script>
 <script>
   if (ADMIN.requireAuth()) {
     ADMIN.renderShell({ title: 'ORDER BOARD' });

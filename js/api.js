@@ -111,8 +111,11 @@ var API = (function () {
 
   /* 轮询用：快取比这个还新就不要再问后端（省掉一半以上的请求 → 现场稳很多） */
   var FRESH_MS = {
-    getActiveOrders: 6000,
-    getPosQueue:     6000,
+    /* 看板 / 待进单：每次轮询都往后端问一次。
+       新订单早一秒看到就是早一秒开始做 —— 这两个动作本来就只有
+       看板 / POS 在轮询（各 8 秒一次），不会增加后端负担。 */
+    getActiveOrders: 0,
+    getPosQueue:     0,
     getAppOrder:     4000,
     getMyOrders:    15000,
     getDashboard:   10000,
@@ -799,8 +802,14 @@ var API = (function () {
     getActiveOrders: function () {
       return call('getActiveOrders', {}, { sessionType: 'staff', cache: true });
     },
-    acceptOrder: function (appOrderId) {
-      return call('acceptOrder', { appOrderId: appOrderId }, { sessionType: 'staff' });
+    /**
+     * 接单。extra.startPreparing = true 时后端会在同一个请求里
+     * 直接接到「制作中」（2.1.10：员工按一下就好，也少一个来回）。
+     */
+    acceptOrder: function (appOrderId, extra) {
+      var d = { appOrderId: appOrderId };
+      if (extra && extra.startPreparing) d.startPreparing = true;
+      return call('acceptOrder', d, { sessionType: 'staff' });
     },
     startPreparing: function (appOrderId) {
       return call('startPreparing', { appOrderId: appOrderId }, { sessionType: 'staff' });
