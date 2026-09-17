@@ -58,7 +58,11 @@ YETIPSY MINI APP DATABASE
 
 ## B2. 把后端程式码放进 Apps Script
 
-后端程式码全部在这个 GitHub repo 的 **`apps-script/`** 资料夹（16 个档案）。
+后端程式码全部在这个 GitHub repo 的 **`apps-script/`** 资料夹（20 个 `.gs` 档案）。
+
+> **已经在跑 1.x 的老板**：新增的 5 个档案（`Menu` `Checkout` `AppOrders`
+> `OrderBoard` `Analytics`）是 2.0 点单用的，**照贴就好，不要动旧档案的内容**；
+> 贴完之后请跳到 **PART B-2（升级到 2.0）**，**不要**再跑 `setupDatabase()`。
 有两种方式，选一种就好：
 
 ### 方式一（推荐）：GitHub Actions 自动推送
@@ -74,21 +78,26 @@ YETIPSY MINI APP DATABASE
 
 | 顺序 | 档案名称 | 顺序 | 档案名称 |
 |---|---|---|---|
-| 1 | `Config` | 9 | `Customers` |
-| 2 | `Utils` | 10 | `Orders` |
-| 3 | `Database` | 11 | `Claims` |
-| 4 | `Security` | 12 | `Promotions` |
-| 5 | `Audit` | 13 | `Admin` |
-| 6 | `Points` | 14 | `Auth` |
-| 7 | `Rewards` | 15 | `Code` |
-| 8 | `Wallet` | | |
+| 1 | `Config` | 11 | `Menu` ★2.0 |
+| 2 | `Utils` | 12 | `Checkout` ★2.0 |
+| 3 | `Database` | 13 | `AppOrders` ★2.0 |
+| 4 | `Security` | 14 | `OrderBoard` ★2.0 |
+| 5 | `Audit` | 15 | `Analytics` ★2.0 |
+| 6 | `Points` | 16 | `Claims` |
+| 7 | `Rewards` | 17 | `Promotions` |
+| 8 | `Wallet` | 18 | `Admin` |
+| 9 | `Customers` | 19 | `Auth` |
+| 10 | `Orders` | 20 | `Code` |
 
 3. 打开专案里的 `apps-script/` 资料夹，每个 `.gs` 档案：
    - 用记事本打开 → 全选复制（Ctrl+A → Ctrl+C）
    - 贴到 Apps Script 对应名称的档案里（覆盖原内容）
 4. 每贴完一个档案按 **💾 储存**（Ctrl+S）
 
-> ⚠️ 15 个档案全部贴完再继续，少一个系统会出错。
+> ⚠️ 20 个档案全部贴完再继续，少一个系统会出错。
+>
+> 不想一个一个贴：repo 里的 **`APPS-SCRIPT-COPY-PASTE.md`** 已经把 20 个档案
+> 依顺序整理成一份，每个档案一节，照着一节一节贴就好。
 
 ## B3. 建立资料库
 
@@ -112,6 +121,97 @@ setupDatabase() done. created sheets: Settings, Sequences, Customers, ...
 
 > `setupDatabase()` 只建立资料表与预设设置，**不会**帮你建立账号，
 > 也不会产生随机密码。老板账号在 PART C 用 `bootstrapOwner()` 建立。
+
+## PART B-2 — 升级到 2.0（★ 已经在跑 1.x 的老板看这里）
+
+如果你**已经有会员资料**（Customers / Wallet / Points 里已经有东西），
+20 个档案贴完之后：
+
+### ⚠️ 不要再跑 `setupDatabase()`
+
+`setupDatabase()` 是给**全新**资料库用的。它会重写每张表的表头，
+而且当某张表的实际栏位数比程式定义的多时，会**删掉多出来的栏**
+（连同那一栏的资料）。
+
+> 实测：在没有手动加过栏的资料库上重跑 `setupDatabase()`，会员 / 钱包 /
+> Claim / 商品 / 设置都没有掉。但只要有人在 Sheet 上手动加过栏，
+> 或改过表头，那些资料就会被删掉。所以升级一律走下面这个函式。
+
+### ✅ 改跑 `upgradeToV2({ backup: true })`
+
+1. 函式下拉选单选 **`upgradeToV2`** → 按 **执行（Run）**
+   （第一次会要求授权，跟前面一样）
+2. 或者用「临时函式」贴这段再执行，可以先做一份完整备份：
+
+```javascript
+function runUpgrade() {
+  var result = upgradeToV2({ backup: true });
+  Logger.log(JSON.stringify(result, null, 2));
+}
+```
+
+3. 看 **记录（Logs）**。回传是 `{ success, data, error }`，
+   重点在 `data` 里面（以下是实跑出来的真实形状）：
+
+```json
+{
+  "success": true,
+  "data": {
+    "upgraded": true,
+    "version": "2.0",
+    "backup": { "ok": true },
+    "createdSheets": ["Categories", "Products", "ProductOptions", "AppOrders", "OrderItems"],
+    "skippedSheets": [],
+    "addedSettings": ["ORDERING_ENABLED", "VISIT_SESSION_HOURS", "..."],
+    "addedSequences": ["apporder", "orderitem", "ordernum"],
+    "rowCounts": { "Customers": {"before": 128, "after": 128}, "...": "..." },
+    "dataIntact": true,
+    "problems": [],
+    "ok": true
+  }
+}
+```
+
+- `createdSheets` = 这次**新建**的 2.0 表（1.x 资料库里应该正好是那 5 张）
+- `skippedSheets` = 已经存在、**没有被动过**的表
+- `addedSettings` = 这次补上的设置**名称清单**（是阵列，不是数字）
+- `addedSequences` = 补上的 ID 序号（点单要用的 `apporder` / `orderitem` / `ordernum`）
+- `rowCounts` = **每张表升级前后的列数**。`before` 跟 `after` 要一样
+- **`dataIntact: true`** = 旧资料一行都没少（这是最重要的一个）
+- 如果 `dataIntact: false`，`problems` 会列出哪张表的列数变少了 —— 先别继续用，
+  把那份备份找回来再看
+- `backup.ok` 要是 `false`，会附上原因并叫你先手动「档案 → 建立副本」
+
+4. 再跑一次 **`reportUpgradeStatus()`** 确认（同样包在 `data` 里）：
+
+```json
+{ "success": true, "data": { "ready": true, "missingSheets": [], "missingSettings": [] } }
+```
+
+`ready: true` 且两个清单都是空的，才算升级完成。
+
+> 重复执行是安全的：第二次跑会回 `createdSheets: []`、
+> `addedSettings: []`、`dataIntact: true`，什么都不会变。
+
+### `upgradeToV2()` 做了什么（§67）
+
+- 整段在交易锁内跑，两个人同时按也不会打架
+- 先备份整个 Google Sheet（`{ backup: true }`）
+- 检测已存在的表，**只建立缺的那几张**
+- **只补**缺的设置与 ID 序号，不覆盖你已经改过的值
+- 不重写表头、不删栏、不动任何一列既有资料
+- 可以重复执行：第二次跑会回 `createdSheets: []`，什么都不会变
+
+> 会员的 Session、Claim Code、钱包余额、积分全部照旧有效（§68）。
+> `/`、`claim.html`、`activity.html`、`wallet.html`、`profile.html`、
+> `admin/login.html` 这些网址也照常运作。
+
+### 升级后要做的两件事
+
+1. **员工端**：`admin/index.html` 顶部多了 **ORDER BOARD**（点单看板），
+   `admin/more.html` 多了菜单管理与业绩报表
+2. **顾客端**：底部导航第三格从「记录」变成「订单」（§4）；
+   「记录」改从首页快捷区进入
 
 ## B4. 确认资料库建立成功
 
