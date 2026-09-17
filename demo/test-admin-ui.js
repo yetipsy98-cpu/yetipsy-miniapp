@@ -663,18 +663,32 @@ suite.group('08 · admin/grant.html 扫码 → 输金额 → 进分', async (t) 
   t.check('★ SCANNER 共用模组存在', !!win.SCANNER);
 
   const st0 = win.ADMIN_GRANT.debugState();
-  t.equal('★ 一开始在扫码步骤', st0.step, 'scan');
+  t.equal('★ 一开始在「输金额」步骤', st0.step, 'bill');
   t.equal('还没有会员', st0.hasCustomer, false);
 
-  /* 扫码步骤的画面 */
-  t.check('★ 扫码步骤可见',
-    doc.getElementById('stepScan').style.display !== 'none');
+  /* ① 输金额步骤先显示，扫码步骤先隐藏 */
+  t.check('★ 输金额步骤可见',
+    doc.getElementById('stepBill').style.display !== 'none');
+  t.check('★ 扫码步骤先隐藏',
+    doc.getElementById('stepScan').style.display === 'none');
   t.check('确认步骤先隐藏',
     doc.getElementById('stepVerify').style.display === 'none');
+
+  /* ② 输金额 → 下一步 */
+  doc.getElementById('billInput').value = '86';
+  doc.getElementById('nextBtn').click();
+  await sleep(200);
+  t.equal('★ 金额换算成 sen', win.ADMIN_GRANT.debugState().bill, 8600);
+  t.equal('★ 进到扫码步骤', win.ADMIN_GRANT.debugState().step, 'scan');
+  t.check('扫码步骤现在可见',
+    doc.getElementById('stepScan').style.display !== 'none');
   t.check('★ 有支援说明文字',
     doc.getElementById('scanSupport').innerHTML.length > 0);
+  t.check('★ 扫码步骤显示这一单的金额',
+    doc.getElementById('scanAmount').textContent.indexOf('86.00') >= 0,
+    doc.getElementById('scanAmount').textContent);
 
-  /* 用手动输入走完整条路（相机在 jsdom 里开不了） */
+  /* ③ 扫码（用手动输入，相机在 jsdom 里开不了） */
   const code = await post('getMemberCode', {}, ct);
   t.okIs(code, '取得会员条码');
   doc.getElementById('manualInput').value = code.data.payload;
@@ -693,15 +707,10 @@ suite.group('08 · admin/grant.html 扫码 → 输金额 → 进分', async (t) 
   t.equal('★ 画面显示会员名', doc.getElementById('vName').textContent, 'GrantTester');
   t.equal('画面显示会员编号', doc.getElementById('vId').textContent,
     reg.data.customer.customerId);
-
-  /* 输金额 */
-  doc.getElementById('billInput').value = '86';
-  doc.getElementById('calcBtn').click();
-  await sleep(200);
-  t.equal('★ 金额换算成 sen', win.ADMIN_GRANT.debugState().bill, 8600);
-  t.check('★ 确认按钮出现了',
-    doc.getElementById('grantBtn').style.display !== 'none');
-  t.check('有预算提示', doc.getElementById('calcLine').innerHTML.indexOf('86.00') >= 0);
+  /* 确认页要显示这一单多少钱（金额在扫码前就输好了） */
+  t.check('★ 确认页显示消费金额 RM86.00',
+    doc.getElementById('cBill').textContent.indexOf('86.00') >= 0,
+    doc.getElementById('cBill').textContent);
 
   /* 送出 */
   doc.getElementById('grantBtn').click();
@@ -739,27 +748,29 @@ suite.group('08b · verifyToken 一次性，用过要重扫', async (t) => {
     seedStaff(global.__staffToken, global.__staffProfile));
   const { win, doc } = page;
 
+  doc.getElementById('billInput').value = '50';
+  doc.getElementById('nextBtn').click();
+  await sleep(150);
+
   const code = await post('getMemberCode', {}, ct);
   doc.getElementById('manualInput').value = code.data.payload;
   doc.getElementById('manualBtn').click();
   await until(() => win.ADMIN_GRANT.debugState().step === 'verify', 12000);
 
-  doc.getElementById('billInput').value = '50';
-  doc.getElementById('calcBtn').click();
-  await sleep(150);
   doc.getElementById('grantBtn').click();
   await until(() => win.ADMIN_GRANT.debugState().step === 'result', 12000);
   t.equal('第一次成功', win.ADMIN_GRANT.debugState().pointsEarned, 50);
 
-  /* 用「再来一单」回到扫码步骤 —— 不能沿用旧的 verifyToken */
+  /* 用「再来一单」回到输金额步骤 —— 不能沿用旧的 verifyToken */
   doc.getElementById('againBtn').click();
   await sleep(250);
   const st = win.ADMIN_GRANT.debugState();
-  t.equal('★ 回到扫码步骤', st.step, 'scan');
+  t.equal('★ 回到输金额步骤', st.step, 'bill');
   t.equal('★ verifyToken 已清掉', st.hasVerifyToken, false);
   t.equal('★ 会员已清掉', st.hasCustomer, false);
-  t.equal('金额已清空', st.bill, 0);
-  t.equal('确认按钮收回去了', doc.getElementById('grantBtn').style.display, 'none');
+  t.equal('★ 金额已清空', st.bill, 0);
+  t.equal('金额输入框也清空了', doc.getElementById('billInput').value, '');
+  t.equal('输金额步骤可见', doc.getElementById('stepBill').style.display, '');
 
   page.dom.window.close();
 });
@@ -774,11 +785,31 @@ suite.group('08c · 没扫码就不能送出', async (t) => {
   t.equal('没有会员', st.hasCustomer, false);
   t.equal('没有 verifyToken', st.hasVerifyToken, false);
 
-  /* 输金额也不该能送出 */
+  /* 输金额也不该能送出（金额可以先输，但没有 verifyToken 就进不了分） */
   doc.getElementById('billInput').value = '100';
-  doc.getElementById('calcBtn').click();
+  doc.getElementById('nextBtn').click();
   await sleep(150);
   t.equal('金额算出来了', win.ADMIN_GRANT.debugState().bill, 10000);
+  t.equal('★ 只走到扫码步骤，没有会员', win.ADMIN_GRANT.debugState().step, 'scan');
+  t.equal('★ 仍然没有 verifyToken', win.ADMIN_GRANT.debugState().hasVerifyToken, false);
+
+  /* 硬按确认也送不出去 */
+  doc.getElementById('grantBtn').click();
+  await sleep(200);
+  t.equal('★ 按了确认也没送出（step 没变）',
+    win.ADMIN_GRANT.debugState().step, 'scan');
+
+  /* 没输金额就想扫码 → 要被挡回输金额步骤 */
+  doc.getElementById('editBillBtn').click();
+  await sleep(100);
+  t.equal('回去改金额 → 回到输金额步骤', win.ADMIN_GRANT.debugState().step, 'bill');
+  const empty = win.ADMIN_GRANT.debugState();
+  doc.getElementById('billInput').value = '';
+  doc.getElementById('nextBtn').click();
+  await sleep(150);
+  t.equal('★ 空金额按下一步不会前进',
+    win.ADMIN_GRANT.debugState().step, 'bill');
+  t.check('（前一个状态的金额还在）', empty.bill >= 0);
 
   /* 后端也会挡：没有 verifyToken 直接呼叫 grantOrder */
   const res = await post('grantOrder', { customerId: 'YT000001', billAmount: 10000 },

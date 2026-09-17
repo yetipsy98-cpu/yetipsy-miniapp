@@ -1,22 +1,32 @@
 /* =============================================================
    YETIPSY — admin-grant.js（2.0 员工端主流程）
    -------------------------------------------------------------
-   点单后扫会员码 → 输消费金额 → 系统自动发积分与 Reward
+   输账单金额 → 扫会员码 → 确认 → 系统自动发积分与 Reward
 
-   为什么这样设计（取代原本的「建立 Claim 生成 QR」）：
-     · 员工只需要输金额，积分按 POINTS_PER_RM 自动算（§57），
+   为什么是「先输金额、后扫码」这个顺序：
+     verifyToken 在扫码那一刻就开始倒数（MEMBER_VERIFY_SECONDS，预设 180 秒）。
+     若先扫码再慢慢输金额／单号／备注，那 180 秒正在流逝，员工输慢一点
+     token 就过期、必须重扫。先输金额、最后才扫码，token 只在
+     「确认进分」这一下的期间有效 —— 过期几乎不可能发生。
+
+   为什么保留第③步确认而不是扫到就直接进分：
+     积分与 Reward 会动到会员资料，扫错人（例如扫到旁边客人的码）
+     代价比多点一下大得多。扫码只是确认「是谁」，进分要点确认。
+
+   其余设计不变：
+     · 员工只输金额，积分按 POINTS_PER_RM 自动算（§57），
        够门槛自动发 Reward（§58），不需要员工自己算
      · §56 六小时内只算一次到店，后端负责，员工不用记
      · 必须扫过顾客的会员条码（REQUIRE_MEMBER_CODE_SCAN），
        而且 verifyToken 一次性 —— 不能事后补登
 
-   四步：扫码 → 确认会员并输金额 → 结果 → 再来一单
+   四步：输金额 → 扫码 → 确认 → 结果
    ============================================================= */
 
 var ADMIN_GRANT = (function () {
 
   var state = {
-    step: 'scan',            // scan | verify | result
+    step: 'bill',            // bill | scan | verify | result
     customer: null,
     verifyToken: '',
     verifyLeft: 0,
@@ -30,6 +40,7 @@ var ADMIN_GRANT = (function () {
   var countdownTimer = null;
 
   function init() {
+    el.stepBill   = document.getElementById('stepBill');
     el.stepScan   = document.getElementById('stepScan');
     el.stepVerify = document.getElementById('stepVerify');
     el.stepResult = document.getElementById('stepResult');
@@ -38,6 +49,13 @@ var ADMIN_GRANT = (function () {
     el.hint       = document.getElementById('scanHint');
     el.support    = document.getElementById('scanSupport');
 
+    /* ① 输金额 → 下一步 */
+    on('nextBtn', readBill);
+    on('billInput', null, function (e) {
+      if (e.key === 'Enter') readBill();
+    });
+
+    /* ② 扫码 */
     on('startScanBtn', function () {
       SCANNER.start({
         video: el.video,
@@ -70,13 +88,13 @@ var ADMIN_GRANT = (function () {
       if (!v) { UI.toast('请输入条码内容 / Enter the code', 'error'); return; }
       handleCode(v);
     });
+    on('editBillBtn', backToBill);
+
+    /* ③ 确认 → 进分 */
+    on('grantBtn', submit);
     on('rescanBtn', backToScan);
 
-    on('calcBtn', calculate);
-    on('grantBtn', submit);
-    on('billInput', null, function (e) {
-      if (e.key === 'Enter') calculate();
-    });
+    /* ④ 结果 → 再来一单 */
     on('againBtn', reset);
 
     /* 支援提示 + 没有相机就直接把扫码按钮收起来 */
@@ -84,7 +102,9 @@ var ADMIN_GRANT = (function () {
     el.support.innerHTML = SCANNER.supportText();
     if (!SCANNER.hasCamera()) showBtn('startScanBtn', false);
 
-    show('scan');
+    show('bill');
+    var bill = document.getElementById('billInput');
+    if (bill) bill.focus();
   }
 
   function on(id, fn, keyFn) {
@@ -108,14 +128,59 @@ var ADMIN_GRANT = (function () {
 
   function show(step) {
     state.step = step;
+    if (el.stepBill)   el.stepBill.style.display   = step === 'bill'   ? '' : 'none';
     if (el.stepScan)   el.stepScan.style.display   = step === 'scan'   ? '' : 'none';
     if (el.stepVerify) el.stepVerify.style.display = step === 'verify' ? '' : 'none';
     if (el.stepResult) el.stepResult.style.display = step === 'result' ? '' : 'none';
   }
 
-  /* ---------------- ① 扫码 → 确认身分 ---------------- */
+  /* ---------------- ① 读金额 → 去扫码 ---------------- */
+
+  function readBill() {
+    var raw = txt('billInput').replace(/[^0-9.]/g, '');
+    var rm = parseFloat(raw);
+    if (!isFinite(rm) || rm <= 0) {
+      UI.toast('请输入消费金额 / Enter the bill amount', 'error');
+      return;
+    }
+    state.bill = Math.round(rm * 100);
+
+    /* 这里只是让员工确认自己没多打一个 0；
+       真正发多少积分由后端按 POINTS_PER_RM / REWARD_TIERS 决定（§41/§42/§57） */
+    var line = document.getElementById('calcLine');
+    if (line) {
+      line.innerHTML = '消费 ' + UI.money(state.bill) +
+        ' · 积分与 Reward 由后端按规则自动计算';
+    }
+
+    set('scanAmount', UI.money(state.bill));
+    show('scan');
+
+    /* 回到扫码步骤时清掉上一单的验证残留 */
+    state.customer = null;
+    state.verifyToken = '';
+    var manual = document.getElementById('manualInput');
+    if (manual) manual.value = '';
+  }
+
+  function backToBill() {
+    SCANNER.stop();
+    stopCountdown();
+    state.customer = null;
+    state.verifyToken = '';
+    show('bill');
+    var bill = document.getElementById('billInput');
+    if (bill) bill.focus();
+  }
+
+  /* ---------------- ② 扫码 → 确认身分 ---------------- */
 
   function handleCode(text) {
+    if (!state.bill) {
+      UI.toast('请先输入消费金额 / Enter the bill amount first', 'error');
+      backToBill();
+      return;
+    }
     SCANNER.stop();
     UI.showLoading('VERIFYING');
     API.staff.scanMemberCode(text).then(function (res) {
@@ -134,8 +199,6 @@ var ADMIN_GRANT = (function () {
       show('verify');
       startCountdown();
       UI.toast('已确认 ' + (state.customer.name || state.customer.customerId), 'success');
-      var bill = document.getElementById('billInput');
-      if (bill) bill.focus();
     });
   }
 
@@ -148,6 +211,7 @@ var ADMIN_GRANT = (function () {
     set('vPoints', (c.currentPoints || 0) + ' 分');
     set('vWallet', UI.money(c.walletBalance || 0));
     set('vCount', (c.totalVisits || 0) + ' 次');
+    set('cBill',  UI.money(state.bill));
   }
 
   function set(id, value) {
@@ -176,37 +240,17 @@ var ADMIN_GRANT = (function () {
     if (countdownTimer) { clearInterval(countdownTimer); countdownTimer = null; }
   }
 
+  /* 重扫：金额保留（金额没有时效），只清掉验证残留 */
   function backToScan() {
     stopCountdown();
+    SCANNER.stop();
     state.customer = null;
     state.verifyToken = '';
     state.result = null;
-    var bill = document.getElementById('billInput');
-    if (bill) bill.value = '';
     show('scan');
   }
 
-  /* ---------------- ② 输金额 → 预算 ---------------- */
-
-  function calculate() {
-    var raw = txt('billInput').replace(/[^0-9.]/g, '');
-    var rm = parseFloat(raw);
-    if (!isFinite(rm) || rm <= 0) {
-      UI.toast('请输入消费金额 / Enter the bill amount', 'error');
-      return;
-    }
-    state.bill = Math.round(rm * 100);
-
-    /* 预算只是给员工看个大概，真正发给多少由后端决定（§41/§42） */
-    var line = document.getElementById('calcLine');
-    if (line) {
-      line.innerHTML = '消费 ' + UI.money(state.bill) +
-        ' · 积分与 Reward 由后端按规则计算';
-    }
-    showBtn('grantBtn', true);
-  }
-
-  /* ---------------- ③ 送出 ---------------- */
+  /* ---------------- ③ 确认 → 送出 ---------------- */
 
   function submit() {
     if (state.busy) return;
@@ -275,6 +319,8 @@ var ADMIN_GRANT = (function () {
     }
   }
 
+  /* ---------------- ④ 再来一单 ---------------- */
+
   function reset() {
     state.bill = 0;
     state.result = null;
@@ -284,10 +330,12 @@ var ADMIN_GRANT = (function () {
       var node = document.getElementById(id);
       if (node) node.value = '';
     });
-    showBtn('grantBtn', false);
     var line = document.getElementById('calcLine');
     if (line) line.innerHTML = '';
-    show('scan');
+    set('scanAmount', '—');
+    show('bill');
+    var bill = document.getElementById('billInput');
+    if (bill) bill.focus();
   }
 
   /* ---------------- 测试用 ---------------- */
@@ -321,6 +369,7 @@ var ADMIN_GRANT = (function () {
   return {
     init: init,
     handleCode: handleCode,
+    readBill: readBill,
     setVerified: setVerified,
     debugState: debugState
   };
