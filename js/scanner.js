@@ -1,9 +1,16 @@
 /* =============================================================
-   YETIPSY — scanner.js（共用扫码模组）
+   YETIPSY — scanner.js（共用「扫会员条码」模组）
    -------------------------------------------------------------
-   为什么抽出来：扫码逻辑原本在 js/admin-redeem.js 与 js/code.js 里
-   各有一份，2.0 员工端新增「扫会员码进分」又要用一次 —— 与其复制
-   第三份，不如共用。
+   为什么抽出来：2.0 员工端新增「扫会员码进分」要用到与
+   js/admin-redeem.js 相同的扫码逻辑（BarcodeDetector + jsQR 备用），
+   与其复制一份，不如共用。
+
+   ⚠️ 全域名称刻意叫 MEMBER_SCANNER，不是 SCANNER：
+      js/claim.js 已经有一个全域 SCANNER（扫「员工 QR」，纯 jsQR，
+      跟扫会员条码是两件事）。同名会在同时载入时静默互相覆写。
+
+   目前 js/admin-redeem.js 仍保留自己那一份（尚未合并）——
+   它的相机路径在 jsdom 里测不到，合并要等能在真机验证时再做。
 
    能力（与原本一致，不降级）：
      · BarcodeDetector（Chrome / Android）→ 直接读 Code128 一维条码
@@ -20,7 +27,7 @@
      SCANNER.stop();
    ============================================================= */
 
-var SCANNER = (function () {
+var MEMBER_SCANNER = (function () {
 
   var detector = null;
   var stream = null;

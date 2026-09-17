@@ -660,7 +660,9 @@ suite.group('08 · admin/grant.html 扫码 → 输金额 → 进分', async (t) 
 
   t.check('页面跑得起来（API 可用）', !!win.API);
   t.check('★ ADMIN_GRANT 模组存在', !!win.ADMIN_GRANT);
-  t.check('★ SCANNER 共用模组存在', !!win.SCANNER);
+  t.check('★ MEMBER_SCANNER 共用模组存在', !!win.MEMBER_SCANNER);
+  /* 名字不能跟 js/claim.js 的全域 SCANNER 撞 —— 撞了会静默互相覆写 */
+  t.equal('★ 没有占用 SCANNER 这个全域名', typeof win.SCANNER, 'undefined');
 
   const st0 = win.ADMIN_GRANT.debugState();
   t.equal('★ 一开始在「输金额」步骤', st0.step, 'bill');

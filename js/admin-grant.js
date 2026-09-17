@@ -57,7 +57,7 @@ var ADMIN_GRANT = (function () {
 
     /* ② 扫码 */
     on('startScanBtn', function () {
-      SCANNER.start({
+      MEMBER_SCANNER.start({
         video: el.video,
         onStart: function (hasBarcode) {
           el.scanBox.style.display = '';
@@ -70,7 +70,7 @@ var ADMIN_GRANT = (function () {
         onError: function (why) {
           el.scanBox.style.display = 'none';
           showBtn('startScanBtn', false);
-          el.support.innerHTML = SCANNER.supportText();
+          el.support.innerHTML = MEMBER_SCANNER.supportText();
           if (why === 'CAMERA_DENIED') {
             UI.toast('开不了相机，请用手动输入 / Camera unavailable', 'error');
           }
@@ -82,7 +82,7 @@ var ADMIN_GRANT = (function () {
         }
       });
     });
-    on('stopScanBtn', function () { SCANNER.stop(); });
+    on('stopScanBtn', function () { MEMBER_SCANNER.stop(); });
     on('manualBtn', function () {
       var v = txt('manualInput');
       if (!v) { UI.toast('请输入条码内容 / Enter the code', 'error'); return; }
@@ -98,9 +98,9 @@ var ADMIN_GRANT = (function () {
     on('againBtn', reset);
 
     /* 支援提示 + 没有相机就直接把扫码按钮收起来 */
-    SCANNER.init();
-    el.support.innerHTML = SCANNER.supportText();
-    if (!SCANNER.hasCamera()) showBtn('startScanBtn', false);
+    MEMBER_SCANNER.init();
+    el.support.innerHTML = MEMBER_SCANNER.supportText();
+    if (!MEMBER_SCANNER.hasCamera()) showBtn('startScanBtn', false);
 
     show('bill');
     var bill = document.getElementById('billInput');
@@ -164,7 +164,7 @@ var ADMIN_GRANT = (function () {
   }
 
   function backToBill() {
-    SCANNER.stop();
+    MEMBER_SCANNER.stop();
     stopCountdown();
     state.customer = null;
     state.verifyToken = '';
@@ -181,7 +181,7 @@ var ADMIN_GRANT = (function () {
       backToBill();
       return;
     }
-    SCANNER.stop();
+    MEMBER_SCANNER.stop();
     UI.showLoading('VERIFYING');
     API.staff.scanMemberCode(text).then(function (res) {
       UI.hideLoading();
@@ -243,7 +243,7 @@ var ADMIN_GRANT = (function () {
   /* 重扫：金额保留（金额没有时效），只清掉验证残留 */
   function backToScan() {
     stopCountdown();
-    SCANNER.stop();
+    MEMBER_SCANNER.stop();
     state.customer = null;
     state.verifyToken = '';
     state.result = null;
