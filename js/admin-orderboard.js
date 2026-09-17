@@ -194,11 +194,20 @@ var ADMIN_ORDERBOARD = (function () {
      状态推进
      --------------------------------------------------------- */
 
+  /** 动过订单之后就不要再拿旧快取 */
+  function dropOrdersCache() {
+    if (API.cache && API.cache.drop) {
+      API.cache.drop('getActiveOrders', {});
+      API.cache.drop('getDashboard', { date: '' });
+    }
+  }
+
   function act(appOrderId, action, label) {
     if (state.busy[appOrderId]) return;
     state.busy[appOrderId] = true;
     setCardBusy(appOrderId, true, label);
 
+    dropOrdersCache();
     API.staff[action](appOrderId).then(function (res) {
       state.busy[appOrderId] = false;
       if (!res.success) {
@@ -225,6 +234,7 @@ var ADMIN_ORDERBOARD = (function () {
       if (!yes) return;
       state.busy[appOrderId] = true;
       setCardBusy(appOrderId, true, '收款中…');
+      dropOrdersCache();
       API.staff.markPaymentPaid(appOrderId, 'COUNTER').then(function (res) {
         state.busy[appOrderId] = false;
         if (!res.success) {
@@ -246,6 +256,7 @@ var ADMIN_ORDERBOARD = (function () {
       if (!yes) return;
       state.busy[appOrderId] = true;
       setCardBusy(appOrderId, true, '取消中…');
+      dropOrdersCache();
       API.staff.cancelAppOrder(appOrderId, 'Cancelled by staff').then(function (res) {
         state.busy[appOrderId] = false;
         if (!res.success) {

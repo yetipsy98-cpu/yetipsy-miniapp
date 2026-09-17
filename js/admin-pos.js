@@ -26,7 +26,11 @@ var ADMIN_POS = (function () {
     tab: 'kiosk',            // kiosk | queue | scan | confirm | result
     menu: null,              // { categories, products }
     categoryId: '',
-    lines: [],               // 目前这张单：{productId,nameZH,nameEN,unitPrice,qty}
+    lines: [],               // 目前这张单：{key,productId,nameZH,nameEN,unitPrice,qty,options[]}
+    search: '',
+    opt: null,               // 有规格的商品：{ product, groups, selected, qty }
+    pad: '0',                // 收据金额键盘
+    padDecimal: false,
     manualAmountSen: 0,
     useManualAmount: false,
     tickets: [],
@@ -69,6 +73,26 @@ var ADMIN_POS = (function () {
     on('tabKiosk', function () { show('kiosk'); });
     on('tabQueue', function () { show('queue'); });
     on('kioskRefreshBtn', function () { loadMenu(true); });
+    on('kioskSearch', null, null);
+    var search = document.getElementById('kioskSearch');
+    if (search) {
+      search.addEventListener('input', function () {
+        state.search = search.value.trim().toLowerCase();
+        renderGrid();
+      });
+    }
+    on('optionSheetClose', closeOptionSheet);
+    on('optQtyMinus', function () { setOptQty((state.opt ? state.opt.qty : 1) - 1); });
+    on('optQtyPlus',  function () { setOptQty((state.opt ? state.opt.qty : 1) + 1); });
+    on('optAddBtn', addOptionToTicket);
+    on('manualClear', function () { padQuick(); });
+    on('noteChips', function (e) {
+      var node = closest(e.target, '[data-note]');
+      if (!node) return;
+      var input = document.getElementById('ticketNoteInput');
+      if (input) input.value = node.getAttribute('data-note') || '';
+    });
+    bindPad();
     on('refreshBtn', function () { loadQueue(true); });
     on('kioskOpenTicket', openTicketSheet);
     on('kioskTicketBtn', openTicketSheet);
@@ -157,7 +181,9 @@ var ADMIN_POS = (function () {
         }),
         products: (res.data.products || []).filter(function (p) {
           return String(p.status || 'ACTIVE').toUpperCase() === 'ACTIVE';
-        })
+        }),
+        /* ★ 规格也要留着：点商品才知道要不要先选 Size / ICE */
+        optionsByProduct: res.data.optionsByProduct || {}
       };
       renderCats();
       renderGrid();
@@ -185,8 +211,28 @@ var ADMIN_POS = (function () {
 
   function gridProducts() {
     var list = (state.menu && state.menu.products) || [];
-    if (!state.categoryId) return list;
-    return list.filter(function (p) { return (p.categoryId || '') === state.categoryId; });
+    if (state.categoryId) {
+      list = list.filter(function (p) { return (p.categoryId || '') === state.categoryId; });
+    }
+    if (state.search) {
+      var q = state.search;
+      list = list.filter(function (p) {
+        return String(p.nameZH || '').toLowerCase().indexOf(q) !== -1 ||
+               String(p.nameEN || '').toLowerCase().indexOf(q) !== -1 ||
+               String(p.descriptionZH || '').toLowerCase().indexOf(q) !== -1 ||
+               String(p.descriptionEN || '').toLowerCase().indexOf(q) !== -1 ||
+               (p.tags || []).join(' ').toLowerCase().indexOf(q) !== -1;
+      });
+    }
+    return list;
+  }
+
+  /** 這一款有幾個規格（有的話點下去要先選） */
+  function optionGroupsOf(productId) {
+    var all = (state.menu && state.menu.optionsByProduct && state.menu.optionsByProduct[productId]) || [];
+    return all.filter(function (o) {
+      return String(o.status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+    });
   }
 
   function renderGrid() {
@@ -210,12 +256,20 @@ var ADMIN_POS = (function () {
     el.grid.innerHTML = list.map(function (p) {
       var sold = p.available === false;
       var qty = qtyOf(p.productId);
+      var groups = optionGroupsOf(p.productId);
+      var thumb = p.imageURL
+        ? '<img class="kt-img" src="' + UI.esc(p.imageURL) + '" alt="">'
+        : '<span class="kt-img kt-emoji">🍸</span>';
+
       return '<button class="k-tile' + (sold ? ' is-sold' : '') + (qty ? ' in-cart' : '') +
         '" data-product="' + UI.esc(p.productId) + '"' + (sold ? ' disabled' : '') + '>' +
-        (qty ? '<span class="kt-qty">' + qty + '</span>' : '') +
+        thumb +
         '<span class="kt-name">' + UI.esc(p.nameZH || p.nameEN) + '</span>' +
         '<span class="kt-en">' + UI.esc(p.nameEN) + '</span>' +
-        '<span class="kt-price">' + (sold ? '售罄 SOLD OUT' : UI.money(p.price)) + '</span>' +
+        '<span class="kt-price">' + (sold ? '售罄 SOLD OUT' : UI.money(p.price)) +
+          (groups.length && !sold ? ' <i class="kt-opt">规格</i>' : '') + '</span>' +
+        (qty ? '<span class="kt-qty">' + qty + '</span>' +
+               '<span class="kt-minus" data-dec="' + UI.esc(p.productId) + '">−</span>' : '') +
       '</button>';
     }).join('');
   }
@@ -225,6 +279,16 @@ var ADMIN_POS = (function () {
     if (!el.grid || el.grid.getAttribute('data-bound') === '1') return;
     el.grid.setAttribute('data-bound', '1');
     el.grid.addEventListener('click', function (e) {
+      /* 格子上的 − ：先把這一款減一杯（不開規格表） */
+      var minus = closest(e.target, '[data-dec]');
+      if (minus) {
+        e.stopPropagation();
+        var pid = minus.getAttribute('data-dec');
+        var last = null;
+        state.lines.forEach(function (l) { if (l.productId === pid) last = l; });
+        if (last) setLineQty(last.key, last.qty - 1);
+        return;
+      }
       var node = closest(e.target, '[data-product]');
       if (!node || node.disabled) return;
       addProduct(node.getAttribute('data-product'));
@@ -257,43 +321,201 @@ var ADMIN_POS = (function () {
     return q;
   }
 
+  /** 同一款 + 同一组规格 → 同一行；规格不同就分开两行 */
+  function lineKey(productId, options) {
+    var ids = (options || []).map(function (o) { return o.optionId; }).sort().join('+');
+    return productId + '|' + ids;
+  }
+
+  function optionsText(options) {
+    return (options || []).map(function (o) { return o.nameZH || o.nameEN || ''; })
+      .filter(Boolean).join('·');
+  }
+
   function addProduct(productId) {
     var p = findProduct(productId);
     if (!p || p.available === false) return;
 
+    /* 有规格 → 先开规格表（否则一律大杯 / 少冰这种东西事后没法补救） */
+    var groups = optionGroupsOf(productId);
+    if (groups.length) { openOptionSheet(productId); return; }
+
+    addLine(p, [], 1);
+  }
+
+  function addLine(product, options, qty) {
+    var opts = options || [];
+    var key = lineKey(product.productId, opts);
+    var add = 0;
+    opts.forEach(function (o) { add += Number(o.priceAdjustment) || 0; });
+
     var line = null;
-    state.lines.forEach(function (l) { if (!line && l.productId === productId) line = l; });
+    state.lines.forEach(function (l) { if (!line && l.key === key) line = l; });
 
     if (line) {
-      if (line.qty >= 99) return;
-      line.qty += 1;
+      line.qty = Math.min(99, line.qty + qty);
     } else {
       state.lines.push({
-        productId: p.productId,
-        nameZH: p.nameZH || '',
-        nameEN: p.nameEN || '',
-        unitPrice: Number(p.price) || 0,
-        qty: 1
+        key: key,
+        productId: product.productId,
+        nameZH: product.nameZH || '',
+        nameEN: product.nameEN || '',
+        unitPrice: (Number(product.price) || 0) + add,
+        qty: Math.max(1, Math.min(99, qty)),
+        options: opts
       });
     }
 
-    renderGrid();          // 只更新数量角标
+    renderGrid();
     renderKioskBar();
     renderTicketLines();
+    UI.toast('已加入 ' + (product.nameZH || product.nameEN) +
+      (opts.length ? '（' + optionsText(opts) + '）' : ''), 'success');
   }
 
-  function setLineQty(productId, qty) {
+  function setLineQty(key, qty) {
     var next = Math.round(Number(qty) || 0);
     if (next <= 0) {
-      state.lines = state.lines.filter(function (l) { return l.productId !== productId; });
+      state.lines = state.lines.filter(function (l) { return l.key !== key; });
     } else {
       state.lines.forEach(function (l) {
-        if (l.productId === productId) l.qty = Math.min(99, next);
+        if (l.key === key) l.qty = Math.min(99, next);
       });
     }
     renderGrid();
     renderKioskBar();
     renderTicketLines();
+  }
+
+  /* ---------------------------------------------------------
+     规格表（有规格的商品）
+     --------------------------------------------------------- */
+
+  function openOptionSheet(productId) {
+    var p = findProduct(productId);
+    if (!p) return;
+    var groups = optionGroupsOf(productId);
+
+    var selected = {};
+    groups.forEach(function (g) {
+      if (g.options && g.options.length) selected[g.optionGroup] = g.options[0].optionId;
+    });
+
+    state.opt = { product: p, groups: groups, selected: selected, qty: 1 };
+    renderOptionSheet();
+
+    var sheet = document.getElementById('optionSheet');
+    if (sheet) sheet.style.display = '';
+    document.body.classList.add('sheet-open');
+  }
+
+  function closeOptionSheet() {
+    var sheet = document.getElementById('optionSheet');
+    if (sheet) sheet.style.display = 'none';
+    state.opt = null;
+    /* 清單抽屜沒開的話，就不要鎖住捲動 */
+    var ticket = document.getElementById('ticketSheet');
+    if (!ticket || ticket.style.display === 'none') document.body.classList.remove('sheet-open');
+  }
+
+  function optChosen(group) {
+    var o = state.opt;
+    if (!o) return null;
+    var id = o.selected[group.optionGroup];
+    var hit = null;
+    (group.options || []).forEach(function (x) { if (!hit && x.optionId === id) hit = x; });
+    return hit;
+  }
+
+  function optUnitPrice() {
+    var o = state.opt;
+    if (!o) return 0;
+    var total = Number(o.product.price) || 0;
+    o.groups.forEach(function (g) {
+      var c = optChosen(g);
+      if (c) total += Number(c.priceAdjustment) || 0;
+    });
+    return total;
+  }
+
+  function renderOptionSheet() {
+    var o = state.opt;
+    if (!o) return;
+
+    set('optTitle', o.product.nameZH || o.product.nameEN || '');
+    set('optSub', (o.product.nameZH && o.product.nameEN ? o.product.nameEN + ' · ' : '') +
+      '请选规格');
+    set('optQtyValue', o.qty);
+    set('optPrice', UI.money(optUnitPrice()));
+
+    var body = document.getElementById('optionBody');
+    if (!body) return;
+
+    body.innerHTML = o.groups.map(function (g) {
+      var head = '<div class="opt-group-head">' +
+        '<span class="option-group-title">' + UI.esc(g.nameEN || g.optionGroup) + '</span>' +
+        '<span class="option-group-sub">' + UI.esc(g.nameZH || '') + '</span>' +
+        (g.required ? '<span class="required-mark">必选</span>' : '') +
+      '</div>';
+
+      var rows = (g.options || []).map(function (x) {
+        var on = o.selected[g.optionGroup] === x.optionId ? ' selected' : '';
+        return '<div class="option-row' + on + '" data-group="' + UI.esc(g.optionGroup) +
+          '" data-option="' + UI.esc(x.optionId) + '">' +
+          '<div class="option-radio"></div>' +
+          '<div class="option-name">' + UI.esc(x.nameZH || x.nameEN) +
+            (x.nameZH && x.nameEN ? ' <span class="tiny muted">' + UI.esc(x.nameEN) + '</span>' : '') +
+          '</div>' +
+          '<div class="option-price">' +
+            (Number(x.priceAdjustment) > 0 ? '+' + UI.money(x.priceAdjustment) : '') +
+          '</div>' +
+        '</div>';
+      }).join('');
+
+      return head + rows;
+    }).join('');
+
+    Array.prototype.forEach.call(body.querySelectorAll('.option-row'), function (node) {
+      node.addEventListener('click', function () {
+        o.selected[node.getAttribute('data-group')] = node.getAttribute('data-option');
+        Array.prototype.forEach.call(body.querySelectorAll('.option-row'), function (n2) {
+          var on = o.selected[n2.getAttribute('data-group')] === n2.getAttribute('data-option');
+          n2.classList.toggle('selected', on);
+        });
+        set('optPrice', UI.money(optUnitPrice()));
+      });
+    });
+  }
+
+  function setOptQty(n) {
+    var o = state.opt;
+    if (!o) return;
+    o.qty = Math.max(1, Math.min(99, n));
+    set('optQtyValue', o.qty);
+    var minus = document.getElementById('optQtyMinus');
+    var plus = document.getElementById('optQtyPlus');
+    if (minus) minus.disabled = o.qty <= 1;
+    if (plus) plus.disabled = o.qty >= 99;
+  }
+
+  function addOptionToTicket() {
+    var o = state.opt;
+    if (!o) return;
+    var chosen = [];
+    o.groups.forEach(function (g) {
+      var c = optChosen(g);
+      if (c) chosen.push({
+        optionGroup: g.optionGroup,
+        optionId: c.optionId,
+        nameZH: c.nameZH,
+        nameEN: c.nameEN,
+        priceAdjustment: Number(c.priceAdjustment) || 0
+      });
+    });
+    var product = o.product;
+    var qty = o.qty;
+    closeOptionSheet();
+    addLine(product, chosen, qty);
   }
 
   function linesTotalSen() {
@@ -306,10 +528,13 @@ var ADMIN_POS = (function () {
     state.lines = [];
     state.manualAmountSen = 0;
     state.useManualAmount = false;
+    state.pad = '0';
+    state.padDecimal = false;
     var toggle = document.getElementById('manualAmountToggle');
     if (toggle) toggle.checked = false;
-    var manual = document.getElementById('manualAmountInput');
-    if (manual) { manual.value = ''; manual.style.display = 'none'; }
+    var pad = document.getElementById('manualPad');
+    if (pad) pad.style.display = 'none';
+    set('manualAmount', '0.00');
     renderGrid();
     renderKioskBar();
     renderTicketLines();
@@ -343,8 +568,9 @@ var ADMIN_POS = (function () {
   function renderTicketLines() {
     if (!el.lines) return;
 
+    var units = state.lines.reduce(function (s, l) { return s + l.qty; }, 0);
     set('ticketSub', state.lines.length
-      ? state.lines.length + ' 项 · ' + UI.money(linesTotalSen())
+      ? state.lines.length + ' 项 · ' + units + ' 杯 · ' + UI.money(linesTotalSen())
       : '空的 · 从商品格点选');
 
     if (!state.lines.length) {
@@ -352,33 +578,45 @@ var ADMIN_POS = (function () {
         '<span class="tiny">回点餐台点商品</span></div>';
     } else {
       el.lines.innerHTML = state.lines.map(function (l) {
-        return '<div class="ps-line" data-line="' + UI.esc(l.productId) + '">' +
+        var opts = optionsText(l.options);
+        return '<div class="ps-line" data-line="' + UI.esc(l.key) + '">' +
           '<div class="psl-main">' +
             '<div class="psl-name">' + UI.esc(l.nameZH || l.nameEN) + '</div>' +
+            (opts ? '<div class="psl-opt">' + UI.esc(opts) + '</div>' : '') +
             '<div class="psl-price">' + UI.money(l.unitPrice) + ' × ' + l.qty +
               ' = <b>' + UI.money(l.unitPrice * l.qty) + '</b></div>' +
           '</div>' +
           '<div class="psl-qty">' +
-            '<button class="qty-btn" data-dec="' + UI.esc(l.productId) + '">−</button>' +
+            '<button class="qty-btn" data-dec="' + UI.esc(l.key) + '">−</button>' +
             '<span class="qty-value">' + l.qty + '</span>' +
-            '<button class="qty-btn" data-inc="' + UI.esc(l.productId) + '">+</button>' +
+            '<button class="qty-btn" data-inc="' + UI.esc(l.key) + '">+</button>' +
+            '<button class="psl-x" data-del="' + UI.esc(l.key) + '">✕</button>' +
           '</div>' +
         '</div>';
       }).join('');
     }
 
-    set('ticketTotal', UI.money(state.useManualAmount ? state.manualAmountSen : linesTotalSen()));
+    set('ticketTotal', UI.money(billSen()));
 
     Array.prototype.forEach.call(el.lines.querySelectorAll('[data-inc]'), function (node) {
       node.addEventListener('click', function () {
-        var id = node.getAttribute('data-inc');
-        setLineQty(id, qtyOf(id) + 1);
+        var key = node.getAttribute('data-inc');
+        var line = null;
+        state.lines.forEach(function (l) { if (!line && l.key === key) line = l; });
+        if (line) setLineQty(key, line.qty + 1);
       });
     });
     Array.prototype.forEach.call(el.lines.querySelectorAll('[data-dec]'), function (node) {
       node.addEventListener('click', function () {
-        var id = node.getAttribute('data-dec');
-        setLineQty(id, qtyOf(id) - 1);
+        var key = node.getAttribute('data-dec');
+        var line = null;
+        state.lines.forEach(function (l) { if (!line && l.key === key) line = l; });
+        if (line) setLineQty(key, line.qty - 1);
+      });
+    });
+    Array.prototype.forEach.call(el.lines.querySelectorAll('[data-del]'), function (node) {
+      node.addEventListener('click', function () {
+        setLineQty(node.getAttribute('data-del'), 0);
       });
     });
 
@@ -388,21 +626,71 @@ var ADMIN_POS = (function () {
 
   function toggleManualAmount() {
     var toggle = document.getElementById('manualAmountToggle');
-    var input = document.getElementById('manualAmountInput');
+    var pad = document.getElementById('manualPad');
     state.useManualAmount = !!(toggle && toggle.checked);
-    if (input) {
-      input.style.display = state.useManualAmount ? '' : 'none';
-      if (state.useManualAmount) input.focus();
+    if (pad) pad.style.display = state.useManualAmount ? '' : 'none';
+    if (state.useManualAmount) {
+      state.pad = state.pad === '0' ? String(linesTotalSen() / 100) : state.pad;
+      updatePad();
     }
-    state.manualAmountSen = state.useManualAmount ? parseAmountSen(input ? input.value : '') : 0;
-    set('ticketTotal', UI.money(state.useManualAmount ? state.manualAmountSen : linesTotalSen()));
+    set('ticketTotal', UI.money(billSen()));
   }
 
-  /** "86" / "86.5" / "RM 86.00" → sen */
-  function parseAmountSen(raw) {
-    var n = parseFloat(String(raw || '').replace(/[^0-9.]/g, ''));
-    if (!isFinite(n) || n < 0) return 0;
+  /* ---- 收据金额键盘（POS 机那样，不要叫员工找输入框） ---- */
+  function bindPad() {
+    var keys = document.getElementById('padKeys');
+    if (!keys) return;
+    keys.addEventListener('click', function (e) {
+      var btn = closest(e.target, '[data-key]');
+      if (!btn) return;
+      padPress(btn.getAttribute('data-key'));
+    });
+  }
+
+  function padSen() {
+    var n = parseFloat(state.pad);
+    if (!isFinite(n) || n < 0) n = 0;
     return Math.round(n * 100);
+  }
+
+  function padPress(key) {
+    if (key === 'del') {
+      state.pad = state.pad.length > 1 ? state.pad.slice(0, -1) : '0';
+      if (state.pad === '' || state.pad === '.') state.pad = '0';
+      if (state.pad.indexOf('.') === -1) state.padDecimal = false;
+      updatePad();
+      return;
+    }
+    if (key === '.') {
+      if (!state.padDecimal) {
+        state.padDecimal = true;
+        if (state.pad.indexOf('.') === -1) state.pad += '.';
+      }
+      updatePad();
+      return;
+    }
+    if (state.padDecimal) {
+      var dec = (state.pad.split('.')[1] || '');
+      if (dec.length >= 2) return;
+      state.pad += String(key);
+    } else if (state.pad === '0') {
+      state.pad = String(key);
+    } else if (state.pad.replace('.', '').length < 8) {
+      state.pad += String(key);
+    }
+    updatePad();
+  }
+
+  function padQuick() {
+    state.pad = '0';
+    state.padDecimal = false;
+    updatePad();
+  }
+
+  function updatePad() {
+    state.manualAmountSen = state.useManualAmount ? padSen() : 0;
+    set('manualAmount', UI.money(padSen()).replace(/^RM\s*/, ''));
+    set('ticketTotal', UI.money(billSen()));
   }
 
   /* ---------------------------------------------------------
@@ -410,7 +698,7 @@ var ADMIN_POS = (function () {
      --------------------------------------------------------- */
 
   function billSen() {
-    if (state.useManualAmount) return state.manualAmountSen;
+    if (state.useManualAmount) return padSen();
     return linesTotalSen();
   }
 
@@ -432,7 +720,13 @@ var ADMIN_POS = (function () {
       externalOrderId: txt('ticketNoInput'),
       note: txt('ticketNoteInput'),
       items: state.lines.map(function (l) {
-        return { nameZH: l.nameZH, nameEN: l.nameEN, quantity: l.qty, unitPriceSen: l.unitPrice };
+        var opts = optionsText(l.options);
+        return {
+          nameZH: (l.nameZH || '') + (opts ? ' ' + opts : ''),
+          nameEN: l.nameEN,
+          quantity: l.qty,
+          unitPriceSen: l.unitPrice
+        };
       })
     }).then(function (res) {
       state.busy = false;
@@ -444,6 +738,7 @@ var ADMIN_POS = (function () {
       }
 
       var ticket = res.data.ticket;
+      dropQueueCache();
       ['ticketNoInput', 'ticketNoteInput'].forEach(function (id) {
         var node = document.getElementById(id);
         if (node) node.value = '';
@@ -579,6 +874,15 @@ var ADMIN_POS = (function () {
     }).join('') + '</div>';
   }
 
+  /** 只丢「待进单」那一份快取（其余员工资料不动） */
+  function dropQueueCache() {
+    if (API.cache && API.cache.drop) {
+      API.cache.drop('getPosQueue', {});
+      API.cache.drop('getDashboard', { date: '' });
+      API.cache.drop('getActiveOrders', {});
+    }
+  }
+
   function cancelTicket(orderId) {
     var hit = null;
     state.tickets.forEach(function (t) { if (!hit && t.orderId === orderId) hit = t; });
@@ -596,6 +900,7 @@ var ADMIN_POS = (function () {
           loadQueue(false);
           return;
         }
+        dropQueueCache();
         UI.toast('已取消单据', 'success');
         loadQueue(false);
       });
@@ -783,6 +1088,7 @@ var ADMIN_POS = (function () {
 
       state.errorCode = null;
       state.result = res.data;
+      dropQueueCache();               // 这张单已经不在队列里了
       stopCountdown();
       renderResult();
       show('result');
@@ -816,7 +1122,9 @@ var ADMIN_POS = (function () {
       tab: state.tab,
       menuProducts: state.menu ? state.menu.products.length : 0,
       categoryId: state.categoryId,
-      lines: state.lines.map(function (l) { return l.productId + '×' + l.qty; }),
+      search: state.search,
+      lines: state.lines.map(function (l) { return l.key.split('|')[0] + '×' + l.qty; }),
+      pad: state.pad,
       linesTotal: linesTotalSen(),
       bill: billSen(),
       useManualAmount: state.useManualAmount,
@@ -841,6 +1149,10 @@ var ADMIN_POS = (function () {
     saveTicket: saveTicket,
     beginScan: beginScan,
     toggleManualAmount: toggleManualAmount,
+    openOptionSheet: openOptionSheet,
+    addOptionToTicket: addOptionToTicket,
+    setOptQty: setOptQty,
+    padPress: padPress,
     show: show,
     debugState: debugState
   };

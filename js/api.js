@@ -64,7 +64,14 @@ var API = (function () {
     getWallet:          60 * 1000,
     getWalletHistory:   60 * 1000,
     getPointHistory:    60 * 1000,
-    getOrderHistory:    60 * 1000
+    getOrderHistory:    60 * 1000,
+
+    /* 员工端：打开就能用（现场网路慢的时候差很多） */
+    getAdminMenu:        5 * 60 * 1000,
+    getDashboard:       30 * 1000,
+    getPosQueue:        30 * 1000,
+    getActiveOrders:    20 * 1000,
+    listClaims:         30 * 1000
   };
 
   var memCache = {};
@@ -459,7 +466,7 @@ var API = (function () {
       return call('getStaffSession', {}, { sessionType: 'staff' });
     },
     getDashboard: function (date) {
-      return call('getDashboard', { date: date || '' }, { sessionType: 'staff' });
+      return call('getDashboard', { date: date || '' }, { sessionType: 'staff', cache: true });
     },
     createClaim: function (source, externalOrderId, amountSen, note) {
       return call('createClaim', {
@@ -476,7 +483,7 @@ var API = (function () {
       return call('getClaim', { claimId: claimId }, { sessionType: 'staff' });
     },
     listClaims: function (limit) {
-      return call('listClaims', { limit: limit || 20 }, { sessionType: 'staff' });
+      return call('listClaims', { limit: limit || 20 }, { sessionType: 'staff', cache: true });
     },
     searchCustomer: function (keyword) {
       return call('searchCustomer', { keyword: keyword }, { sessionType: 'staff' });
@@ -547,7 +554,7 @@ var API = (function () {
 
     /** POS 台画面：待进单队列 + 今日已进单统计 */
     getPosQueue: function (data) {
-      return call('getPosQueue', data || {}, { sessionType: 'staff' });
+      return call('getPosQueue', data || {}, { sessionType: 'staff', cache: true });
     },
 
     /**
@@ -594,7 +601,7 @@ var API = (function () {
       return call('getIncomingOrders', {}, { sessionType: 'staff' });
     },
     getActiveOrders: function () {
-      return call('getActiveOrders', {}, { sessionType: 'staff' });
+      return call('getActiveOrders', {}, { sessionType: 'staff', cache: true });
     },
     acceptOrder: function (appOrderId) {
       return call('acceptOrder', { appOrderId: appOrderId }, { sessionType: 'staff' });
@@ -628,7 +635,7 @@ var API = (function () {
     /* 2.0 菜单管理（§32）—— 只有 MANAGER / OWNER 能改。
        用 getAdminMenu：回传全部状态（含已下架）的商品 */
     getAdminMenu: function () {
-      return call('getAdminMenu', {}, { sessionType: 'staff' });
+      return call('getAdminMenu', {}, { sessionType: 'staff', cache: true });
     }
   };
 
@@ -725,25 +732,54 @@ var API = (function () {
      预载：会员端首页一有空就把最常用的资料先抓好，
      这样点进酒单 / 我的订单是「立刻」出来，不是「等一次」
      -------------------------------------------------------- */
-  function prefetchCustomer(which) {
-    if (!AUTH.isCustomerLoggedIn || !AUTH.isCustomerLoggedIn()) return;
-    var jobs = which || ['getMenu', 'getMyOrders', 'getWallet'];
-    if (jobs.indexOf('getMenu') >= 0) cachePeekAsync('getMenu', {});
-    if (jobs.indexOf('getMyOrders') >= 0) cachePeekAsync('getMyOrders', { limit: 30 });
-    if (jobs.indexOf('getWallet') >= 0) {
-      cachePeekAsync('getWallet', {});
-      cachePeekAsync('getWalletHistory', { limit: 50 });
+  /* 会员端「打开就能用」的清单：酒单 / 订单 / 钱包 / 记录 / 待领奖励 / 会员资料 */
+  var CUSTOMER_WARM = [
+    ['getMenu',          function () { return {}; }],
+    ['getMyOrders',      function () { return { limit: 30 }; }],
+    ['getWallet',        function () { return {}; }],
+    ['getWalletHistory', function () { return { limit: 50 }; }],
+    ['getOrderHistory',  function () { return { limit: 50 }; }],
+    ['getPointHistory',  function () { return { limit: 50 }; }],
+    ['getPendingReward', function () { return { rewardId: '' }; }],
+    ['getProfile',       function () { return {}; }]
+  ];
+
+  /* 员工端：点餐台酒单 / 待进单 / 今日看板 / 订单看板 */
+  var STAFF_WARM = [
+    ['getAdminMenu',    function () { return {}; }],
+    ['getPosQueue',     function () { return {}; }],
+    ['getDashboard',    function () { return { date: '' }; }],
+    ['getActiveOrders', function () { return {}; }]
+  ];
+
+  /**
+   * 预载：把某个角色「接下来一定会用到的」只读资料先抓好。
+   * 逐笔依序抓（Apps Script 一次只回一个请求，一次全丢反而更慢）。
+   */
+  function prefetchJobs(jobs, sessionType, skipFresh) {
+    var pending = jobs.slice();
+    function next() {
+      if (!pending.length) return;
+      var job = pending.shift();
+      var action = job[0];
+      var data = job[1]();
+      if (skipFresh && cachePeek(action, data)) return next();
+      send(action, data, { sessionType: sessionType }).then(function (res) {
+        if (res.success) cacheWrite(cacheKey(action, data), res.data);
+        next();
+      });
     }
-    if (jobs.indexOf('getHistory') >= 0) {
-      cachePeekAsync('getOrderHistory', { limit: 50 });
-      cachePeekAsync('getPointHistory', { limit: 50 });
-    }
+    next();
   }
 
-  /** 已经新鲜就不用再问一次 */
-  function cachePeekAsync(action, data) {
-    if (cachePeek(action, data)) return;
-    call(action, data, { sessionType: 'customer', cache: true });
+  function prefetchCustomer() {
+    if (!AUTH.isCustomerLoggedIn || !AUTH.isCustomerLoggedIn()) return;
+    prefetchJobs(CUSTOMER_WARM, 'customer', true);
+  }
+
+  function prefetchStaff() {
+    if (!AUTH.isStaffLoggedIn || !AUTH.isStaffLoggedIn()) return;
+    prefetchJobs(STAFF_WARM, 'staff', true);
   }
 
   return {
@@ -754,6 +790,7 @@ var API = (function () {
       drop: cacheDrop,
       clear: cacheClear,
       prefetch: prefetchCustomer,
+      prefetchStaff: prefetchStaff,
       TTL: READ_TTL
     },
     customer: customer,

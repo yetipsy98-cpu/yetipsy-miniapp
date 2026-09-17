@@ -24,8 +24,13 @@
     </button>
   </div>
 
-  <!-- ================= ① 点餐台：商品格 → 清单 → 记录单据 ================= -->
+  <!-- ================= ① 点餐台 ================= -->
   <div id="stepKiosk">
+
+    <div class="kiosk-search">
+      <input class="a-input" id="kioskSearch" type="search" autocomplete="off"
+             placeholder="找商品 Search product…">
+    </div>
 
     <div class="pos-bar">
       <span class="a-sub" id="kioskStatus">载入中…</span>
@@ -39,7 +44,7 @@
     <div class="kiosk-bar" id="kioskBar" style="display:none">
       <button class="kb-main" id="kioskOpenTicket">
         <span class="kb-count" id="kbCount">0</span>
-        <span class="kb-text">已点 <span class="kb-total" id="kbTotal">RM 0.00</span></span>
+        <span class="kb-text">这张单 <span class="kb-total" id="kbTotal">RM 0.00</span></span>
       </button>
       <button class="kb-go" id="kioskTicketBtn">清单 TICKET</button>
     </div>
@@ -171,19 +176,74 @@
       <input class="a-input" id="ticketNoteInput" placeholder="备注（选填）4 号桌"
              maxlength="60" autocomplete="off">
     </div>
+    <div class="ps-quick" id="noteChips">
+      <button class="pq" data-note="内用">内用 DINE-IN</button>
+      <button class="pq" data-note="外带">外带 TAKEAWAY</button>
+      <button class="pq" data-note="">清除 CLEAR</button>
+    </div>
 
     <label class="ps-check">
       <input type="checkbox" id="manualAmountToggle">
-      <span>收据金额跟这里不同？手动输入收据上的金额</span>
+      <span>收据金额跟这里不同？直接输入收据上的金额</span>
     </label>
-    <input class="a-input" id="manualAmountInput" inputmode="decimal"
-           placeholder="例如 86.00" style="display:none">
+
+    <!-- 金额键盘（POS 机那样） -->
+    <div class="ps-pad" id="manualPad" style="display:none">
+      <div class="pad-amount">
+        <span class="pa-cur">RM</span>
+        <span class="pa-val" id="manualAmount">0.00</span>
+        <button class="pad-clr" id="manualClear">清空 CLR</button>
+      </div>
+      <div class="pad-keys" id="padKeys">
+        <button class="pk" data-key="1">1</button>
+        <button class="pk" data-key="2">2</button>
+        <button class="pk" data-key="3">3</button>
+        <button class="pk" data-key="4">4</button>
+        <button class="pk" data-key="5">5</button>
+        <button class="pk" data-key="6">6</button>
+        <button class="pk" data-key="7">7</button>
+        <button class="pk" data-key="8">8</button>
+        <button class="pk" data-key="9">9</button>
+        <button class="pk" data-key="."><span class="pk-sub">POINT</span>.</button>
+        <button class="pk" data-key="0">0</button>
+        <button class="pk back" data-key="del">⌫</button>
+      </div>
+    </div>
 
     <button class="big-action" id="saveTicketBtn">
       记录单据 SAVE RECEIPT
       <span class="ba-sub">进「待进单」→ 顾客出示会员码时才进分</span>
     </button>
-    <button class="chip ps-clear" id="ticketClearBtn">清空清单 CLEAR</button>
+    <button class="chip ps-clear" id="ticketClearBtn">清空清单 CLEAR TICKET</button>
+  </div>
+</div>
+
+<!-- ================= 规格抽屉（有规格的商品） ================= -->
+<div class="pos-sheet" id="optionSheet" style="display:none">
+  <div class="pos-sheet-inner">
+    <div class="ps-head">
+      <div>
+        <div class="ps-title" id="optTitle">—</div>
+        <div class="a-sub" id="optSub">—</div>
+      </div>
+      <button class="ps-close" id="optionSheetClose">✕</button>
+    </div>
+
+    <div class="ps-body" id="optionBody"></div>
+
+    <div class="ps-total">
+      <span>这一杯 EACH</span>
+      <b id="optPrice">RM 0.00</b>
+    </div>
+
+    <div class="opt-foot">
+      <div class="qty-ctrl">
+        <button class="qty-btn" id="optQtyMinus">−</button>
+        <span class="qty-value" id="optQtyValue">1</span>
+        <button class="qty-btn" id="optQtyPlus">+</button>
+      </div>
+      <button class="big-action" id="optAddBtn" style="margin:0">加入 ADD</button>
+    </div>
   </div>
 </div>
 

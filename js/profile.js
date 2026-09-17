@@ -104,14 +104,17 @@ var PROFILE = (function () {
     });
   }
 
+  /**
+   * ★ 登出不等后端。
+   * 以前是 API.customer.logout().then(清 session + 跳页) —— 现场网路一慢
+   * （Apps Script 有时候要好几秒）就会变成「按了没反应」。
+   * 现在：按下去立刻清 session、立刻跳登录页，后端通知只是顺带送出的。
+   */
   function logout() {
     UI.confirmDialog('确定要登出吗？', 'Log out from this device?', '登出 LOG OUT')
       .then(function (yes) {
         if (!yes) return;
-        API.customer.logout().then(function () {
-          AUTH.clearCustomer();
-          location.replace('login.html');
-        });
+        AUTH.logoutCustomer();
       });
   }
 

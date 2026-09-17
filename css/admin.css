@@ -385,3 +385,101 @@ body.admin.has-admin-nav { padding-bottom: calc(66px + env(safe-area-inset-botto
 .a-tile .at-zh { font-size: 15px; font-weight: 700; letter-spacing: .5px; margin-top: auto; }
 .a-tile .at-en { font-size: 8.5px; letter-spacing: 1.4px; color: var(--a-muted); }
 .a-tile.primary .at-zh { color: var(--a-gold); }
+
+/* 顶栏登出（每一页都有） */
+.admin-header .ah-out {
+  border: 1px solid var(--a-line); background: none; color: var(--a-muted);
+  border-radius: 999px; padding: 5px 10px; font-size: 10px; letter-spacing: .8px;
+  cursor: pointer; display: inline-flex; align-items: baseline; gap: 4px;
+}
+.admin-header .ah-out:active { border-color: rgba(226,105,107,.5); color: var(--a-danger); }
+.admin-header .ah-out span { font-size: 7.5px; letter-spacing: 1.2px; opacity: .7; }
+
+/* =============================================================
+   POS 点餐台补充：搜寻 / 商品图 / 格子上的 − / 规格表 / 金额键盘
+   ============================================================= */
+.kiosk-search { margin-bottom: 10px; }
+.kiosk-search .a-input { padding: 12px 13px; font-size: 14px; }
+
+.k-tile .kt-img {
+  width: 100%; height: 34px; object-fit: cover;
+  border-radius: 8px; margin-bottom: 4px; background: rgba(255,255,255,.03);
+}
+.k-tile .kt-emoji {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; color: var(--a-gold); background: rgba(229,183,105,.07);
+}
+.k-tile .kt-price i { font-style: normal; font-size: 8px; letter-spacing: 1px; color: var(--a-muted); }
+.k-tile .kt-minus {
+  position: absolute; left: 7px; bottom: 7px;
+  width: 22px; height: 22px; border-radius: 999px;
+  background: rgba(226,105,107,.18); color: var(--a-danger);
+  font-size: 15px; font-weight: 800; line-height: 22px; text-align: center;
+}
+.psl-opt { font-size: 10.5px; color: var(--a-gold); margin-top: 2px; }
+.psl-x {
+  margin-left: 4px; width: 26px; height: 26px; border-radius: 8px;
+  border: 1px solid var(--a-line); background: none; color: var(--a-muted);
+  cursor: pointer; font-size: 11px;
+}
+.ps-quick { display: flex; gap: 6px; margin-top: 8px; }
+.ps-quick .pq {
+  flex: 1; padding: 9px 0; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--a-line); background: rgba(255,255,255,.02);
+  color: var(--a-muted); font-size: 10.5px; font-weight: 600;
+}
+.ps-pad { margin: 10px 0 4px; }
+.ps-pad .pad-amount {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 10px 12px; margin-bottom: 8px;
+  border: 1px solid var(--a-line); border-radius: 14px; background: #0E0E0E;
+}
+.ps-pad .pa-cur { font-size: 12px; letter-spacing: 1.6px; color: var(--a-muted); }
+.ps-pad .pa-val { font-size: 30px; font-weight: 800; margin-left: auto; letter-spacing: -.5px; }
+.pad-clr {
+  margin-left: 10px; align-self: center;
+  border: 1px solid rgba(226,105,107,.3); background: none;
+  color: var(--a-danger); border-radius: 999px;
+  padding: 5px 11px; font-size: 10px; letter-spacing: 1px; cursor: pointer;
+}
+.pad-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.pad-keys .pk {
+  height: 50px; border-radius: 13px; cursor: pointer;
+  border: 1px solid var(--a-line); background: #191919; color: var(--a-text);
+  font-size: 20px; font-weight: 650;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.pad-keys .pk:active { background: rgba(229,183,105,.14); border-color: rgba(229,183,105,.4); }
+.pad-keys .pk .pk-sub { font-size: 7px; letter-spacing: 1px; color: var(--a-muted); }
+.pad-keys .pk.back { color: var(--a-muted); font-size: 17px; }
+
+/* 规格表 */
+.opt-group-head {
+  display: flex; align-items: baseline; gap: 6px;
+  margin: 14px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--a-line);
+}
+.opt-group-head:first-child { margin-top: 0; }
+.opt-foot { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.opt-foot .big-action { flex: 1 1 auto; }
+#optionBody .option-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 2px; border-bottom: 1px solid rgba(255,255,255,.05); cursor: pointer;
+}
+#optionBody .option-row:last-child { border-bottom: 0; }
+#optionBody .option-radio {
+  width: 18px; height: 18px; border-radius: 50%; flex: 0 0 18px;
+  border: 1px solid var(--a-line);
+}
+#optionBody .option-row.selected .option-radio {
+  border-color: var(--a-gold); background: var(--a-gold);
+  box-shadow: inset 0 0 0 4px #141414;
+}
+#optionBody .option-name { flex: 1 1 auto; font-size: 14px; }
+#optionBody .option-price { color: var(--a-gold); font-size: 12px; }
+.required-mark {
+  font-size: 8px; letter-spacing: 1px; color: var(--a-danger);
+  border: 1px solid rgba(226,105,107,.4); border-radius: 999px; padding: 1px 6px;
+}
+.option-group-title { font-size: 12px; letter-spacing: 1px; color: var(--a-gold); }
+.option-group-sub { font-size: 11px; color: var(--a-muted); }
+#optionBody, #ticketLines { max-height: 46vh; }

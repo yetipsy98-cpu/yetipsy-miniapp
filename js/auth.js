@@ -90,6 +90,7 @@ var AUTH = (function () {
   function setStaffSession(token, profile) {
     set(S.STAFF_TOKEN, token);
     if (profile) set(S.STAFF_PROFILE, JSON.stringify(profile));
+    dropReadCache();          // 换人登入 → 不能拿到上一位员工的快取
   }
 
   function getStaffProfile() {
@@ -144,6 +145,42 @@ var AUTH = (function () {
     return false;
   }
 
+  /* ---------------------------------------------------------
+     登出（★ 不等后端）
+     ---------------------------------------------------------
+     现场网路慢的时候，「等 API 回来才跳页」会变成按了没反应。
+     这里一律：先清 session（含只读快取）→ 立刻跳登录页，
+     后端通知用 fire-and-forget 送出去，失败也无所谓（token 在前端已经没了）。
+     --------------------------------------------------------- */
+
+  var backendNotified = {};
+
+  function notifyBackend(which) {
+    if (backendNotified[which]) return;
+    backendNotified[which] = true;
+    try {
+      if (typeof API !== 'undefined' && API.customer && which === 'customer') API.customer.logout();
+      if (typeof API !== 'undefined' && API.staff && which === 'staff') API.staff.logout();
+    } catch (e) {}
+  }
+
+  function logoutCustomer() {
+    notifyBackend('customer');
+    clearCustomer();
+    goToLogin();
+  }
+
+  function logoutStaff() {
+    notifyBackend('staff');
+    clearStaff();
+    goToLogin();
+  }
+
+  function goToLogin() {
+    try { location.replace('login.html'); }
+    catch (e) { location.href = 'login.html'; }
+  }
+
   return {
     getCustomerToken: getCustomerToken,
     setCustomerSession: setCustomerSession,
@@ -160,6 +197,9 @@ var AUTH = (function () {
     isStaffLoggedIn: isStaffLoggedIn,
     requireStaff: requireStaff,
     hasRole: hasRole,
+
+    logoutCustomer: logoutCustomer,
+    logoutStaff: logoutStaff,
 
     handleSessionError: handleSessionError
   };
