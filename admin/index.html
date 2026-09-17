@@ -21,14 +21,24 @@
     <button id="logoutBtn" class="btn btn-ghost btn-sm" style="width:auto;padding:0 14px">SIGN OUT</button>
   </div>
 
-  <a class="big-action" href="orderboard.html">
+  <!-- ★ 2.0 主流程：点单后扫会员码进分（任何员工都能做） -->
+  <a class="big-action" href="grant.html">
+    ⌁ SCAN &amp; GRANT
+    <span class="ba-sub">扫会员码进分 · 输金额即可</span>
+  </a>
+
+  <a class="big-action" href="orderboard.html"
+     style="background:#1A1A1A;border-color:#3A3A3A">
     🍸 ORDER BOARD
     <span class="ba-sub">点单看板 · 接单 / 制作 / 完成</span>
   </a>
 
-  <a class="big-action" href="claim.html">
+  <!-- 建立 Claim（生成 QR）已收紧到 MANAGER / OWNER，
+       普通员工由 admin-dashboard.js 隐藏这个入口 -->
+  <a class="big-action" href="claim.html" id="createClaimAction"
+     style="background:#1A1A1A;border-color:#3A3A3A">
     + CREATE CLAIM
-    <span class="ba-sub">建立认领 · 5 秒完成</span>
+    <span class="ba-sub">建立认领 · 生成 QR（经理以上）</span>
   </a>
 
   <a class="big-action" href="redeem.html" style="background:#1A1A1A;border-color:#3A3A3A">

@@ -112,9 +112,10 @@ suite.group('01 · §51 通路业绩：App 与 Foodcourt 分得开', (t) => {
   const app = completedAppOrder(w, [pick(w, w.mojito, 2), pick(w, w.longIsland, 1)]);
   t.check('App 订单完成', !app.error, app.error);
 
-  /* 一张 Foodcourt 订单 RM50，顾客认领 */
+  /* 一张 Foodcourt 订单 RM50，顾客认领。
+     ★ 2.0：建立 Claim 收紧到 MANAGER / OWNER，所以用 ownerToken。 */
   const made = call(w, 'createClaim',
-    { source: 'FOODCOURT', externalOrderId: 'FC-AN-1', amount: 5000 }, w.staffToken);
+    { source: 'FOODCOURT', externalOrderId: 'FC-AN-1', amount: 5000 }, w.ownerToken);
   const claim = call(w, 'claimOrder', { token: made.data.token }, w.customerToken);
   t.okIs(claim, 'Foodcourt 认领');
 
@@ -147,7 +148,7 @@ suite.group('01b · §51 通路按业绩排序', (t) => {
   /* Foodcourt 两笔大的，App 一笔小的 → Foodcourt 应该排前面 */
   ['FC-AN-2', 'FC-AN-3'].forEach((id, i) => {
     const made = call(w, 'createClaim',
-      { source: 'FOODCOURT', externalOrderId: id, amount: 10000 + i * 1000 }, w.staffToken);
+      { source: 'FOODCOURT', externalOrderId: id, amount: 10000 + i * 1000 }, w.ownerToken);
     call(w, 'claimOrder', { token: made.data.token }, w.customerToken);
   });
   completedAppOrder(w, [pick(w, w.sunset, 1)], { useWallet: false });

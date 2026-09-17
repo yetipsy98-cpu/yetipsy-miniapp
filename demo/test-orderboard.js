@@ -452,9 +452,10 @@ suite.group('08 · §19/§20 看板三栏 + §46 轮询 + §49 等待 + §50 统
 suite.group('09 · §24/§51 完成时写一笔 1.x Orders（通路业绩）', (t) => {
   const w = boardWorld({ wallet: 868 });
 
-  /* 先走一遍 Foodcourt 认领，确认 1.x 流程照旧 */
+  /* 先走一遍 Foodcourt 认领，确认 1.x 流程照旧。
+     ★ 2.0：建立 Claim 收紧到 MANAGER / OWNER，所以这里用 ownerToken。 */
   const made = call(w, 'createClaim',
-    { source: 'FOODCOURT', externalOrderId: 'FC-1', amount: 5000 }, w.staffToken);
+    { source: 'FOODCOURT', externalOrderId: 'FC-1', amount: 5000 }, w.ownerToken);
   const claim = call(w, 'claimOrder', { token: made.data.token }, w.customerToken);
   t.okIs(claim, 'Foodcourt 认领照旧可用');
   t.equal('Foodcourt 得到 50 分', claim.data.pointsEarned, 50);

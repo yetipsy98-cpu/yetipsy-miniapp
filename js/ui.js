@@ -182,14 +182,14 @@ var UI = (function () {
      6. 底部导航（会员端）
      ========================================================= */
 
-  /* 2.0（§4）：HOME · MENU · ORDERS · WALLET · MEMBER
-     activity.html 仍从首页快捷区进入（§68 不能断掉 1.x 页面） */
+  /* 2.0 会员端导览：HOME（导览界面）· MENU · 会员码 · 会员中心
+     钱包 / 我的订单 / 活动记录改从首页下方与会员中心进入，
+     页面本身都还在（§68 不能断掉 1.x 的网址）。 */
   var NAV = [
-    { page: 'index.html',    zh: '首页',   en: 'HOME',     icon: 'home' },
-    { page: 'menu.html',     zh: '酒单',   en: 'MENU',     icon: 'menu' },
-    { page: 'orders.html',   zh: '订单',   en: 'ORDERS',   icon: 'orders' },
-    { page: 'wallet.html',   zh: '钱包',   en: 'WALLET',   icon: 'wallet' },
-    { page: 'profile.html',  zh: '我的',   en: 'PROFILE',  icon: 'profile' }
+    { page: 'index.html',    zh: '首页',     en: 'HOME',        icon: 'home' },
+    { page: 'menu.html',     zh: '酒单',     en: 'MENU',        icon: 'menu' },
+    { page: 'code.html',     zh: '会员码',   en: 'MEMBER CODE', icon: 'scan' },
+    { page: 'profile.html',  zh: '会员中心', en: 'MEMBER',      icon: 'profile' }
   ];
 
   var ICONS = {

@@ -183,6 +183,69 @@ suite.group('03 · session 失效也一样要讲清楚', async (t) => {
    起 server → 跑 → 收尾
    ============================================================= */
 
+/* =============================================================
+   04 · 2.0 会员端导览界面（登入后的第一个画面）
+   ============================================================= */
+
+suite.group('04 · 导览界面三张卡与右上角认领入口', async (t) => {
+  const { win, doc } = await openHome(global.__JSDOM, (w) => {
+    w.localStorage.setItem('yt_customer_token', global.__token);
+    w.localStorage.setItem('yt_customer_profile', JSON.stringify(global.__profile));
+  });
+
+  /* 页面本身要跑得起来（不能一开就抛错） */
+  t.check('页面载入且 API 可用', !!win.API);
+  t.check('APP 模组存在', !!win.APP);
+
+  /* 三张导览卡 */
+  const cards = doc.querySelectorAll('.nav-grid .nav-card');
+  t.equal('★ 导览界面有三张卡', cards.length, 3);
+
+  const hrefs = Array.prototype.map.call(cards, (c) => c.getAttribute('href'));
+  t.equal('★ 第一张是酒单', hrefs[0], 'menu.html');
+  t.equal('★ 第二张是会员码', hrefs[1], 'code.html');
+  t.equal('★ 第三张是会员中心', hrefs[2], 'profile.html');
+
+  /* 图标真的渲染出来了（不是空的 span） */
+  ['navMenu', 'navCode', 'navProfile'].forEach((id) => {
+    const node = doc.getElementById(id);
+    t.check('★ ' + id + ' 有图标', !!node && node.innerHTML.indexOf('svg') >= 0,
+      node ? node.innerHTML.slice(0, 40) : '(元素不存在)');
+  });
+
+  /* 认领入口在右上角，不是页面中间的大 CTA */
+  const topClaim = doc.getElementById('topClaimLink');
+  t.check('★ 右上角有认领入口', !!topClaim);
+  t.equal('★ 认领入口连到 claim.html', topClaim.getAttribute('href'), 'claim.html');
+  t.check('★ 认领入口有图标',
+    doc.getElementById('claimIcon').innerHTML.indexOf('svg') >= 0);
+  /* 页面中间那个大 CTA 已经移除 */
+  t.equal('★ 页面中间的大 CTA 已移除', doc.querySelectorAll('.cta-claim').length, 0);
+
+  /* 原本的功能保留在下方 */
+  ['wallet.html', 'activity.html', 'orders.html', 'profile.html'].forEach((href) => {
+    t.check('★ 下方仍有 ' + href + ' 入口',
+      !!doc.querySelector('.quick-grid a[href="' + href + '"]'));
+  });
+  ['qiOrders', 'qiAct', 'qiWallet', 'qiProfile'].forEach((id) => {
+    const node = doc.getElementById(id);
+    t.check('★ ' + id + ' 有图标', !!node && node.innerHTML.indexOf('svg') >= 0);
+  });
+
+  /* 底部导航：首页 / 酒单 / 会员码 / 会员中心 */
+  const nav = doc.querySelectorAll('.bottom-nav .nav-item');
+  t.equal('★ 底部导航 4 格', nav.length, 4);
+  const navHrefs = Array.prototype.map.call(nav, (a) => a.getAttribute('href'));
+  t.equal('底部导航含酒单', navHrefs.indexOf('menu.html') >= 0, true);
+  t.equal('★ 底部导航含会员码', navHrefs.indexOf('code.html') >= 0, true);
+  t.equal('★ 底部导航含会员中心', navHrefs.indexOf('profile.html') >= 0, true);
+  t.equal('★ 底部导航不再有钱包那一格', navHrefs.indexOf('wallet.html') >= 0, false);
+
+  /* 会员数字照常显示（改版没弄坏 hero） */
+  t.check('★ hero 卡还在', !!doc.getElementById('heroCard'));
+  t.check('积分有渲染', doc.getElementById('pointsValue').textContent.length > 0);
+});
+
 const server = spawn(process.execPath,
   [path.join(__dirname, 'server.js'), '--port', String(PORT), '--reset'],
   { cwd: path.join(__dirname, '..') });

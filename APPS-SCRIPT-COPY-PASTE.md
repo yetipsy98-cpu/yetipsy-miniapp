@@ -1,6 +1,6 @@
 # YETIPSY · Google Apps Script 全部档案（复制贴上用）
 
-**20 个档案 · 版本 1.5.0 · 会员登录 = 手机号码 + 密码（不用 WhatsApp OTP）**
+**20 个档案 · 版本 1.6.0 · 会员登录 = 手机号码 + 密码（不用 WhatsApp OTP）**
 
 > 这份文件由 `node demo/build-copypaste.js` 从 `apps-script/*.gs` 产生。
 > 改了后端记得重跑，`npm test` 会检查两者是否同步。
@@ -28,25 +28,25 @@
 | 顺序 | Apps Script 里的档案名 | 行数 | 内容 |
 |---|---|---|---|
 | 1 | `Config` | 460 | 所有设定与 17 张表的栏位定义（要改规则就改这里） |
-| 2 | `Utils` | 247 | 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 |
+| 2 | `Utils` | 248 | 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 |
 | 3 | `Database` | 770 | setupDatabase()、upgradeToV2()、补栏位、防重复注册工具、dedupeCustomers() |
 | 4 | `Security` | 108 | Session Token、权限（STAFF/MANAGER/OWNER）、Rate Limit、登入锁定 |
 | 5 | `Audit` | 18 | Audit Log 写入与查询（最多保留 5000 条） |
 | 6 | `Points` | 83 | 积分累计 / 等级门槛计算 |
 | 7 | `Rewards` | 70 | 奖励产生与状态流转 |
-| 8 | `Wallet` | 187 | 钱包储值 / 抵扣 / 上限（金额一律 sen） |
+| 8 | `Wallet` | 191 | 钱包储值 / 抵扣 / 上限（金额一律 sen） |
 | 9 | `Customers` | 595 | ★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料 |
-| 10 | `Orders` | 134 | 消费纪录与统计 |
-| 11 | `Menu` | 798 | ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） |
+| 10 | `Orders` | 140 | 消费纪录与统计 |
+| 11 | `Menu` | 831 | ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） |
 | 12 | `Checkout` | 332 | ★ 2.0 结帐报价：后端重算价格、钱包上限、Quote 5 分钟有效期、防重复下单的识别码 |
 | 13 | `AppOrders` | 370 | ★ 2.0 订单：placeOrder（幂等）、订单查询、取消、再点一次、名称与单价快照 |
 | 14 | `OrderBoard` | 463 | ★ 2.0 员工看板：接单 / 制作 / 完成（幂等）、收款才扣钱包、取消退回、6 小时内只算一次到店 |
 | 15 | `Analytics` | 308 | ★ 2.0 业绩分析：今日统计、通路业绩（App / Foodcourt 分得开且不重复计算）、热销商品、会员分析 |
-| 16 | `Claims` | 401 | QR / 4 位 Code 认领（只存 token 的 hash） |
+| 16 | `Claims` | 511 | QR / 4 位 Code 认领（只存 token 的 hash） |
 | 17 | `Promotions` | 154 | 优惠规则 |
 | 18 | `Admin` | 209 | 员工端：Dashboard、会员查询、手动调整、重设会员密码、设置 |
 | 19 | `Auth` | 89 | ping / getPublicSettings / staffLogin / staffLogout |
-| 20 | `Code` | 238 | ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 |
+| 20 | `Code` | 243 | ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 |
 
 > ⚠️ **20 个档案全部贴完再执行**，少一个会报 `xxx is not defined`。
 
@@ -55,7 +55,7 @@
 ## 1. Config.gs
 
 > Apps Script 里的档案名称：**`Config`**（不要打 .gs）
-> 所有设定与 17 张表的栏位定义（要改规则就改这里） · 460 行 · SHA-256 `13f027b211ca5074`
+> 所有设定与 17 张表的栏位定义（要改规则就改这里） · 460 行 · SHA-256 `f317f5db9d328ae6`
 
 ```javascript
 /* =============================================================
@@ -69,7 +69,7 @@
    ============================================================= */
 
 /** 版本（ping 会回传，方便确认线上跑的是哪一版） */
-var APP_VERSION = '1.5.0';
+var APP_VERSION = '1.6.0';
 
 /**
  * 资料表定义。
@@ -525,7 +525,7 @@ var ORDER_SOURCES = ['FOODCOURT', 'DIRECT', 'YETIPSY_APP', 'MANUAL', 'FOODCOURT_
 ## 2. Utils.gs
 
 > Apps Script 里的档案名称：**`Utils`**（不要打 .gs）
-> 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 · 247 行 · SHA-256 `6a0fefa697d55715`
+> 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 · 248 行 · SHA-256 `364fa72c0c28194f`
 
 ```javascript
 /* =============================================================
@@ -741,6 +741,7 @@ var ERR = {
   INSUFFICIENT_WALLET:     ['INSUFFICIENT_WALLET', 'Insufficient wallet balance. / 钱包余额不足。'],
   WALLET_LIMIT_EXCEEDED:   ['WALLET_LIMIT_EXCEEDED', 'Wallet usage exceeds the allowed limit. / 超出钱包可抵扣上限。'],
   CUSTOMER_NOT_FOUND:      ['CUSTOMER_NOT_FOUND', 'Member not found. / 找不到会员。'],
+  CUSTOMER_BLOCKED:        ['CUSTOMER_BLOCKED', 'This member account is blocked. / 这个会员账号已被停用。'],
   INVALID_ROLE:            ['INVALID_ROLE', 'Invalid role. / 角色无效。'],
   RATE_LIMITED:            ['RATE_LIMITED', 'Too many attempts. Please wait. / 尝试次数过多，请稍后再试。'],
   STAFF_NOT_FOUND:         ['STAFF_NOT_FOUND', 'Staff account not found. / 找不到员工账号。'],
@@ -1881,7 +1882,7 @@ function generateReward(customer, order, amountSen) {
 ## 8. Wallet.gs
 
 > Apps Script 里的档案名称：**`Wallet`**（不要打 .gs）
-> 钱包储值 / 抵扣 / 上限（金额一律 sen） · 187 行 · SHA-256 `8f4a382a3cb79a93`
+> 钱包储值 / 抵扣 / 上限（金额一律 sen） · 191 行 · SHA-256 `83362e4d96f0b811`
 
 ```javascript
 /* =============================================================
@@ -2031,8 +2032,12 @@ function redeemWallet(data, token) {
   order.pointsEarned = points;
 
   c.totalSpend  = (Number(c.totalSpend) || 0) + bill;
-  c.totalVisits = (Number(c.totalVisits) || 0) + 1;
-  c.lastVisitAt = nowISO();
+  /* §56 六小时内只算一次到店 —— 原本这里是无条件 +1，
+     同一位顾客同晚用钱包抵扣再走别条通路就会算两次 */
+  if (shouldCountVisit(c, order, order.orderId)) {
+    c.totalVisits = (Number(c.totalVisits) || 0) + 1;
+    c.lastVisitAt = nowISO();
+  }
   issuePoints(c, order, points, 'Purchase with wallet redemption', ctx.staff.staffId, 'STAFF', 'EARN');
 
   var reward = generateReward(c, order, bill);
@@ -2683,7 +2688,7 @@ function consumeMemberVerify(verifyToken) {
 ## 10. Orders.gs
 
 > Apps Script 里的档案名称：**`Orders`**（不要打 .gs）
-> 消费纪录与统计 · 134 行 · SHA-256 `91582268a0a873fe`
+> 消费纪录与统计 · 140 行 · SHA-256 `942b313920d89a2f`
 
 ```javascript
 /* =============================================================
@@ -2813,7 +2818,13 @@ function cancelOrder(data, token) {
     var pending = dbFind('rewards', function (r) {
       return r.orderId === order.orderId && r.status === 'AVAILABLE';
     });
-    if (pending) pending.status = 'CANCELLED';
+    if (pending) {
+      pending.status = 'CANCELLED';
+      /* ★ totalRewards 是「已发出数」，发出时已经 +1 了，
+         所以取消一个还没兑换的 Reward 也要 -1，
+         否则会员资料上的数字会比 Rewards 表多。 */
+      customer.totalRewards = Math.max(0, (Number(customer.totalRewards) || 0) - 1);
+    }
   }
 
   audit(ctx.staff.staffId, 'STAFF', 'CANCEL_ORDER', 'ORDER', order.orderId, 'ACTIVE',
@@ -2827,7 +2838,7 @@ function cancelOrder(data, token) {
 ## 11. Menu.gs
 
 > Apps Script 里的档案名称：**`Menu`**（不要打 .gs）
-> ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） · 798 行 · SHA-256 `3a38b24ddd8ac10e`
+> ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） · 831 行 · SHA-256 `c60eebd170ea3cc0`
 
 ```javascript
 /* =============================================================
@@ -3627,6 +3638,39 @@ function getAdminMenu(data, token) {
       soldOut: products.filter(function (p) { return !p.available; }).length
     }
   });
+}
+
+/* =============================================================
+   商品上下架（2.0 · §32 状态类操作）
+   -------------------------------------------------------------
+   与 setProductAvailability 同级：任何员工都能操作。
+   「状态」类操作（售罄 / 有货、上架 / 下架）不该卡在权限上，
+   改价格与新增商品仍然只有 MANAGER / OWNER（updateProduct）。
+
+   入参：{ productId, status: 'ACTIVE' | 'ARCHIVED' }
+   ============================================================= */
+
+function setProductStatus(data, token) {
+  var ctx = requireStaff(token);
+  if (ctx.error) return ctx.error;
+
+  var p = dbById('products', String(data.productId || ''));
+  if (!p) return err('PRODUCT_NOT_FOUND');
+
+  var status = String(data.status || '').toUpperCase();
+  if (['ACTIVE', 'ARCHIVED'].indexOf(status) === -1) {
+    return err('INVALID_INPUT', 'Status must be ACTIVE or ARCHIVED. / 状态只能是 ACTIVE 或 ARCHIVED。');
+  }
+
+  p.status = status;
+  p.updatedAt = nowISO();
+
+  audit(ctx.staff.staffId, 'STAFF', 'SET_PRODUCT_STATUS', 'PRODUCT', p.productId,
+        '', status === 'ACTIVE' ? '上架' : '下架');
+
+  clearMenuCache();
+
+  return ok({ productId: p.productId, status: p.status });
 }
 ```
 
@@ -5148,7 +5192,7 @@ function getMemberAnalytics(data, token) {
 ## 16. Claims.gs
 
 > Apps Script 里的档案名称：**`Claims`**（不要打 .gs）
-> QR / 4 位 Code 认领（只存 token 的 hash） · 401 行 · SHA-256 `500abff8e467172d`
+> QR / 4 位 Code 认领（只存 token 的 hash） · 511 行 · SHA-256 `dda1326b0f2d0b9f`
 
 ```javascript
 /* =============================================================
@@ -5228,7 +5272,12 @@ function findClaimByTokenOrCode(rawToken, code) {
    ------------------------------------------------------------- */
 
 function createClaim(data, token) {
-  var ctx = requireStaff(token);
+  /*
+   * ★ 改成只有 MANAGER / OWNER 能建立 Claim（生成 QR）。
+   * 2.0 之后主流程是「员工进单 → 扫会员码进分」（grantOrder），
+   * 生成 QR 给顾客自己认领变成备用路径，所以收紧到经理以上。
+   */
+  var ctx = requireStaff(token, ['MANAGER', 'OWNER']);
   if (ctx.error) return ctx.error;
 
   var source = String(data.source || 'FOODCOURT').toUpperCase();
@@ -5473,6 +5522,12 @@ function claimOrder(data, token) {
   audit(customer.customerId, 'CUSTOMER', 'CLAIM_ORDER', 'ORDER', order.orderId, 'AVAILABLE', 'CLAIMED');
 
   var reward = generateReward(customer, order, order.billAmount);
+  /* ★ totalRewards 一律 = 已发出的 Reward 数。
+     之前这里是 0，要等顾客兑换（claimReward）才 +1，
+     而 2.0 的 completeOrder 却是发出时就 +1 —— 两条通路数字对不上。 */
+  if (reward) {
+    customer.totalRewards = (Number(customer.totalRewards) || 0) + 1;
+  }
 
   return ok({
     orderId: order.orderId,
@@ -5541,7 +5596,10 @@ function claimReward(data, token) {
   walletCredit(customer, order, reward.amount, 'REWARD',
                'Reward from ' + (order ? (order.externalOrderId || order.orderId) : 'Yetipsy'),
                customer.customerId, 'CUSTOMER');
-  customer.totalRewards = (Number(customer.totalRewards) || 0) + 1;
+  /* ★ 不再 +1：totalRewards 在 Reward「发出」时就已经算过了
+     （claimOrder / completeOrder / grantOrder 三条发出路径）。
+     这里再加一次会让同一个 Reward 被数两遍 —— 实测过：
+     发出后 1、兑换后 2，但 Rewards 表只有 1 笔。 */
 
   audit(customer.customerId, 'CUSTOMER', 'CLAIM_REWARD', 'REWARD', reward.rewardId, '', reward.amount);
 
@@ -5550,6 +5608,102 @@ function claimReward(data, token) {
     amount: reward.amount,
     walletBalance: customer.walletBalance,
     customer: publicCustomer(customer)
+  });
+}
+
+/* =============================================================
+   ★ 2.0 主流程：员工扫会员码 → 输消费金额 → 自动发积分与 Reward
+   -------------------------------------------------------------
+   这是 2.0 之后员工端的主要操作。取代原本「员工建立 Claim 生成 QR
+   → 顾客自己扫码认领」的流程（那条路径保留，但收紧到 MANAGER / OWNER）。
+
+   与 redeemWallet 的差别：
+     · 不扣钱包（顾客没有要用钱包抵扣时走这条）
+     · 任何员工都能操作（主流程不该卡在权限上）
+     · §56 六小时内只算一次到店，不是无条件 +1
+
+   与顾客自助认领（claimOrder）的差别：
+     · 员工这边一次完成，顾客不需要再扫码确认
+     · 所以必须扫过顾客的会员条码（REQUIRE_MEMBER_CODE_SCAN）
+
+   入参：{ customerId, billAmount(sen), verifyToken, externalOrderId?,
+           source?, note? }
+   ============================================================= */
+
+function grantOrder(data, token) {
+  var ctx = requireStaff(token);
+  if (ctx.error) return ctx.error;
+
+  var c = dbById('customers', String(data.customerId || ''));
+  if (!c) return err('CUSTOMER_NOT_FOUND');
+  if (String(c.status || 'ACTIVE').toUpperCase() === 'BLOCKED') {
+    return err('CUSTOMER_BLOCKED');
+  }
+
+  var bill = Math.round(Number(data.billAmount));
+  if (!isFinite(bill) || bill <= 0) return err('INVALID_AMOUNT');
+
+  var source = String(data.source || 'DIRECT').toUpperCase();
+  var externalOrderId = String(data.externalOrderId || '').trim().toUpperCase();
+  if (externalOrderId && findOrderByExternal(source, externalOrderId)) {
+    return err('DUPLICATE_EXTERNAL_ORDER');
+  }
+
+  /* ★ 必须扫过这位顾客的会员条码。
+     放在金额检查之后，避免验证次数被无效请求白白消耗掉。 */
+  var verifyError = peekMemberVerify(data.verifyToken, c.customerId, ctx.staff.staffId);
+  if (verifyError) return verifyError;
+
+  var order = createMemberTransaction({
+    source: source,
+    externalOrderId: externalOrderId,
+    amount: bill,
+    customerId: c.customerId,
+    createdBy: ctx.staff.staffId,
+    actorType: 'STAFF',
+    note: String(data.note || '').slice(0, 200)
+  });
+
+  order.walletUsed  = 0;
+  order.finalAmount = bill;
+  order.claimStatus = 'CLAIMED';
+  order.claimedAt   = nowISO();
+  order.completedAt = nowISO();
+
+  var points = pointsForAmount(bill, 0);
+  order.pointsEarned = points;
+
+  c.totalSpend = (Number(c.totalSpend) || 0) + bill;
+
+  /* §56 六小时内只算一次到店 —— 不能无条件 +1，
+     否则同一位顾客同晚走 App 点单 + 员工扫码就会算两次 */
+  var visitCounted = shouldCountVisit(c, order, order.orderId);
+  if (visitCounted) {
+    c.totalVisits = (Number(c.totalVisits) || 0) + 1;
+    c.lastVisitAt = nowISO();
+  }
+
+  issuePoints(c, order, points, 'Purchase via staff scan',
+              ctx.staff.staffId, 'STAFF', 'EARN');
+
+  var reward = generateReward(c, order, bill);
+  /* totalRewards = 已发出数，与 claimOrder / completeOrder 一致 */
+  if (reward) {
+    c.totalRewards = (Number(c.totalRewards) || 0) + 1;
+  }
+
+  consumeMemberVerify(data.verifyToken);   // 交易成立，这次验证用掉了
+
+  audit(ctx.staff.staffId, 'STAFF', 'GRANT_ORDER', 'ORDER', order.orderId, '', points);
+
+  return ok({
+    orderId: order.orderId,
+    billAmount: bill,
+    pointsEarned: points,
+    visitCounted: visitCounted,
+    customer: publicCustomer(c),
+    membership: membershipInfo(c),
+    reward: reward ? { rewardId: reward.rewardId, status: reward.status, amount: reward.amount } : null
   });
 }
 ```
@@ -6041,7 +6195,7 @@ function getStaffSession(data, token) {
 ## 20. Code.gs
 
 > Apps Script 里的档案名称：**`Code`**（不要打 .gs）
-> ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 · 238 行 · SHA-256 `8689a2c99ca0b10c`
+> ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 · 243 行 · SHA-256 `c92e89c3aee30751`
 
 ```javascript
 /* =============================================================
@@ -6173,7 +6327,12 @@ function getHandlers() {
     getMemberAnalytics: getMemberAnalytics,     // §52 会员分析
 
     /* ★ 员工专用酒单：回传全部状态（含已下架）的商品，管理页才载得出来 */
-    getAdminMenu: getAdminMenu
+    getAdminMenu: getAdminMenu,
+    /* ★ 任何员工都能上下架商品（状态类操作，§32） */
+    setProductStatus: setProductStatus,
+
+    /* ★ 2.0 员工端主流程：扫会员码 → 输金额 → 自动发积分与 Reward */
+    grantOrder: grantOrder
   };
 }
 

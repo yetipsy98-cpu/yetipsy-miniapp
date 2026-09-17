@@ -946,3 +946,41 @@ body:not(.has-bottom-nav) .toast-box { bottom: 26px; }
   0% { background-position: 100% 50%; }
   100% { background-position: 0 50%; }
 }
+
+/* =============================================================
+   2.0 会员端导览界面（登入后的第一个画面）
+   ============================================================= */
+
+/* 右上角的认领入口（主流程已改成员工扫会员码进分，认领变成次要） */
+.top-claim {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid var(--line); border-radius: 999px;
+  padding: 5px 11px; color: var(--gold); text-decoration: none;
+}
+.top-claim:active { transform: scale(.96); }
+.top-claim .tc-zh { font-size: 11px; }
+.top-claim .tc-en { font-size: 7.5px; letter-spacing: 1px; color: var(--muted-2); }
+
+/* 三张主导航卡 */
+.nav-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr);
+  gap: 10px; margin-bottom: 16px;
+}
+.nav-card {
+  display: flex; flex-direction: column; align-items: center;
+  gap: 3px; padding: 18px 8px 14px;
+  background: var(--card); border: 1px solid var(--line);
+  border-radius: var(--radius); text-decoration: none; color: var(--text);
+  text-align: center;
+}
+.nav-card:active { transform: scale(.97); }
+.nav-card .nc-icon { color: var(--gold); display: block; margin-bottom: 6px; }
+.nav-card .nc-zh { font-size: 13px; font-weight: 700; }
+.nav-card .nc-en {
+  font-size: 7.5px; letter-spacing: 1.2px; color: var(--muted-2);
+  display: block; margin-top: 1px;
+}
+.nav-card .nc-sub {
+  font-size: 9.5px; color: var(--muted-2); display: block; margin-top: 6px;
+  line-height: 1.35;
+}

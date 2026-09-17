@@ -347,6 +347,22 @@ var API = (function () {
       return call('setProductAvailability',
         { productId: productId, available: !!available }, { sessionType: 'staff' });
     },
+    /** 上架 / 下架（状态类操作，任何员工都能做 §32） */
+    setProductStatus: function (productId, status) {
+      return call('setProductStatus',
+        { productId: productId, status: status }, { sessionType: 'staff' });
+    },
+
+    /* ============ 2.0 员工端主流程：扫会员码 → 输金额 → 自动进分 ============ */
+    /**
+     * @param {object} data { customerId, billAmount(sen), verifyToken,
+     *                        externalOrderId?, source?, note? }
+     * 后端按 POINTS_PER_RM 与 REWARD_TIERS 自动发积分与 Reward（§57 §58），
+     * 并按 §56 六小时内只算一次到店。
+     */
+    grantOrder: function (data) {
+      return call('grantOrder', data || {}, { sessionType: 'staff' });
+    },
 
     /* ===== 2.0 点单：菜单管理（§62，MANAGER / OWNER 限定）===== */
     createCategory: function (data) {

@@ -20,6 +20,15 @@ var ADMIN_DASH = (function () {
 
   function init() {
     document.getElementById('logoutBtn').addEventListener('click', ADMIN.logout);
+
+    /* ★ 2.0：建立 Claim（生成 QR）已收紧到 MANAGER / OWNER。
+       主流程改成扫会员码进分（grant.html），普通员工不需要这个入口；
+       而且后端 createClaim 也会回 UNAUTHORIZED，所以前端一并收起来。 */
+    var claimAction = document.getElementById('createClaimAction');
+    if (claimAction && !ADMIN.isManager()) {
+      claimAction.style.display = 'none';
+    }
+
     renderDate();
     load();
   }

@@ -75,7 +75,12 @@ function findClaimByTokenOrCode(rawToken, code) {
    ------------------------------------------------------------- */
 
 function createClaim(data, token) {
-  var ctx = requireStaff(token);
+  /*
+   * ★ 改成只有 MANAGER / OWNER 能建立 Claim（生成 QR）。
+   * 2.0 之后主流程是「员工进单 → 扫会员码进分」（grantOrder），
+   * 生成 QR 给顾客自己认领变成备用路径，所以收紧到经理以上。
+   */
+  var ctx = requireStaff(token, ['MANAGER', 'OWNER']);
   if (ctx.error) return ctx.error;
 
   var source = String(data.source || 'FOODCOURT').toUpperCase();
@@ -320,6 +325,12 @@ function claimOrder(data, token) {
   audit(customer.customerId, 'CUSTOMER', 'CLAIM_ORDER', 'ORDER', order.orderId, 'AVAILABLE', 'CLAIMED');
 
   var reward = generateReward(customer, order, order.billAmount);
+  /* ★ totalRewards 一律 = 已发出的 Reward 数。
+     之前这里是 0，要等顾客兑换（claimReward）才 +1，
+     而 2.0 的 completeOrder 却是发出时就 +1 —— 两条通路数字对不上。 */
+  if (reward) {
+    customer.totalRewards = (Number(customer.totalRewards) || 0) + 1;
+  }
 
   return ok({
     orderId: order.orderId,
@@ -388,7 +399,10 @@ function claimReward(data, token) {
   walletCredit(customer, order, reward.amount, 'REWARD',
                'Reward from ' + (order ? (order.externalOrderId || order.orderId) : 'Yetipsy'),
                customer.customerId, 'CUSTOMER');
-  customer.totalRewards = (Number(customer.totalRewards) || 0) + 1;
+  /* ★ 不再 +1：totalRewards 在 Reward「发出」时就已经算过了
+     （claimOrder / completeOrder / grantOrder 三条发出路径）。
+     这里再加一次会让同一个 Reward 被数两遍 —— 实测过：
+     发出后 1、兑换后 2，但 Rewards 表只有 1 笔。 */
 
   audit(customer.customerId, 'CUSTOMER', 'CLAIM_REWARD', 'REWARD', reward.rewardId, '', reward.amount);
 
@@ -397,5 +411,101 @@ function claimReward(data, token) {
     amount: reward.amount,
     walletBalance: customer.walletBalance,
     customer: publicCustomer(customer)
+  });
+}
+
+/* =============================================================
+   ★ 2.0 主流程：员工扫会员码 → 输消费金额 → 自动发积分与 Reward
+   -------------------------------------------------------------
+   这是 2.0 之后员工端的主要操作。取代原本「员工建立 Claim 生成 QR
+   → 顾客自己扫码认领」的流程（那条路径保留，但收紧到 MANAGER / OWNER）。
+
+   与 redeemWallet 的差别：
+     · 不扣钱包（顾客没有要用钱包抵扣时走这条）
+     · 任何员工都能操作（主流程不该卡在权限上）
+     · §56 六小时内只算一次到店，不是无条件 +1
+
+   与顾客自助认领（claimOrder）的差别：
+     · 员工这边一次完成，顾客不需要再扫码确认
+     · 所以必须扫过顾客的会员条码（REQUIRE_MEMBER_CODE_SCAN）
+
+   入参：{ customerId, billAmount(sen), verifyToken, externalOrderId?,
+           source?, note? }
+   ============================================================= */
+
+function grantOrder(data, token) {
+  var ctx = requireStaff(token);
+  if (ctx.error) return ctx.error;
+
+  var c = dbById('customers', String(data.customerId || ''));
+  if (!c) return err('CUSTOMER_NOT_FOUND');
+  if (String(c.status || 'ACTIVE').toUpperCase() === 'BLOCKED') {
+    return err('CUSTOMER_BLOCKED');
+  }
+
+  var bill = Math.round(Number(data.billAmount));
+  if (!isFinite(bill) || bill <= 0) return err('INVALID_AMOUNT');
+
+  var source = String(data.source || 'DIRECT').toUpperCase();
+  var externalOrderId = String(data.externalOrderId || '').trim().toUpperCase();
+  if (externalOrderId && findOrderByExternal(source, externalOrderId)) {
+    return err('DUPLICATE_EXTERNAL_ORDER');
+  }
+
+  /* ★ 必须扫过这位顾客的会员条码。
+     放在金额检查之后，避免验证次数被无效请求白白消耗掉。 */
+  var verifyError = peekMemberVerify(data.verifyToken, c.customerId, ctx.staff.staffId);
+  if (verifyError) return verifyError;
+
+  var order = createMemberTransaction({
+    source: source,
+    externalOrderId: externalOrderId,
+    amount: bill,
+    customerId: c.customerId,
+    createdBy: ctx.staff.staffId,
+    actorType: 'STAFF',
+    note: String(data.note || '').slice(0, 200)
+  });
+
+  order.walletUsed  = 0;
+  order.finalAmount = bill;
+  order.claimStatus = 'CLAIMED';
+  order.claimedAt   = nowISO();
+  order.completedAt = nowISO();
+
+  var points = pointsForAmount(bill, 0);
+  order.pointsEarned = points;
+
+  c.totalSpend = (Number(c.totalSpend) || 0) + bill;
+
+  /* §56 六小时内只算一次到店 —— 不能无条件 +1，
+     否则同一位顾客同晚走 App 点单 + 员工扫码就会算两次 */
+  var visitCounted = shouldCountVisit(c, order, order.orderId);
+  if (visitCounted) {
+    c.totalVisits = (Number(c.totalVisits) || 0) + 1;
+    c.lastVisitAt = nowISO();
+  }
+
+  issuePoints(c, order, points, 'Purchase via staff scan',
+              ctx.staff.staffId, 'STAFF', 'EARN');
+
+  var reward = generateReward(c, order, bill);
+  /* totalRewards = 已发出数，与 claimOrder / completeOrder 一致 */
+  if (reward) {
+    c.totalRewards = (Number(c.totalRewards) || 0) + 1;
+  }
+
+  consumeMemberVerify(data.verifyToken);   // 交易成立，这次验证用掉了
+
+  audit(ctx.staff.staffId, 'STAFF', 'GRANT_ORDER', 'ORDER', order.orderId, '', points);
+
+  return ok({
+    orderId: order.orderId,
+    billAmount: bill,
+    pointsEarned: points,
+    visitCounted: visitCounted,
+    customer: publicCustomer(c),
+    membership: membershipInfo(c),
+    reward: reward ? { rewardId: reward.rewardId, status: reward.status, amount: reward.amount } : null
   });
 }

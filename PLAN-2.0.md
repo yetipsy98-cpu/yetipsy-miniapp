@@ -20,10 +20,11 @@
 | 6 | 建立订单（§75） | ✅ 完成 · `AppOrders.gs` · `placeOrder` 幂等 · 订单追踪页 |
 | 7 | 员工订单看板（§76） | ✅ 完成 · `OrderBoard.gs` · `admin/orderboard.html` · `test:orderboard` 159 项 |
 | 8 | 会员整合（§77） | ✅ 完成 · 完成订单时呼叫 1.x 的 `issuePoints` / `generateReward` / `walletCredit`，没有第二套逻辑 |
-| 9 | Wallet 接入 Checkout（§78） | ⬜ 未开始 |
-| 10 | Owner 菜单管理（§79） | 🟡 后端 7 个 action 已就位并通过权限测试；`admin/menu.html` 页面未做 |
-| 11 | Analytics（§80） | ⬜ 未开始 |
-| 12 | 安全审计（§81） | ✅ 完成 · §81 的 12 项逐条验 · `test:security` 214 项 |
+| 9 | Wallet 接入 Checkout（§78） | ✅ 完成 · Quote 回传余额／最多可用／20% 上限；`markPaymentPaid` 才真正扣款，取消才退回 · `test:security` 钱包重复使用项 |
+| 10 | Owner 菜单管理（§79） | ✅ 完成 · `admin/menu.html` 增删改 + 分类 + 上下架 · `test:admin-ui` |
+| 11 | Analytics（§80） | ✅ 完成 · `Admin.gs` 报表 + `admin/analytics.html` · `test:analytics` 103 项 |
+| 12 | 安全审计（§81） | ✅ 完成 · §81 的 12 项逐条验 · `test:security` 216 项 |
+| 13 | 业务重构：员工扫码进分为主流程（§86） | ✅ 完成 · `grantOrder` / `setProductStatus` · `test:grant` 116 项 |
 
 ### 页面覆盖率补完（`npm run test:admin-ui`，123 项）
 
@@ -665,3 +666,82 @@ WalletTransaction / AuditLog`。
                  MEMBER → VERIFIED SPEND → POINTS → MEMBERSHIP
                     → REWARD → WALLET → RETURN
 ```
+
+---
+
+## §86 · 业务重构：员工扫码进分改为主流程（Owner 于 2.0 定稿后追加）
+
+Owner 在 2.0 各 Phase 完成后提出四项业务决定。这一节记录决定本身、
+实作位置，以及重构过程中**实测查出的两个真 bug**。
+
+### 一、四项决定与实作
+
+| # | 决定 | 实作 |
+|---|---|---|
+| 1 | 主流程改成「员工输入账单金额 → 扫会员码 → 自动进积分 + 自动发 Reward」。Foodcourt Claim 保留但**降级为次要**（只有经理用得到）。 | 新增 `grantOrder` action（`Claims.gs`）；`createClaim` 收紧为 MANAGER / OWNER；`admin/grant.html` 为员工首页第一个大按钮 |
+| 2 | 会员端改成「登入 → 导览界面」，导览界面三张卡：**酒单 / 会员码 / 会员中心**；原功能放在下方。 | `index.html` 改版；`js/ui.js` 底部导航改 4 格（首页 / 酒单 / 会员码 / 会员中心）；认领入口移到右上角 |
+| 3 | 员工菜单管理改成 `status_only`：**所有员工**都能上下架（ACTIVE ↔ ARCHIVED）与标售罄；改价与新增商品仍限 MANAGER / OWNER。 | 新增 `setProductStatus` action（`Menu.gs`，任何员工可用）；`admin/menu.js` 每一列都显示上下架钮 |
+| 4 | 积分／Reward 由**后端自动计算**（员工只输账单金额），不让员工自己填点数。 | `grantOrder` 内部走与点单完成同一条 `issuePoints` / `generateReward`，没有第二套规则 |
+
+### 二、`grantOrder` 的完整规则（`demo/test-grant.js` 116 项实测）
+
+1. **必须先扫会员码**：`verifyToken` 由顾客端 `getMemberCode` → 员工端 `scanMemberCode` 取得，
+   **一次性**，用过即失效。没扫 → `MEMBER_VERIFY_REQUIRED`；伪造 → 失败；
+   重复使用 → `MEMBER_VERIFY_EXPIRED`；扫了别人的码却给 A 进分 → `MEMBER_VERIFY_MISMATCH`。
+2. **金额验证**：`0 / -100 / 'abc' / null` → `INVALID_AMOUNT`；未知会员 → `CUSTOMER_NOT_FOUND`；
+   同一张单号重复送 → `DUPLICATE_EXTERNAL_ORDER`（`Orders` 表不会多出一列）。
+3. **自动计算**：RM86 → `pointsEarned 86`（`POINTS_PER_RM` = 1）、`visitCounted true`、
+   Reward 自动生成（`AVAILABLE`）。RM20 低于 `REWARD_MIN_SPEND`（RM30）→ 只有积分，不发 Reward。
+4. **写入 1.x 的资料结构**：`Orders` 一列（`orderSource DIRECT`、`claimStatus CLAIMED`、`walletUsed 0`）、
+   1 笔 `PointTx`、`AuditLog` 记 `GRANT_ORDER`。
+5. **§56 六小时到店规则与点单共用**：连开三张单 `totalVisits` 仍是 **1**，但积分照算（120）。
+6. **权限**：三种员工角色都能进分；顾客 token 与匿名 → `INVALID_SESSION`；
+   被封锁的会员 → `CUSTOMER_BLOCKED`。
+
+### 三、重构过程中实测查出的两个真 bug
+
+#### bug 1 · `redeemWallet` 违反 §56，会重复计入到店次数
+
+`Wallet.gs` 的 `redeemWallet` 原本是**无条件** `totalVisits + 1`。
+也就是说客人同一天来两次、两次都用钱包抵扣，就会被算成两次到店 ——
+但 §56 明订 `VISIT_SESSION_HOURS = 6`，六小时内只算一次。
+
+点单完成走的是 `OrderBoard.gs completeOrder`，那条路径**有**正确判断；
+只有钱包抵扣这条漏了。修法：改为与点单共用同一个判断逻辑。
+
+#### bug 2 · `totalRewards` 有双重计数，而且五处的语义不一致
+
+`grep -rn totalRewards apps-script/*.gs` 找到 6 处、三种不同语义。
+用一个探针实测（发出 Reward → 数 `Rewards` 表的列数）证实：
+
+- 点单发出 Reward → `totalRewards 1` / 1 列 ✅
+- 顾客认领后 → `totalRewards 2` / 1 列 ❌ **多算一次**
+
+根因：`claimOrder` 在**发出时**已经 +1，`claimReward` 在**认领时**又 +1。
+
+统一语义为「**已发出的 Reward 数量**」，改四处：
+
+| 档案 · 函式 | 改动 |
+|---|---|
+| `Claims.gs claimOrder` | 发出时 +1（原本就有） |
+| `Claims.gs claimReward` | **移除**认领时的 +1 |
+| `Claims.gs grantOrder` | 发出时 +1（新流程） |
+| `Orders.gs cancelOrder` | 取消 `AVAILABLE`（已发出未认领）的 Reward 时也要 −1，原本只处理 `CLAIMED` |
+
+修好后实测三条路径都对得上：`兑换后 1 / 1 列`、`认领后 2 / 2 列`、`扫码后 3 / 3 列`。
+`OrderBoard.gs completeOrder` 原本就是对的，未改动。
+
+### 四、新增／改动的档案
+
+**后端**：`Claims.gs`（`grantOrder`、`createClaim` 权限、`totalRewards`）、
+`Menu.gs`（`setProductStatus`）、`Wallet.gs`（§56）、`Orders.gs`（`cancelOrder`）、
+`Utils.gs`（`CUSTOMER_BLOCKED`）、`Code.gs`（87 个 action）。
+
+**员工端**：`js/scanner.js`（**新**，从 `admin-redeem.js` 与 `code.js` 两份重复的扫码码抽出共用模组）、
+`js/admin-grant.js` + `admin/grant.html`（**新**）、`admin/index.html`、
+`js/admin-dashboard.js`（非经理隐藏建立 Claim）、`js/admin-menu.js`。
+
+**会员端**：`index.html`（导览界面）、`js/app.js`、`js/ui.js`（底部导航）、`css/app.css`。
+
+**测试**：`demo/test-grant.js`（**新**，116 项）、`demo/test-admin-ui.js`（+53 项）、
+`demo/test-home-ui.js`（+28 项）。

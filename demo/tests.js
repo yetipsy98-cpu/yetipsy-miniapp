@@ -487,8 +487,20 @@ suite.group('19 · 权限与 session', (t) => {
   t.errorIs(call(w, 'getProfile', {}, 'not-a-real-token'),
     'INVALID_SESSION', '假 token → 拒绝');
 
+  /* ★ 2.0 改动：建立 Claim（生成 QR）收紧到 MANAGER / OWNER。
+     主流程改成员工扫会员码进分（grantOrder），QR 认领变成备用路径。 */
+  t.errorIs(call(w, 'createClaim',
+    { source: 'DIRECT', amount: 1000 }, staffToken),
+    'UNAUTHORIZED', '★ 普通员工不能建立 Claim（2.0 收紧）');
   t.okIs(call(w, 'createClaim',
-    { source: 'DIRECT', amount: 1000 }, staffToken), '员工可以建立 Claim');
+    { source: 'DIRECT', amount: 1000 }, w.ownerToken), '★ OWNER 仍可建立 Claim');
+  /* 但普通员工仍能做主流程的扫码进分 */
+  t.check('普通员工仍可调 grantOrder（权限不挡，另测验证）',
+    ['grantOrder', 'setProductAvailability', 'setProductStatus', 'getAdminMenu']
+      .every(function (a) {
+        var r = call(w, a, {}, staffToken);
+        return r.success || r.error.code !== 'UNAUTHORIZED';
+      }));
 
   /* 停用账号后 session 立刻失效 */
   call(w, 'setStaffStatus', { staffId: staffRes.data.staffId, status: 'DISABLED' }, w.ownerToken);

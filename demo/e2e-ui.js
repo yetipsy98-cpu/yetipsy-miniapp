@@ -95,9 +95,21 @@ async function waitForServer(timeoutMs) {
       t.okIs(login, '员工登录');
       const token = login.data.token;
 
+      /* ★ 2.0：建立 Claim（生成 QR）收紧到 MANAGER / OWNER，
+         主流程改成员工扫会员码进分（grantOrder）。 */
+      const denied = await post('createClaim',
+        { source: 'FOODCOURT', externalOrderId: 'FC-DENY', amount: 1000 }, token);
+      t.check('★ 普通员工建立 Claim 会被挡', denied.success === false);
+      t.equal('错误码 UNAUTHORIZED', denied.error.code, 'UNAUTHORIZED');
+
+      const mgr = await post('staffLogin', { username: 'manager', password: 'yetipsy123' });
+      t.okIs(mgr, '经理登录');
+      global.__managerToken = mgr.data.token;
+
       const made = await post('createClaim',
-        { source: 'FOODCOURT', externalOrderId: 'FC8231', amount: 8600 }, token);
-      t.okIs(made, '建立 Claim');
+        { source: 'FOODCOURT', externalOrderId: 'FC8231', amount: 8600 },
+        global.__managerToken);
+      t.okIs(made, '★ MANAGER 建立 Claim');
       t.equal('金额 RM86.00', made.data.amount, 8600);
       global.__claim = made.data;
       global.__staffToken = token;

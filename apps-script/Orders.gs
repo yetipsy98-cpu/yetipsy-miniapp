@@ -125,7 +125,13 @@ function cancelOrder(data, token) {
     var pending = dbFind('rewards', function (r) {
       return r.orderId === order.orderId && r.status === 'AVAILABLE';
     });
-    if (pending) pending.status = 'CANCELLED';
+    if (pending) {
+      pending.status = 'CANCELLED';
+      /* ★ totalRewards 是「已发出数」，发出时已经 +1 了，
+         所以取消一个还没兑换的 Reward 也要 -1，
+         否则会员资料上的数字会比 Rewards 表多。 */
+      customer.totalRewards = Math.max(0, (Number(customer.totalRewards) || 0) - 1);
+    }
   }
 
   audit(ctx.staff.staffId, 'STAFF', 'CANCEL_ORDER', 'ORDER', order.orderId, 'ACTIVE',

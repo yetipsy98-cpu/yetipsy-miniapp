@@ -145,8 +145,12 @@ function redeemWallet(data, token) {
   order.pointsEarned = points;
 
   c.totalSpend  = (Number(c.totalSpend) || 0) + bill;
-  c.totalVisits = (Number(c.totalVisits) || 0) + 1;
-  c.lastVisitAt = nowISO();
+  /* §56 六小时内只算一次到店 —— 原本这里是无条件 +1，
+     同一位顾客同晚用钱包抵扣再走别条通路就会算两次 */
+  if (shouldCountVisit(c, order, order.orderId)) {
+    c.totalVisits = (Number(c.totalVisits) || 0) + 1;
+    c.lastVisitAt = nowISO();
+  }
   issuePoints(c, order, points, 'Purchase with wallet redemption', ctx.staff.staffId, 'STAFF', 'EARN');
 
   var reward = generateReward(c, order, bill);

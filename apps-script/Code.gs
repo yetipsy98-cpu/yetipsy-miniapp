@@ -127,7 +127,12 @@ function getHandlers() {
     getMemberAnalytics: getMemberAnalytics,     // §52 会员分析
 
     /* ★ 员工专用酒单：回传全部状态（含已下架）的商品，管理页才载得出来 */
-    getAdminMenu: getAdminMenu
+    getAdminMenu: getAdminMenu,
+    /* ★ 任何员工都能上下架商品（状态类操作，§32） */
+    setProductStatus: setProductStatus,
+
+    /* ★ 2.0 员工端主流程：扫会员码 → 输金额 → 自动发积分与 Reward */
+    grantOrder: grantOrder
   };
 }
 

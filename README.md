@@ -1,7 +1,9 @@
-# YETIPSY MINI APP 1.2 — FOODCOURT EDITION
+# YETIPSY MINI APP 1.6 — ORDERING EDITION
 
 > Foodcourt 负责点餐和付款。
 > Yetipsy 负责顾客关系。
+>
+> **1.6：员工扫会员码直接进分（主流程）+ 手机自助点单（Smart Ordering 2.0）。**
 
 Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积分 / 奖励 / 钱包系统。
 
@@ -25,16 +27,35 @@ Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积�
 
 **做：**
 
+主流程（1.6 起）—— 员工扫会员码直接进分：
+
 ```
-任何渠道产生消费 → 建立会员消费记录 → 产生 Claim → 顾客认领
-→ 绑定会员 → 累计 Spend → 获得 Points → 更新 Tier
-→ 获得 Reward → Reward 进入 Wallet → 促进下一次消费
+员工输入账单金额 → 扫顾客会员码 → 后端自动计算
+→ 累计 Spend → 获得 Points → 更新 Tier
+→ 自动产生 Reward → Reward 进入 Wallet → 促进下一次消费
+```
+
+自助点单（Smart Ordering 2.0）：
+
+```
+顾客开酒单 → 加入购物车 → 选桌号或自取 → 结帐（可用钱包抵扣）
+→ 员工看板接单 → 制作 → 完成
+→ 完成时才发 Points / Reward（§22），并写入同一套会员资料
+```
+
+Foodcourt Claim（1.x 原流程，保留但降级为次要，仅 MANAGER / OWNER）：
+
+```
+经理建立 Claim → 顾客认领 → 绑定会员 → 同上
 ```
 
 **不做（Phase 1 明确排除）：**
 
-Foodcourt API、线上点餐、DuitNow / FPX / 信用卡、POS、库存、会计、
+Foodcourt API、线上付款闸（DuitNow / FPX / 信用卡）、POS、库存、会计、
 厨房系统、订位、外送、WhatsApp 自动化、SMS OTP、Native App、多分店、拆单积分。
+
+> 「线上点餐」在 2.0 已经做了（自助点单 + 员工看板），
+> 但**只做到产生订单**，不做收银与厨房 ERP。付款仍在柜台完成。
 
 > 这不是 POS。
 > 目的是 **CUSTOMER RETENTION**，不是 ORDER MANAGEMENT。

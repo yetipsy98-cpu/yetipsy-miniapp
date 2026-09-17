@@ -32,7 +32,9 @@ const ADMIN_PAGES = ['admin/login.html', 'admin/index.html', 'admin/claim.html',
   /* 2.0 员工订单看板（§69）；1.x 的 admin/orders.html 保留不动 */
   'admin/orderboard.html',
   /* 2.0 Owner 菜单管理与业绩报表（§32 §50 §51 §69） */
-  'admin/menu.html', 'admin/analytics.html'];
+  'admin/menu.html', 'admin/analytics.html',
+  /* 2.0 员工端主流程：扫会员码进分 */
+  'admin/grant.html'];
 const PRODUCTION_PAGES = CUSTOMER_PAGES.concat(ADMIN_PAGES);
 
 /* -------------------------------------------------------------
@@ -150,7 +152,8 @@ suite.group('05 · HTML 元素 id', (t) => {
     ['js/admin-staff.js', 'admin/staff.html'],
     ['js/admin-orderboard.js', 'admin/orderboard.html'],
     ['js/admin-menu.js', 'admin/menu.html'],
-    ['js/admin-analytics.js', 'admin/analytics.html']
+    ['js/admin-analytics.js', 'admin/analytics.html'],
+    ['js/admin-grant.js', 'admin/grant.html']
   ];
 
   pairs.forEach((pair) => {

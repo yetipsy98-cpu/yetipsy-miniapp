@@ -211,6 +211,7 @@ var ERR = {
   INSUFFICIENT_WALLET:     ['INSUFFICIENT_WALLET', 'Insufficient wallet balance. / 钱包余额不足。'],
   WALLET_LIMIT_EXCEEDED:   ['WALLET_LIMIT_EXCEEDED', 'Wallet usage exceeds the allowed limit. / 超出钱包可抵扣上限。'],
   CUSTOMER_NOT_FOUND:      ['CUSTOMER_NOT_FOUND', 'Member not found. / 找不到会员。'],
+  CUSTOMER_BLOCKED:        ['CUSTOMER_BLOCKED', 'This member account is blocked. / 这个会员账号已被停用。'],
   INVALID_ROLE:            ['INVALID_ROLE', 'Invalid role. / 角色无效。'],
   RATE_LIMITED:            ['RATE_LIMITED', 'Too many attempts. Please wait. / 尝试次数过多，请稍后再试。'],
   STAFF_NOT_FOUND:         ['STAFF_NOT_FOUND', 'Staff account not found. / 找不到员工账号。'],

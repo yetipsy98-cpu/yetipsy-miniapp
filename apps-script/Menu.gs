@@ -796,3 +796,36 @@ function getAdminMenu(data, token) {
     }
   });
 }
+
+/* =============================================================
+   商品上下架（2.0 · §32 状态类操作）
+   -------------------------------------------------------------
+   与 setProductAvailability 同级：任何员工都能操作。
+   「状态」类操作（售罄 / 有货、上架 / 下架）不该卡在权限上，
+   改价格与新增商品仍然只有 MANAGER / OWNER（updateProduct）。
+
+   入参：{ productId, status: 'ACTIVE' | 'ARCHIVED' }
+   ============================================================= */
+
+function setProductStatus(data, token) {
+  var ctx = requireStaff(token);
+  if (ctx.error) return ctx.error;
+
+  var p = dbById('products', String(data.productId || ''));
+  if (!p) return err('PRODUCT_NOT_FOUND');
+
+  var status = String(data.status || '').toUpperCase();
+  if (['ACTIVE', 'ARCHIVED'].indexOf(status) === -1) {
+    return err('INVALID_INPUT', 'Status must be ACTIVE or ARCHIVED. / 状态只能是 ACTIVE 或 ARCHIVED。');
+  }
+
+  p.status = status;
+  p.updatedAt = nowISO();
+
+  audit(ctx.staff.staffId, 'STAFF', 'SET_PRODUCT_STATUS', 'PRODUCT', p.productId,
+        '', status === 'ACTIVE' ? '上架' : '下架');
+
+  clearMenuCache();
+
+  return ok({ productId: p.productId, status: p.status });
+}

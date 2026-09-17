@@ -639,10 +639,15 @@ suite.group('13 · §83 LockService：写钱的路径都在锁内', (t) => {
 suite.group('14 · §68 升级后 1.x 仍然正常', (t) => {
   const w = secWorld({ wallet: 868 });
 
-  /* Foodcourt 开单 + 认领 */
+  /* Foodcourt 开单 + 认领。
+     ★ 2.0：建立 Claim 收紧到 MANAGER / OWNER，所以用 ownerToken。 */
   const made = call(w, 'createClaim',
-    { source: 'FOODCOURT', externalOrderId: 'FC-SEC-1', amount: 5000 }, w.staffToken);
-  t.okIs(made, '员工开单照旧');
+    { source: 'FOODCOURT', externalOrderId: 'FC-SEC-1', amount: 5000 }, w.ownerToken);
+  t.okIs(made, '经理开单照旧');
+  const staffDenied = call(w, 'createClaim',
+    { source: 'FOODCOURT', externalOrderId: 'FC-SEC-2', amount: 1000 }, w.staffToken);
+  t.check('★ 普通员工建立 Claim 被挡（2.0 收紧）', staffDenied.success === false);
+  t.equal('错误码 UNAUTHORIZED', staffDenied.error.code, 'UNAUTHORIZED');
   const claim = call(w, 'claimOrder', { token: made.data.token }, w.customerToken);
   t.okIs(claim, '顾客认领照旧');
   t.equal('Foodcourt 得到 50 分', claim.data.pointsEarned, 50);

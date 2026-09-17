@@ -641,6 +641,217 @@ suite.group('06e · preview.html 总览页跑得起来', async (t) => {
   page.dom.window.close();
 });
 
+/* -------------------------------------------------------------
+   08 · admin/grant.html 员工扫会员码进分（2.0 主流程）
+   ------------------------------------------------------------- */
+
+suite.group('08 · admin/grant.html 扫码 → 输金额 → 进分', async (t) => {
+  /* 先准备一位会员 */
+  const reg = await post('customerRegister',
+    { phone: '0124445555', name: 'GrantTester', password: 'test-pass-123' });
+  t.okIs(reg, '注册会员');
+  const ct = reg.data.token;
+  const before = (await post('getProfile', {}, ct)).data.customer;
+  t.equal('起始积分 0', before.currentPoints, 0);
+
+  const page = await openPage(global.__JSDOM, '/admin/grant.html',
+    seedStaff(global.__staffToken, global.__staffProfile));
+  const { win, doc } = page;
+
+  t.check('页面跑得起来（API 可用）', !!win.API);
+  t.check('★ ADMIN_GRANT 模组存在', !!win.ADMIN_GRANT);
+  t.check('★ SCANNER 共用模组存在', !!win.SCANNER);
+
+  const st0 = win.ADMIN_GRANT.debugState();
+  t.equal('★ 一开始在扫码步骤', st0.step, 'scan');
+  t.equal('还没有会员', st0.hasCustomer, false);
+
+  /* 扫码步骤的画面 */
+  t.check('★ 扫码步骤可见',
+    doc.getElementById('stepScan').style.display !== 'none');
+  t.check('确认步骤先隐藏',
+    doc.getElementById('stepVerify').style.display === 'none');
+  t.check('★ 有支援说明文字',
+    doc.getElementById('scanSupport').innerHTML.length > 0);
+
+  /* 用手动输入走完整条路（相机在 jsdom 里开不了） */
+  const code = await post('getMemberCode', {}, ct);
+  t.okIs(code, '取得会员条码');
+  doc.getElementById('manualInput').value = code.data.payload;
+  doc.getElementById('manualBtn').click();
+
+  const verified = await until(() => win.ADMIN_GRANT.debugState().step === 'verify', 12000);
+  t.check('★ 扫码后进入确认步骤', verified,
+    JSON.stringify(win.ADMIN_GRANT.debugState()));
+
+  const st1 = win.ADMIN_GRANT.debugState();
+  t.equal('★ 认出是这位会员', st1.customerId, reg.data.customer.customerId);
+  t.equal('★ 拿到 verifyToken', st1.hasVerifyToken, true);
+  t.check('验证有倒数', st1.verifyLeft > 0, st1.verifyLeft);
+
+  /* 会员资料显示出来了 */
+  t.equal('★ 画面显示会员名', doc.getElementById('vName').textContent, 'GrantTester');
+  t.equal('画面显示会员编号', doc.getElementById('vId').textContent,
+    reg.data.customer.customerId);
+
+  /* 输金额 */
+  doc.getElementById('billInput').value = '86';
+  doc.getElementById('calcBtn').click();
+  await sleep(200);
+  t.equal('★ 金额换算成 sen', win.ADMIN_GRANT.debugState().bill, 8600);
+  t.check('★ 确认按钮出现了',
+    doc.getElementById('grantBtn').style.display !== 'none');
+  t.check('有预算提示', doc.getElementById('calcLine').innerHTML.indexOf('86.00') >= 0);
+
+  /* 送出 */
+  doc.getElementById('grantBtn').click();
+  const done = await until(() => win.ADMIN_GRANT.debugState().step === 'result', 12000);
+  t.check('★ 进入结果步骤', done, JSON.stringify(win.ADMIN_GRANT.debugState()));
+
+  const st2 = win.ADMIN_GRANT.debugState();
+  t.equal('★ 后端算出 86 分', st2.pointsEarned, 86);
+  t.equal('★ 算了一次到店', st2.visitCounted, true);
+  t.check('★ 发了 Reward（RM86 ≥ RM30）', st2.rewardAmount > 0, st2.rewardAmount);
+
+  /* 结果显示 */
+  t.equal('★ 画面显示 +86 分', doc.getElementById('rPoints').textContent, '+86 分');
+  t.equal('画面显示消费 RM86.00', doc.getElementById('rBill').textContent, 'RM 86.00');
+  t.check('画面说明到店', doc.getElementById('rVisit').textContent.indexOf('到店') >= 0);
+  t.check('★ 画面显示 Reward 金额',
+    doc.getElementById('rReward').innerHTML.indexOf('Reward') >= 0);
+
+  /* 后端真的写进去了 */
+  const after = (await post('getProfile', {}, ct)).data.customer;
+  t.equal('★ 会员积分变 86', after.currentPoints, 86);
+  t.equal('★ 总消费 RM86.00', after.totalSpend, 8600);
+  t.equal('★ 到店 1 次', after.totalVisits, 1);
+  t.equal('★ totalRewards 1（发出时就算）', after.totalRewards, 1);
+
+  page.dom.window.close();
+});
+
+suite.group('08b · verifyToken 一次性，用过要重扫', async (t) => {
+  const reg = await post('customerRegister',
+    { phone: '0125556666', name: 'ReuseTester', password: 'test-pass-123' });
+  const ct = reg.data.token;
+
+  const page = await openPage(global.__JSDOM, '/admin/grant.html',
+    seedStaff(global.__staffToken, global.__staffProfile));
+  const { win, doc } = page;
+
+  const code = await post('getMemberCode', {}, ct);
+  doc.getElementById('manualInput').value = code.data.payload;
+  doc.getElementById('manualBtn').click();
+  await until(() => win.ADMIN_GRANT.debugState().step === 'verify', 12000);
+
+  doc.getElementById('billInput').value = '50';
+  doc.getElementById('calcBtn').click();
+  await sleep(150);
+  doc.getElementById('grantBtn').click();
+  await until(() => win.ADMIN_GRANT.debugState().step === 'result', 12000);
+  t.equal('第一次成功', win.ADMIN_GRANT.debugState().pointsEarned, 50);
+
+  /* 用「再来一单」回到扫码步骤 —— 不能沿用旧的 verifyToken */
+  doc.getElementById('againBtn').click();
+  await sleep(250);
+  const st = win.ADMIN_GRANT.debugState();
+  t.equal('★ 回到扫码步骤', st.step, 'scan');
+  t.equal('★ verifyToken 已清掉', st.hasVerifyToken, false);
+  t.equal('★ 会员已清掉', st.hasCustomer, false);
+  t.equal('金额已清空', st.bill, 0);
+  t.equal('确认按钮收回去了', doc.getElementById('grantBtn').style.display, 'none');
+
+  page.dom.window.close();
+});
+
+suite.group('08c · 没扫码就不能送出', async (t) => {
+  const page = await openPage(global.__JSDOM, '/admin/grant.html',
+    seedStaff(global.__staffToken, global.__staffProfile));
+  const { win, doc } = page;
+
+  /* 直接呼叫 submit（模拟有人用 devtools 跳过扫码） */
+  const st = win.ADMIN_GRANT.debugState();
+  t.equal('没有会员', st.hasCustomer, false);
+  t.equal('没有 verifyToken', st.hasVerifyToken, false);
+
+  /* 输金额也不该能送出 */
+  doc.getElementById('billInput').value = '100';
+  doc.getElementById('calcBtn').click();
+  await sleep(150);
+  t.equal('金额算出来了', win.ADMIN_GRANT.debugState().bill, 10000);
+
+  /* 后端也会挡：没有 verifyToken 直接呼叫 grantOrder */
+  const res = await post('grantOrder', { customerId: 'YT000001', billAmount: 10000 },
+    global.__staffToken);
+  t.check('★ 后端挡下没扫码的请求', res.success === false);
+  t.equal('错误码 MEMBER_VERIFY_REQUIRED', res.error.code, 'MEMBER_VERIFY_REQUIRED');
+
+  page.dom.window.close();
+});
+
+suite.group('08d · 员工首页：扫码进分是主操作，Claim 限经理', async (t) => {
+  /* 普通员工 */
+  const asStaff = await openPage(global.__JSDOM, '/admin/index.html',
+    seedStaff(global.__staffToken, global.__staffProfile));
+  await sleep(400);
+  const staffHtml = asStaff.doc.body.innerHTML;
+  t.check('★ 员工首页有扫码进分入口', staffHtml.indexOf('grant.html') >= 0);
+  t.check('★ 扫码进分排在最前面',
+    staffHtml.indexOf('grant.html') < staffHtml.indexOf('orderboard.html'));
+  const hidden = asStaff.doc.getElementById('createClaimAction');
+  t.check('★ 普通员工看不到建立 Claim',
+    !!hidden && hidden.style.display === 'none',
+    hidden ? hidden.style.display : '(元素不存在)');
+  asStaff.dom.window.close();
+
+  /* 经理 */
+  const asMgr = await openPage(global.__JSDOM, '/admin/index.html',
+    seedStaff(global.__managerToken, global.__managerProfile));
+  await sleep(400);
+  const shown = asMgr.doc.getElementById('createClaimAction');
+  t.check('★ 经理看得到建立 Claim',
+    !!shown && shown.style.display !== 'none',
+    shown ? shown.style.display : '(元素不存在)');
+  asMgr.dom.window.close();
+});
+
+suite.group('08e · 员工菜单页：普通员工也能上下架', async (t) => {
+  const page = await openPage(global.__JSDOM, '/admin/menu.html',
+    seedStaff(global.__staffToken, global.__staffProfile));
+  const { win, doc } = page;
+  await until(() => win.ADMIN_MENU.debugState().products > 0, 12000);
+
+  const st = win.ADMIN_MENU.debugState();
+  t.equal('★ 普通员工 canEdit = false', st.canEdit, false);
+
+  /* 上下架按钮对所有员工都在（状态类操作） */
+  const statusBtns = doc.querySelectorAll('#menuAdminBody [data-status]');
+  t.check('★ 普通员工有上下架按钮', statusBtns.length >= 4, statusBtns.length + ' 个');
+  const toggles = doc.querySelectorAll('#menuAdminBody [data-toggle]');
+  t.check('★ 售罄切换也在', toggles.length >= 4, toggles.length + ' 个');
+  t.equal('★ 但没有编辑按钮',
+    doc.querySelectorAll('#menuAdminBody [data-edit]').length, 0);
+
+  /* 真的点一下下架，后端要变 */
+  const menu0 = await post('getAdminMenu', {}, global.__staffToken);
+  const target = menu0.data.products[0];
+  const btn = doc.querySelector('#menuAdminBody [data-status="' + target.productId + '"]');
+  t.check('★ 找得到那一列的上下架钮', !!btn);
+  btn.click();
+
+  const changed = await until(async () => {
+    const m = await post('getAdminMenu', {}, global.__staffToken);
+    const p = m.data.products.filter((x) => x.productId === target.productId)[0];
+    return p && p.status === 'ARCHIVED';
+  }, 12000);
+  t.check('★ 普通员工真的把商品下架了', changed);
+
+  /* 恢复回去，别污染后面的测试 */
+  await post('setProductStatus',
+    { productId: target.productId, status: 'ACTIVE' }, global.__staffToken);
+  page.dom.window.close();
+});
+
 /* =============================================================
    起 server → 跑 → 收尾
    ============================================================= */

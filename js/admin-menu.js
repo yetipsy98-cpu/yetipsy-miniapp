@@ -139,11 +139,14 @@ var ADMIN_MENU = (function () {
 
   function row(p) {
     var soldOut = !p.available;
+    /* getAdminMenu 才回传 status（顾客端的 getMenu 只有 ACTIVE 的商品） */
+    var archived = String(p.status || 'ACTIVE').toUpperCase() !== 'ACTIVE';
     var opts = state.optionsByProduct[p.productId] || [];
     return '<div class="a-list" data-row="' + UI.esc(p.productId) + '">' +
       '<div class="a-main">' +
         '<div class="a-title">' + UI.esc(p.nameEN) +
           (p.nameZH ? ' <span class="a-sub">' + UI.esc(p.nameZH) + '</span>' : '') +
+          (archived ? ' <span class="chip chip-warn">已下架 ARCHIVED</span>' : '') +
           (soldOut ? ' <span class="chip chip-warn">售罄 SOLD OUT</span>' : '') +
           (p.onPromo ? ' <span class="chip chip-on">促销 PROMO</span>' : '') +
         '</div>' +
@@ -158,6 +161,10 @@ var ADMIN_MENU = (function () {
       '<div class="a-right">' +
         '<button class="chip" data-toggle="' + UI.esc(p.productId) + '">' +
           (soldOut ? '恢复有货 IN STOCK' : '标售罄 SOLD OUT') + '</button>' +
+        /* ★ 上下架是「状态类」操作，任何员工都能做（setProductStatus）。
+           只有改价格 / 新增商品才需要 MANAGER+（state.canEdit）。 */
+        '<button class="chip mt-8" data-status="' + UI.esc(p.productId) + '">' +
+          (archived ? '上架 RESTORE' : '下架 ARCHIVE') + '</button>' +
         (state.canEdit
           ? '<button class="chip mt-8" data-edit="' + UI.esc(p.productId) + '">编辑 EDIT</button>' : '') +
       '</div>' +
@@ -186,6 +193,25 @@ var ADMIN_MENU = (function () {
       el.addEventListener('click', function () {
         var pid = el.getAttribute('data-edit');
         openForm(state.products.filter(function (p) { return p.productId === pid; })[0]);
+      });
+    });
+
+    /* ★ 上下架：任何员工都能做（§32 状态类操作） */
+    Array.prototype.forEach.call(box.querySelectorAll('[data-status]'), function (el) {
+      el.addEventListener('click', function () {
+        var pid = el.getAttribute('data-status');
+        var prod = state.products.filter(function (p) { return p.productId === pid; })[0];
+        if (!prod) return;
+        var archived = String(prod.status || 'ACTIVE').toUpperCase() !== 'ACTIVE';
+        var next = archived ? 'ACTIVE' : 'ARCHIVED';
+
+        el.disabled = true;
+        API.staff.setProductStatus(pid, next).then(function (res) {
+          el.disabled = false;
+          if (!res.success) { UI.toast(res.error.message, 'error'); return; }
+          UI.toast(archived ? '已上架' : '已下架', 'success', 1800);
+          fetchAll();
+        });
       });
     });
   }

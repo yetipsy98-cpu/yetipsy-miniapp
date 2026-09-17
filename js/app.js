@@ -21,6 +21,12 @@ var APP = (function () {
     return { zh: '晚上好', en: 'Good evening' };
   }
 
+  /** 图标渲染：元素不存在就安静跳过（导览界面区块可能被调整过） */
+  function setIcon(id, name, size) {
+    var node = document.getElementById(id);
+    if (node) node.innerHTML = UI.icon(name, size);
+  }
+
   function init() {
     if (!AUTH.isCustomerLoggedIn()) { AUTH.requireCustomer(); return; }
 
@@ -35,11 +41,15 @@ var APP = (function () {
     }
 
     // icons
-    document.getElementById('claimIcon').innerHTML = UI.icon('scan', 24);
-    document.getElementById('qiScan').innerHTML    = UI.icon('scan', 20);
-    document.getElementById('qiAct').innerHTML     = UI.icon('activity', 20);
-    document.getElementById('qiWallet').innerHTML  = UI.icon('wallet', 20);
-    document.getElementById('qiProfile').innerHTML = UI.icon('profile', 20);
+    /* ★ 认领入口已移到右上角，导览界面三张卡 + 下方的「其他」 */
+    setIcon('claimIcon',  'scan', 18);
+    setIcon('navMenu',    'menu', 26);
+    setIcon('navCode',    'scan', 26);
+    setIcon('navProfile', 'profile', 26);
+    setIcon('qiOrders',   'orders', 20);
+    setIcon('qiAct',      'activity', 20);
+    setIcon('qiWallet',   'wallet', 20);
+    setIcon('qiProfile',  'profile', 20);
 
     var g = greeting();
     document.getElementById('greeting').innerHTML = g.zh + ' · ' + g.en;
