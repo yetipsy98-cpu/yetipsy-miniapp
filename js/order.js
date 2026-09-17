@@ -49,7 +49,7 @@ var ORDER = (function () {
     order: null,
     error: null,
     loadFailed: false,
-    pollSeconds: 12,
+    pollSeconds: 3,
     ticking: 0,
     lastNotifiedStatus: null
   };
@@ -116,8 +116,9 @@ var ORDER = (function () {
   /* §47 轮询：预设 12 秒，只在页面开着、订单未结案时跑 */
   function startPolling() {
     if (poller) return;                    // 已经在跑就不要重复挂
-    state.pollSeconds = Number(YETIPSY_CONFIG.CUSTOMER_ORDER_POLL_SECONDS || 12);
-    poller = API.poll(Math.max(5, state.pollSeconds), function () {
+    /* 2.1.14：取餐状态要更快看到 → 预设 3 秒（以前 12 秒），最低不低于 3 秒 */
+    state.pollSeconds = Number(YETIPSY_CONFIG.CUSTOMER_ORDER_POLL_SECONDS || 3);
+    poller = API.poll(Math.max(3, state.pollSeconds), function () {
       if (isFinal(state.order && state.order.orderStatus)) { stopPolling(); return Promise.resolve({ success: true }); }
       return load(false);
     });

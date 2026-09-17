@@ -595,6 +595,9 @@ body.admin.has-admin-nav .pos-page { padding-bottom: 132px; }
 @keyframes vb-pulse { from { transform: scale(1); } to { transform: scale(1.045); } }
 
 /* 正在送状态的那张卡：看得出来在忙，但位置已经先移好了 */
-.board-card.is-busy { opacity: .62; }
+.board-card.is-busy { opacity: .62; }                 /* 收款 / 取消：真的锁住 */
+.board-card.is-pending { opacity: .88; }               /* 状态推进：只是还在跑 */
+/* 状态推进：按钮只是轻轻呼吸一下（不再换文字、不再锁住） */
+.board-card[data-pending="1"] .big-action { animation: bc-wait 1.4s ease-in-out infinite alternate; }
 .board-card.is-busy .big-action { animation: bc-wait .9s ease-in-out infinite alternate; }
-@keyframes bc-wait { from { opacity: .55; } to { opacity: 1; } }
+@keyframes bc-wait { from { opacity: .7; } to { opacity: 1; } }

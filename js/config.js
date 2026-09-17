@@ -20,7 +20,7 @@ var YETIPSY_CONFIG = {
      APP_VERSION 一致；员工端「MORE」页会拿它跟后端比，不一样就提示
      要重新贴 Apps Script。检查：npm run check:backend
      ---------------------------------------------------------- */
-  APP_VERSION: '2.1.13',
+  APP_VERSION: '2.1.14',
 
   /* ----------------------------------------------------------
      1) API 地址（Google Apps Script Web App）
@@ -29,6 +29,14 @@ var YETIPSY_CONFIG = {
      {"success":true,"data":{"app":"YETIPSY MINI APP",...}}
      ---------------------------------------------------------- */
   API_URL: 'https://script.google.com/macros/s/AKfycbw2WXwgeHls1AvyAl_dcNW0q2Fd4KOsurqPXky28MqDo6wxMPuVICAhyfr-xex34qgSuw/exec',
+
+  /* ----------------------------------------------------------
+     1.5) 刷新间隔（秒）
+     看板 / 顾客订单状态的自动刷新。愈短愈即时，但每个装置都会多打
+     后端（Apps Script 一次往返约 1~2 秒，不要再短于 3 秒）。
+     ---------------------------------------------------------- */
+  BOARD_POLL_SECONDS: 4,             // 员工看板
+  CUSTOMER_ORDER_POLL_SECONDS: 3,    // 顾客的取餐状态
 
   /* ----------------------------------------------------------
      2) 品牌

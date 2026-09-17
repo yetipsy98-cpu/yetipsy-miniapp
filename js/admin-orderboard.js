@@ -6,7 +6,9 @@
    规则：
    · §19 看板三栏 NEW / PREPARING / READY，大按钮、一次点击就换状态
      （2.1.13：不再有「已确认」栏 —— 按一下就是制作中）
-   · §46 每 ORDER_POLL_SECONDS（预设 8 秒）刷新，而且只在页面开着时刷新
+   · §46 每 BOARD_POLL_SECONDS（预设 4 秒）刷新，而且只在页面开着时刷新
+     2.1.14：状态推进不再有「处理中…」那一段 —— 按下去卡片立刻在新栏、
+     按钮已经是下一个动作（只留一点点还在跑的提示）。
    · §48 新订单要有声音，但必须可以 MUTE（员工整晚开着这页）
    · §49 等待时间只用后端的 waitingSeconds（CreatedAt 算的）往上加秒
    · §55 完成按钮连按两次也安全（后端幂等），但 UI 还是会先锁住
@@ -37,7 +39,8 @@ var ADMIN_ORDERBOARD = (function () {
     mutationAt: 0,
     mutating: 0,
     expect: {},
-    autoPushed: {}        // 2.1.13：残留的 CONFIRMED 只自动推一次
+    autoPushed: {},       // 2.1.13：残留的 CONFIRMED 只自动推一次
+    busyLabel: {}         // 只有「收款 / 取消」这种要确认的动作才换按钮文字
   };
 
   /* 状态高低顺序：数字大的比较新。后端回来的比我们刚才做的旧 → 不采信 */
@@ -233,9 +236,16 @@ var ADMIN_ORDERBOARD = (function () {
   }
 
   /* §46 轮询：上一次跑完才排下一次（不重叠）+ 失败自动退避 */
+  /** 看板刷新间隔（秒）：预设 4 秒，最快不低于 3 秒（Apps Script 一次往返要约 1~2 秒） */
+  function pollEverySeconds() {
+    var want = Number((window.YETIPSY_CONFIG || {}).BOARD_POLL_SECONDS) || 4;
+    var server = Number(state.pollSeconds) || 8;
+    return Math.max(3, Math.min(server, want));
+  }
+
   function startPolling() {
     if (poller) return;
-    poller = API.poll(Math.max(5, state.pollSeconds), function () {
+    poller = API.poll(pollEverySeconds(), function () {
       /* 员工刚按下去、还在等后端 → 这一次轮询跳过（不要跟写动作抢） */
       if (state.mutating) return Promise.resolve({ success: true });
       return load(false);
@@ -430,8 +440,12 @@ var ADMIN_ORDERBOARD = (function () {
     });
   }
 
-  function act(appOrderId, action, label) {
-    if (state.busy[appOrderId]) return;
+  function act(appOrderId, action) {
+    if (state.busy[appOrderId]) {
+      /* 上一个动作还在跑：不要静悄悄没反应，也不要重复送一次 */
+      UI.toast('上一个动作还在处理中 / Still processing', 'info', 1600);
+      return;
+    }
     var target = LANE_OF_ACTION[action];
     var moved = null;
 
@@ -444,7 +458,8 @@ var ADMIN_ORDERBOARD = (function () {
       state.expect[appOrderId] = { status: target, at: Date.now(), guess: true };
     }
     if (target) moved = moveCardLocal(appOrderId, target);
-    setCardBusy(appOrderId, true, label);
+    /* 没有 label → 不换按钮文字：卡片直接就是「下一个动作」的样子 */
+    setCardBusy(appOrderId, true);
     render();
 
     dropOrdersCache();
@@ -563,13 +578,28 @@ var ADMIN_ORDERBOARD = (function () {
     });
   }
 
+  /**
+   * 「送出去了、还在等后端」的视觉（2.1.14）
+   * ---------------------------------------------------------
+   * 以前这里会把按钮换成「处理中…」并锁住所有按钮 —— 员工看到的就是
+   * 一段空等。现在：卡片已经在新栏、按钮已经是下一个动作，只留一点点
+   * 「还在跑」的提示；连点由 state.busy 挡住并给一句提示。
+   * 只有要确认的动作（收款 / 取消）才真的换文字。
+   */
   function setCardBusy(appOrderId, on, label) {
     var card = document.querySelector('[data-card="' + appOrderId + '"]');
     if (!card) return;
+    card.setAttribute('data-pending', on ? '1' : '0');
+    if (label) state.busyLabel[appOrderId] = label;
+    else delete state.busyLabel[appOrderId];
+    if (!label) {
+      card.style.opacity = on ? '0.88' : '';     // 状态推进：只轻微淡化，按钮照常
+      return;
+    }
     var btns = card.querySelectorAll('button');
     for (var i = 0; i < btns.length; i++) {
       btns[i].disabled = on;
-      if (on && label && btns[i].classList.contains('big-action')) btns[i].textContent = label;
+      if (on && btns[i].classList.contains('big-action')) btns[i].textContent = label;
     }
     card.style.opacity = on ? '0.6' : '';
   }
@@ -625,7 +655,7 @@ var ADMIN_ORDERBOARD = (function () {
       var id = card.getAttribute('data-card');
       var num = (card.querySelector('.bc-num') || {}).textContent || '';
       if (t.hasAttribute && t.hasAttribute('data-act')) {
-        act(id, t.getAttribute('data-act'), '处理中…');
+        act(id, t.getAttribute('data-act'));
       } else if (t.hasAttribute && t.hasAttribute('data-pay')) {
         pay(id);
       } else if (t.hasAttribute && t.hasAttribute('data-cancel')) {
@@ -790,11 +820,14 @@ var ADMIN_ORDERBOARD = (function () {
     }
 
     var busy = !!state.busy[o.appOrderId];
-    if (busy) {
-      main = '<button class="big-action" disabled>处理中…</button>';
+    var busyLabel = busy ? (state.busyLabel[o.appOrderId] || '') : '';
+    if (busyLabel) {
+      /* 收款 / 取消：这几个要等后端确定，才显示「处理中」文字 */
+      main = '<button class="big-action" disabled>' + UI.esc(busyLabel) + '</button>';
     }
 
-    return '<article class="board-card' + (busy ? ' is-busy' : '') +
+    return '<article class="board-card' + (busyLabel ? ' is-busy' : '') +
+      (busy ? ' is-pending' : '') + '" data-pending="' + (busy ? '1' : '0') +
       '" data-card="' + UI.esc(o.appOrderId) + '">' +
       '<div class="bc-top">' +
         '<span class="bc-num">' + UI.esc(o.orderNumber) + '</span>' +
@@ -834,6 +867,7 @@ var ADMIN_ORDERBOARD = (function () {
       totalToday: state.today ? state.today.orders : 0,
       salesToday: state.today ? state.today.sales : 0,
       pollSeconds: state.pollSeconds,
+      pollEverySeconds: pollEverySeconds(),
       muted: state.muted,
       voice: !!(window.speechSynthesis),
       polling: !!poller,
