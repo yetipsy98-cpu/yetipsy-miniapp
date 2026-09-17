@@ -62,6 +62,7 @@ var PROFILE = (function () {
 
     UI.setLoading(btn, true, 'SAVING');
     API.customer.updateProfile(name, birthday).then(function (res) {
+      if (res.success && API.cache) API.cache.clear();
       UI.setLoading(btn, false);
       if (!res.success) {
         if (!AUTH.handleSessionError(res.error)) UI.toast(res.error.message, 'error');

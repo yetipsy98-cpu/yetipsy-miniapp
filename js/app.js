@@ -67,6 +67,7 @@ var APP = (function () {
     bindBanner();
     checkBackend();
     load();
+    prefetch();
   }
 
   /** API_URL 没配置 → 明确报错（正式环境不会出现） */
@@ -109,48 +110,70 @@ var APP = (function () {
      载入
      --------------------------------------------------------- */
 
+  /**
+   * ① 先画快取（有的话立刻有画面）② 后端回来再画一次。
+   * API 层的 live call 会回两次，所以这里每个 .then 都要是幂等的。
+   */
   function load() {
-    return Promise.all([
-      API.customer.getProfile(),
-      API.customer.getPendingReward(),
-      API.customer.getPromotions()
-    ]).then(function (results) {
-      var profileRes = results[0];
+    var pending = { profile: false, reward: false, promo: false, failed: false };
 
-      if (!profileRes.success) {
-        if (!AUTH.handleSessionError(profileRes.error)) {
-          UI.toast(profileRes.error.message, 'error');
+    function ready() { return pending.profile && pending.reward && pending.promo; }
+
+    API.customer.getProfile().then(function (res) {
+      if (!res.success) {
+        if (!pending.failed) {
+          pending.failed = true;
+          if (!AUTH.handleSessionError(res.error)) UI.toast(res.error.message, 'error');
         }
         return;
       }
+      state.profile = res.data.customer;
+      state.membership = res.data.membership;
+      pending.profile = true;
+      if (ready()) { renderBanner(); startRotate(); }
+    });
 
-      state.profile = profileRes.data.customer;
-      state.membership = profileRes.data.membership;
+    API.customer.getPendingReward().then(function (res) {
+      state.pendingReward = (res.success && res.data && res.data.reward) ? res.data.reward : null;
+      pending.reward = true;
+      if (ready()) { renderBanner(); startRotate(); }
+    });
 
-      var rewardRes = results[1];
-      state.pendingReward = (rewardRes.success && rewardRes.data && rewardRes.data.reward)
-        ? rewardRes.data.reward : null;
-
-      /* ★ 成功但清单是空的 ≠ 请求失败。
-         以前两种情况都画「暂无活动」，后端出问题（例如线上还是旧版、
-         没有 getPromotions 这个 action）时顾客看到的是「没有活动」，
-         根本无从发现故障。现在失败会变成一张写清楚的错误幕布。 */
-      var promoRes = results[2];
-      if (promoRes.success) {
+    /* ★ 成功但清单是空的 ≠ 请求失败。
+       以前两种情况都画「暂无活动」，后端出问题（例如线上还是旧版、
+       没有 getPromotions 这个 action）时顾客看到的是「没有活动」，
+       根本无从发现故障。现在失败会变成一张写清楚的错误幕布。 */
+    API.customer.getPromotions().then(function (res) {
+      if (res.success) {
         state.promoError = null;
-        state.slides = buildSlides(promoRes.data.promotions || []);
+        state.slides = buildSlides(res.data.promotions || []);
       } else {
-        state.promoError = promoRes.error || {};
+        state.promoError = res.error || {};
         state.slides = buildSlides([]);
         if (window.console && console.warn) {
           console.warn('[YETIPSY] getPromotions 失败：' +
             (state.promoError.code || '') + ' · ' + (state.promoError.message || ''));
         }
       }
-
-      renderBanner();
-      startRotate();
+      pending.promo = true;
+      if (ready()) { renderBanner(); startRotate(); }
     });
+  }
+
+  /**
+   * 预载：首页是顾客第一个到的页面，趁它载完把酒单 / 订单 / 钱包
+   * 先在背景抓好（只读写入快取）。这样点「下单」是立刻出来，
+   * 不是「再等一次载入」。失败也不影响首页。
+   */
+  function prefetch() {
+    try {
+      var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 400); };
+      idle(function () {
+        if (API.cache && API.cache.prefetch) {
+          API.cache.prefetch(['getMenu', 'getMyOrders', 'getWallet']);
+        }
+      });
+    } catch (e) {}
   }
 
   /* ---------------------------------------------------------

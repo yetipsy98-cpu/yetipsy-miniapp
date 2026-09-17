@@ -53,22 +53,43 @@ var PRODUCT = (function () {
   }
 
   function load() {
+    /* ★ 先看酒单快取：顾客从酒单点进来时，规格其实已经在手上了
+         （menu.getMenu 的回传里有 optionsByProduct），不必再等一次 */
+    var menu = API.cache ? API.cache.peek('getMenu', {}) : null;
+    if (menu && menu.products) {
+      var hit = null;
+      (menu.products || []).forEach(function (p) { if (!hit && p.productId === state.productId) hit = p; });
+      if (hit) {
+        applyProduct(hit, (menu.optionsByProduct || {})[state.productId] || []);
+      }
+    }
+
     API.customer.getProduct(state.productId).then(function (res) {
       if (!res.success) {
         state.error = res.error;
-        if (!AUTH.handleSessionError(res.error)) renderError();
+        if (!AUTH.handleSessionError(res.error) && !state.product) renderError();
         return;
       }
-      state.product = res.data.product;
-      state.optionGroups = res.data.optionGroups || [];
       state.error = null;
-      /* 每组规格先选第一个（必选组这样就有预设值） */
-      state.selected = {};
-      state.optionGroups.forEach(function (g) {
-        if (g.options && g.options.length) state.selected[g.optionGroup] = g.options[0].optionId;
-      });
-      render();
+      applyProduct(res.data.product, res.data.optionGroups || []);
     });
+  }
+
+  /** 同一份商品重复到位（快取 → 后端）时，不要重置顾客已经选好的规格 */
+  function applyProduct(product, optionGroups) {
+    var prev = state.selected || {};
+    state.product = product;
+    state.optionGroups = optionGroups || [];
+    state.selected = {};
+    state.optionGroups.forEach(function (g) {
+      var opts = g.options || [];
+      if (!opts.length) return;
+      var keep = prev[g.optionGroup];
+      var ok = false;
+      opts.forEach(function (o) { if (o.optionId === keep) ok = true; });
+      state.selected[g.optionGroup] = ok ? keep : opts[0].optionId;
+    });
+    render();
   }
 
   /* ---------------------------------------------------------
@@ -289,7 +310,8 @@ var PRODUCT = (function () {
       productId: state.product.productId,
       nameEN: state.product.nameEN,
       nameZH: state.product.nameZH,
-      unitPrice: Number(state.product.price) || 0,
+      /* 含规格加价（显示用；结帐时后端会重算一次，§41 §42） */
+      unitPrice: unitPriceSen(),
       quantity: state.quantity,
       options: items,
       note: String(state.note || '').slice(0, 200)
@@ -297,7 +319,7 @@ var PRODUCT = (function () {
 
     if (!added.ok) { UI.toast(added.message, 'error'); return; }
     UI.toast('已加入清单 · ' + state.product.nameEN, 'success');
-    setTimeout(function () { UI.go('cart.html'); }, 450);
+    setTimeout(function () { UI.go('menu.html'); }, 450);   /* 回酒单继续点（购物车条就在下面） */
   }
 
   /** 给测试用 */

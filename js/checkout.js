@@ -135,6 +135,7 @@ var CHECKOUT = (function () {
 
       state.orderId = res.data.order.appOrderId;
       CART.clear();                                   // 下单成功才清车
+      API.cache.clear();                              // 积分 / 订单 / 钱包都变了 → 下次重新抓
       if (timer) { clearInterval(timer); timer = null; }
       UI.go('order.html?id=' + encodeURIComponent(res.data.order.appOrderId));
     });

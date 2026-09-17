@@ -68,6 +68,7 @@ var REWARD = (function () {
           if (!AUTH.handleSessionError(res.error)) UI.toast(res.error.message, 'error');
           return;
         }
+        API.cache.clear();          // 钱包余额变了
         renderOpened(res.data);
       });
     }, 320);

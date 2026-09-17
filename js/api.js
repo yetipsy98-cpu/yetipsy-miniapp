@@ -38,7 +38,174 @@ var API = (function () {
    * @param {object} data
    * @param {object} options  { sessionType: 'customer'|'staff'|null, silent: bool }
    */
+  /* ==========================================================
+     快取（stale-while-revalidate）
+     ----------------------------------------------------------
+     目的：会员端每点一次都等后端，太慢。做法是
+       ① 有快取 → 立刻回快取（画面马上出来）
+       ② 同时背景再问一次后端 → 有新资料就再回一次
+     所以页面只要 .then(render) 写一次，快取与最新资料都会经过它，
+     而且 render 本来就是幂等的（重画同一份资料没有副作用）。
+
+     只用在「只读」的会员端资料上；钱包扣款、下单、扫码、
+     条码这些一律不吃快取（一定问后端）。
+     ========================================================== */
+
+  var CACHE_PREFIX = 'yt_cache_v1:';
+
+  /* 各种只读资料的保鲜期：过了就当没有，直接等后端 */
+  var READ_TTL = {
+    getMenu:           10 * 60 * 1000,   // 酒单：10 分钟（改菜单后叫一次就更新）
+    getPromotions:      5 * 60 * 1000,
+    getProfile:         90 * 1000,
+    getMembership:      5 * 60 * 1000,
+    getPendingReward:   60 * 1000,
+    getMyOrders:        60 * 1000,
+    getWallet:          60 * 1000,
+    getWalletHistory:   60 * 1000,
+    getPointHistory:    60 * 1000,
+    getOrderHistory:    60 * 1000
+  };
+
+  var memCache = {};
+
+  var SCOPE_KEY = 'yt_cache_scope';
+
+  /**
+   * 快取要分「谁的快取」：同手机换人登入时，绝不能拿到上一位会员的资料。
+   * 每次登入 / 登出都会换一组 scope，旧资料自然读不到（也会被清掉）。
+   */
+  function cacheScope() {
+    var v = '';
+    try {
+      v = window.localStorage.getItem(SCOPE_KEY) || '';
+      if (!v) {
+        v = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+        window.localStorage.setItem(SCOPE_KEY, v);
+      }
+    } catch (e) { return 'mem'; }
+    return v;
+  }
+
+  function newScope() {
+    var v = 's' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+    try { window.localStorage.setItem(SCOPE_KEY, v); } catch (e) {}
+    return v;
+  }
+
+  function cacheKey(action, data) {
+    return CACHE_PREFIX + cacheScope() + ':' + action + ':' + JSON.stringify(data || {});
+  }
+
+  function clone(value) {
+    try { return JSON.parse(JSON.stringify(value)); } catch (e) { return value; }
+  }
+
+  function cacheRead(key, ttlMs) {
+    var hit = memCache[key];
+    if (!hit) {
+      try {
+        var raw = window.localStorage.getItem(key);
+        if (raw) hit = JSON.parse(raw);
+      } catch (e) { hit = null; }
+    }
+    if (!hit || typeof hit.t !== 'number') return null;
+    if (ttlMs && (Date.now() - hit.t) > ttlMs) return null;
+    memCache[key] = hit;
+    return clone(hit.v);
+  }
+
+  function cacheWrite(key, value) {
+    if (value === undefined || value === null) return;
+    var size = 0;
+    try { size = JSON.stringify(value).length; } catch (e) { return; }
+    if (size > 200000) return;                     // 太大的不要塞进 localStorage
+    var hit = { t: Date.now(), v: clone(value) };
+    memCache[key] = hit;
+    try { window.localStorage.setItem(key, JSON.stringify(hit)); } catch (e) {}
+  }
+
+  function cacheDrop(action, data) {
+    var key = cacheKey(action, data);
+    delete memCache[key];
+    try { window.localStorage.removeItem(key); } catch (e) {}
+  }
+
+  /** 资料被改过（下单 / 兑奖 / 改资料）之后清掉全部只读快取，下次重新抓 */
+  function cacheClear() {
+    memCache = {};
+    try {
+      var keys = [];
+      for (var i = 0; i < window.localStorage.length; i++) {
+        var k = window.localStorage.key(i);
+        if (k && k.indexOf(CACHE_PREFIX) === 0) keys.push(k);
+      }
+      keys.forEach(function (k) { window.localStorage.removeItem(k); });
+    } catch (e) {}
+    newScope();                       // 换一组 scope：旧资料绝对读不回来
+  }
+
+  /** 给页面用：同步拿快取（酒单页要立刻画清单与规格） */
+  function cachePeek(action, data, ttlMs) {
+    return cacheRead(cacheKey(action, data), ttlMs || READ_TTL[action] || 120000);
+  }
+
+  /**
+   * 先画快取、再补最新资料。回传的是一个「可以回两次」的 thenable：
+   * 有快取就先回一次（res.cached = true），后端回来再回一次。
+   * 页面写 .then(render) 就同时吃到两者。
+   */
+  function liveCall(action, data, options, key, ttl) {
+    var cached = cacheRead(key, ttl);
+    var subs = [];
+    var started = false;
+
+    function emit(res) {
+      var list = subs.slice();
+      subs.length = 0;
+      for (var i = 0; i < list.length; i++) {
+        try { list[i](res); } catch (e) { log('[API] cached subscriber failed', e); }
+      }
+    }
+
+    function refresh() {
+      if (started) return;
+      started = true;
+      send(action, data, options).then(function (res) {
+        if (res.success) cacheWrite(key, res.data);
+        else if (res.error && res.error.code === 'INVALID_SESSION') cacheDrop(action, data);
+        emit(res);
+      });
+    }
+
+    var live = {
+      then: function (onFulfilled) {
+        if (cached) {
+          var first = { success: true, data: cached, error: null, cached: true };
+          Promise.resolve().then(function () { if (onFulfilled) onFulfilled(first); });
+        }
+        if (typeof onFulfilled === 'function') subs.push(onFulfilled);
+        return live;
+      },
+      catch: function () { return live; },
+      finally: function (fn) { if (typeof fn === 'function') fn(); return live; }
+    };
+
+    /* 不用等 .then：一开始就先去问后端（预载时没人订阅也要抓） */
+    refresh();
+    return live;
+  }
+
   function call(action, data, options) {
+    options = options || {};
+    if (options.cache) {
+      var ttl = options.cacheTtl || READ_TTL[action] || 120000;
+      return liveCall(action, data, options, cacheKey(action, data), ttl);
+    }
+    return send(action, data, options);
+  }
+
+  function send(action, data, options) {
     options = options || {};
     var sessionType = options.sessionType || 'auto';
 
@@ -161,31 +328,31 @@ var API = (function () {
       return call('customerLogout', {}, { sessionType: 'customer' });
     },
     getProfile: function () {
-      return call('getProfile', {}, { sessionType: 'customer' });
+      return call('getProfile', {}, { sessionType: 'customer', cache: true });
     },
     updateProfile: function (name, birthday) {
       return call('updateProfile', { name: name, birthday: birthday }, { sessionType: 'customer' });
     },
     getMembership: function () {
-      return call('getMembership', {}, { sessionType: 'customer' });
+      return call('getMembership', {}, { sessionType: 'customer', cache: true });
     },
     getPoints: function () {
       return call('getPoints', {}, { sessionType: 'customer' });
     },
     getPointHistory: function (limit) {
-      return call('getPointHistory', { limit: limit || 50 }, { sessionType: 'customer' });
+      return call('getPointHistory', { limit: limit || 50 }, { sessionType: 'customer', cache: true });
     },
     getWallet: function () {
-      return call('getWallet', {}, { sessionType: 'customer' });
+      return call('getWallet', {}, { sessionType: 'customer', cache: true });
     },
     getWalletHistory: function (limit) {
-      return call('getWalletHistory', { limit: limit || 50 }, { sessionType: 'customer' });
+      return call('getWalletHistory', { limit: limit || 50 }, { sessionType: 'customer', cache: true });
     },
     getPromotions: function () {
-      return call('getPromotions', {}, { sessionType: 'customer' });
+      return call('getPromotions', {}, { sessionType: 'customer', cache: true });
     },
     getOrderHistory: function (limit) {
-      return call('getOrderHistory', { limit: limit || 50 }, { sessionType: 'customer' });
+      return call('getOrderHistory', { limit: limit || 50 }, { sessionType: 'customer', cache: true });
     },
     getClaimByToken: function (token) {
       return call('getClaimByToken', { token: token }, { sessionType: 'auto' });
@@ -216,7 +383,7 @@ var API = (function () {
       return call('claimOrder', payload, { sessionType: 'auto' });
     },
     getPendingReward: function (rewardId) {
-      return call('getPendingReward', { rewardId: rewardId || '' }, { sessionType: 'customer' });
+      return call('getPendingReward', { rewardId: rewardId || '' }, { sessionType: 'customer', cache: true });
     },
     claimReward: function (rewardId) {
       return call('claimReward', { rewardId: rewardId }, { sessionType: 'customer' });
@@ -228,7 +395,7 @@ var API = (function () {
      * filter: { search, tag, categoryId }
      */
     getMenu: function (filter) {
-      return call('getMenu', filter || {}, { sessionType: 'customer' });
+      return call('getMenu', filter || {}, { sessionType: 'customer', cache: true });
     },
     getCategories: function () {
       return call('getCategories', {}, { sessionType: 'customer' });
@@ -238,7 +405,7 @@ var API = (function () {
     },
     /** Product Detail：商品 + 规格分组，一次就够 */
     getProduct: function (productId) {
-      return call('getProduct', { productId: productId }, { sessionType: 'customer' });
+      return call('getProduct', { productId: productId }, { sessionType: 'customer', cache: true });
     },
     getProductOptions: function (productId) {
       return call('getProductOptions', { productId: productId }, { sessionType: 'customer' });
@@ -267,7 +434,7 @@ var API = (function () {
       return call('getAppOrder', { appOrderId: appOrderId }, { sessionType: 'customer' });
     },
     getMyOrders: function (filters) {
-      return call('getMyOrders', filters || {}, { sessionType: 'customer' });
+      return call('getMyOrders', filters || {}, { sessionType: 'customer', cache: true });
     },
     requestOrderCancellation: function (appOrderId, reason) {
       return call('requestOrderCancellation',
@@ -554,9 +721,41 @@ var API = (function () {
     }
   };
 
+  /* --------------------------------------------------------
+     预载：会员端首页一有空就把最常用的资料先抓好，
+     这样点进酒单 / 我的订单是「立刻」出来，不是「等一次」
+     -------------------------------------------------------- */
+  function prefetchCustomer(which) {
+    if (!AUTH.isCustomerLoggedIn || !AUTH.isCustomerLoggedIn()) return;
+    var jobs = which || ['getMenu', 'getMyOrders', 'getWallet'];
+    if (jobs.indexOf('getMenu') >= 0) cachePeekAsync('getMenu', {});
+    if (jobs.indexOf('getMyOrders') >= 0) cachePeekAsync('getMyOrders', { limit: 30 });
+    if (jobs.indexOf('getWallet') >= 0) {
+      cachePeekAsync('getWallet', {});
+      cachePeekAsync('getWalletHistory', { limit: 50 });
+    }
+    if (jobs.indexOf('getHistory') >= 0) {
+      cachePeekAsync('getOrderHistory', { limit: 50 });
+      cachePeekAsync('getPointHistory', { limit: 50 });
+    }
+  }
+
+  /** 已经新鲜就不用再问一次 */
+  function cachePeekAsync(action, data) {
+    if (cachePeek(action, data)) return;
+    call(action, data, { sessionType: 'customer', cache: true });
+  }
+
   return {
     call: call,
     callWithToast: callWithToast,
+    cache: {
+      peek: cachePeek,
+      drop: cacheDrop,
+      clear: cacheClear,
+      prefetch: prefetchCustomer,
+      TTL: READ_TTL
+    },
     customer: customer,
     staff: staff,
     admin: admin,

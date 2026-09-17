@@ -1,42 +1,66 @@
 /* =============================================================
-   YETIPSY — menu.js（2.0 Phase 3）
+   YETIPSY — menu.js（2.1 单页点单）
    -------------------------------------------------------------
-   酒单页：分类 / 商品 / 搜寻 / 风味筛选 / 售罄（§5 §6 §31 §34 §35）
+   一页做完「逛 → 选规格 → 加入购物车 → 看购物车 → 去结帐」：
 
-   几条规则：
-   · 价格一律用后端回传的 product.price，前端绝不自己算（§41）
-   · 菜单失败要讲清楚，不能伪装成「暂无商品」（1.2 活动区的教训）
-   · 载入状态画在内容区（骨架），不用全屏 overlay（会员条码页的教训）
+     · 酒单预载：首页已经先抓好 / 或快取还在 → 进来直接画，不等后端
+     · 搜寻 / 分类 / 风味 → 全部在本机筛（不再每点一次就等一次）
+     · 点商品 → 底部抽屜选规格（规格跟酒单一起回来的，不用再抓）
+     · 底部购物车条：几件 + 金额 + 结帐，要改数量开抽屉即可
+
+   规则不变：
+   · 价格一律用后端回传的数字（§41），下单时后端会重算（§42）
+   · 菜单失败要讲清楚，不能伪装成「暂无商品」
    ============================================================= */
 
 var MENU = (function () {
 
+  var MAX_QTY = 20;
+
   var state = {
-    loading: false,
     loaded: false,
     error: null,
     categories: [],
     products: [],
     optionsByProduct: {},
     ordering: null,
-    allowPickup: true,
-    allowTableOrder: true,
     maxOrderItems: 20,
-    /* 目前的筛选 */
+    /* 筛选（全部在本机做） */
     search: '',
     tag: '',
-    categoryId: ''
+    categoryId: '',
+    /* 规格抽屉 */
+    sheet: null,
+    /* 避免同一份资料重复重画 */
+    signature: ''
   };
 
-  /* 后端没给分类时的兜底标题（分类本身仍来自 Sheet，§5） */
   var ALL = { categoryId: '', nameEN: 'ALL', nameZH: '全部' };
+  var el = {};
 
-  var searchTimer = null;
+  /* ---------------------------------------------------------
+     初始化
+     --------------------------------------------------------- */
 
   function init() {
     if (!AUTH.isCustomerLoggedIn()) { AUTH.requireCustomer(); return; }
+
+    el.list       = document.getElementById('menuList');
+    el.hint       = document.getElementById('menuHint');
+    el.sheet      = document.getElementById('sheetOverlay');
+    el.productSheet = document.getElementById('productSheet');
+    el.cartSheet  = document.getElementById('cartSheet');
+    el.sheetBody  = document.getElementById('sheetBody');
+    el.cartBody   = document.getElementById('cartSheetBody');
+
     bindEvents();
-    renderSkeleton();
+    renderCartBar();
+
+    /* ★ 先用快取画一次（如果有），画面立刻有东西；后端回来再更新一次 */
+    var cached = API.cache.peek('getMenu', {});
+    if (cached) apply(cached, true);
+    else renderSkeleton();
+
     load();
   }
 
@@ -44,42 +68,105 @@ var MENU = (function () {
     var input = document.getElementById('menuSearch');
     if (input) {
       input.addEventListener('input', function () {
-        /* 输入时先在本地筛（快），同时向后端要一次权威结果 */
-        state.search = input.value.trim();
-        clearTimeout(searchTimer);
-        searchTimer = setTimeout(load, 260);
-        renderLocal();
+        state.search = input.value.trim().toLowerCase();
+        renderProducts();               // 纯本机筛选，零延迟
       });
     }
 
-    var retry = document.getElementById('menuRetryBtn');
-    if (retry) retry.addEventListener('click', function () { renderSkeleton(); load(); });
+    on('topCartBtn', openCart);
+    on('cbOpenCart', openCart);
+    on('cbCheckout', goCheckout);
+    on('cartSheetGo', goCheckout);
+    on('cartSheetClose', closeSheets);
+    on('sheetClose', closeSheets);
+    on('sheetOverlay', function (e) { if (e.target === el.sheet) closeSheets(); });
+
+    on('sheetQtyMinus', function () { setSheetQty((state.sheet ? state.sheet.qty : 1) - 1); });
+    on('sheetQtyPlus',  function () { setSheetQty((state.sheet ? state.sheet.qty : 1) + 1); });
+    on('sheetAddBtn', addSheetToCart);
+
+    on('cartClearBtn', function () {
+      UI.confirmDialog('清空购物车？', 'Clear the whole cart?', '清空 CLEAR').then(function (yes) {
+        if (!yes) return;
+        CART.clear();
+        renderCart();
+        renderCartBar();
+        UI.toast('购物车已清空', 'success');
+        closeSheets();
+      });
+    });
+
+    document.addEventListener('keydown', function (e) {
+      if (e.key === 'Escape') closeSheets();
+    });
   }
 
+  function on(id, fn) {
+    var node = document.getElementById(id);
+    if (node) node.addEventListener('click', fn);
+  }
+
+  /* ---------------------------------------------------------
+     载入（快取优先；同一个 payload 只画一次）
+     --------------------------------------------------------- */
+
   function load() {
-    state.loading = true;
-    API.customer.getMenu({
-      search: state.search,
-      tag: state.tag,
-      categoryId: state.categoryId
-    }).then(function (res) {
-      state.loading = false;
+    API.customer.getMenu({}).then(function (res) {
       if (!res.success) {
         state.error = res.error;
-        if (!AUTH.handleSessionError(res.error)) renderError();
+        if (!AUTH.handleSessionError(res.error) && !state.loaded) renderError();
         return;
       }
       state.error = null;
-      state.loaded = true;
-      state.categories = res.data.categories || [];
-      state.products = res.data.products || [];
-      state.optionsByProduct = res.data.optionsByProduct || {};
-      state.ordering = res.data.ordering || null;
-      state.allowPickup = res.data.allowPickup !== false;
-      state.allowTableOrder = res.data.allowTableOrder !== false;
-      state.maxOrderItems = res.data.maxOrderItems || 20;
-      render();
+      apply(res.data, false);
     });
+  }
+
+  function apply(data, fromCache) {
+    state.categories = data.categories || [];
+    state.products = data.products || [];
+    state.optionsByProduct = data.optionsByProduct || {};
+    state.ordering = data.ordering || null;
+    state.maxOrderItems = data.maxOrderItems || 20;
+    state.loaded = true;
+
+    var sig = JSON.stringify([state.categories, state.products.length, state.products[0],
+      state.ordering, state.maxOrderItems]);
+    if (sig === state.signature && state.rendered) return;   // 快取与后端一样 → 不重画
+    state.signature = sig;
+    state.rendered = true;
+
+    render();
+    if (fromCache) log('menu painted from cache');
+  }
+
+  function log(msg) {
+    if (window.console && console.log) console.log('[MENU] ' + msg);
+  }
+
+  /* ---------------------------------------------------------
+     筛选（全部本机）
+     --------------------------------------------------------- */
+
+  function visibleProducts() {
+    var q = state.search;
+    return state.products.filter(function (p) {
+      if (state.categoryId && (p.categoryId || '') !== state.categoryId) return false;
+      if (state.tag && (p.tags || []).indexOf(state.tag) === -1) return false;
+      if (!q) return true;
+      var hay = [p.nameEN, p.nameZH, p.descriptionEN, p.descriptionZH, (p.tags || []).join(' ')]
+        .join(' ').toLowerCase();
+      return hay.indexOf(q) !== -1;
+    });
+  }
+
+  /** 目前这一批商品里出现过的风味（分类/搜寻改变时不会整条消失） */
+  function visibleTags() {
+    var set = {};
+    visibleProducts().forEach(function (p) {
+      (p.tags || []).forEach(function (t) { set[t] = (set[t] || 0) + 1; });
+    });
+    return Object.keys(set).sort(function (a, b) { return set[b] - set[a]; }).slice(0, 8);
   }
 
   /* ---------------------------------------------------------
@@ -87,18 +174,39 @@ var MENU = (function () {
      --------------------------------------------------------- */
 
   function renderSkeleton() {
-    var box = document.getElementById('menuList');
-    if (!box) return;
-    box.innerHTML = '<div class="menu-skeleton"></div>'.repeat(5);
-    var hint = document.getElementById('menuHint');
-    if (hint) hint.textContent = '';
+    if (!el.list) return;
+    el.list.innerHTML = '<div class="menu-skeleton"></div>'.repeat(4);
+    if (el.hint) el.hint.textContent = '';
   }
 
-  /** §58/§64：点单关闭时菜单仍可浏览，但要讲清楚 */
-  function orderingBanner() {
+  function renderError() {
+    if (!el.list) return;
+    var code = state.error && state.error.code ? state.error.code : 'ERROR';
+    el.list.innerHTML =
+      '<div class="card" style="text-align:center;padding:26px 16px">' +
+        '<div class="bilingual-zh">酒单载入失败</div>' +
+        '<div class="bilingual-en">MENU FAILED TO LOAD</div>' +
+        '<div class="divider"></div>' +
+        '<div class="small muted">错误码 ' + UI.esc(code) + '</div>' +
+        '<div class="tiny muted mt-12" style="line-height:1.7">' +
+          UI.esc(state.error && state.error.message || '') +
+        '</div>' +
+        '<button class="btn btn-secondary mt-12" id="menuRetryBtn">重试 RETRY</button>' +
+      '</div>';
+    on('menuRetryBtn', function () { renderSkeleton(); load(); });
+  }
+
+  function render() {
+    renderOrderingBanner();
+    renderCategories();
+    renderProducts();
+  }
+
+  function renderOrderingBanner() {
+    var box = document.getElementById('orderingBanner');
+    if (!box) return;
     var o = state.ordering;
-    if (!o) return '';
-    if (o.open) return '';
+    if (!o || o.open) { box.innerHTML = ''; return; }
 
     var zh, en;
     if (o.reason === 'DISABLED') {
@@ -111,47 +219,10 @@ var MENU = (function () {
       zh = '点单时间 ' + o.openTime + ' – ' + o.closeTime + '，你可以先看看酒单';
       en = 'ORDERING CLOSED · You can still browse our menu.';
     }
-    return '<div class="ordering-banner">' +
+    box.innerHTML = '<div class="ordering-banner">' +
       '<div class="ordering-banner-zh">' + UI.esc(zh) + '</div>' +
       '<div class="ordering-banner-en">' + UI.esc(en) + '</div>' +
       '</div>';
-  }
-
-  function renderError() {
-    var box = document.getElementById('menuList');
-    if (!box) return;
-    var code = state.error && state.error.code ? state.error.code : 'ERROR';
-    box.innerHTML =
-      '<div class="card" style="text-align:center;padding:26px 16px">' +
-        '<div class="bilingual-zh">酒单载入失败</div>' +
-        '<div class="bilingual-en">MENU FAILED TO LOAD</div>' +
-        '<div class="divider"></div>' +
-        '<div class="small muted">错误码 ' + UI.esc(code) + '</div>' +
-        '<div class="tiny muted mt-12" style="line-height:1.7">' +
-          UI.esc(state.error && state.error.message || '') +
-        '</div>' +
-        '<button class="btn btn-secondary mt-12" id="menuRetryBtn">重试 RETRY</button>' +
-      '</div>';
-    var btn = document.getElementById('menuRetryBtn');
-    if (btn) btn.addEventListener('click', function () { renderSkeleton(); load(); });
-  }
-
-  /** 只在本地重画商品清单（输入搜寻时用，避免整页闪） */
-  function renderLocal() {
-    if (!state.loaded) return;
-    renderProducts();
-  }
-
-  function render() {
-    renderOrderingBanner();
-    renderCategories();
-    renderTags();
-    renderProducts();
-  }
-
-  function renderOrderingBanner() {
-    var box = document.getElementById('orderingBanner');
-    if (box) box.innerHTML = orderingBanner();
   }
 
   function renderCategories() {
@@ -160,76 +231,47 @@ var MENU = (function () {
     var cats = [ALL].concat(state.categories);
     strip.innerHTML = cats.map(function (c) {
       var active = (c.categoryId || '') === state.categoryId ? ' active' : '';
-      var label = c.nameZH ? UI.esc(c.nameZH) : UI.esc(c.nameEN);
       return '<div class="cat-chip' + active + '" data-cat="' + UI.esc(c.categoryId || '') + '">' +
-        label + '</div>';
+        (c.nameZH ? UI.esc(c.nameZH) : UI.esc(c.nameEN)) + '</div>';
     }).join('');
 
-    Array.prototype.forEach.call(strip.querySelectorAll('.cat-chip'), function (el) {
-      el.addEventListener('click', function () {
-        state.categoryId = el.getAttribute('data-cat') || '';
+    Array.prototype.forEach.call(strip.querySelectorAll('.cat-chip'), function (node) {
+      node.addEventListener('click', function () {
+        var next = node.getAttribute('data-cat') || '';
+        state.categoryId = (state.categoryId === next) ? '' : next;
+        state.tag = '';
         renderCategories();
-        renderSkeleton();
-        load();
-      });
-    });
-  }
-
-  function renderTags() {
-    var strip = document.getElementById('tagStrip');
-    if (!strip) return;
-    /* 风味标签从商品的 tags 收集（§35），不写死 */
-    var set = {};
-    state.products.forEach(function (p) {
-      (p.tags || []).forEach(function (t) { set[t] = (set[t] || 0) + 1; });
-    });
-    /* 也把「全部商品」的标签纳入，避免筛掉之后就看不到其他标签 */
-    var tags = Object.keys(set).sort(function (a, b) { return set[b] - set[a]; }).slice(0, 8);
-
-    if (!tags.length) { strip.innerHTML = ''; return; }
-    strip.innerHTML = tags.map(function (t) {
-      var active = t === state.tag ? ' active' : '';
-      return '<div class="tag-chip' + active + '" data-tag="' + UI.esc(t) + '">' +
-        UI.esc(t) + '</div>';
-    }).join('');
-
-    Array.prototype.forEach.call(strip.querySelectorAll('.tag-chip'), function (el) {
-      el.addEventListener('click', function () {
-        var t = el.getAttribute('data-tag');
-        state.tag = (state.tag === t) ? '' : t;      // 再点一次取消
-        renderTags();
-        renderSkeleton();
-        load();
+        renderProducts();
       });
     });
   }
 
   function renderProducts() {
-    var box = document.getElementById('menuList');
-    if (!box) return;
-
+    if (!el.list) return;
     if (state.error) { renderError(); return; }
 
-    if (!state.products.length) {
-      box.innerHTML = UI.emptyState(
-        state.search || state.tag ? '找不到符合的酒' : '酒单还没有商品',
-        state.search || state.tag ? 'NO MATCHING DRINKS' : 'MENU IS EMPTY',
+    renderTags();
+
+    var list = visibleProducts();
+
+    if (!list.length) {
+      el.list.innerHTML = UI.emptyState(
+        state.search || state.tag || state.categoryId ? '找不到符合的酒' : '酒单还没有商品',
+        state.search || state.tag || state.categoryId ? 'NO MATCHING DRINKS' : 'MENU IS EMPTY',
         'activity');
-      var hint = document.getElementById('menuHint');
-      if (hint) hint.textContent = '';
+      if (el.hint) el.hint.textContent = '';
       return;
     }
 
     /* 依分类分组（分类顺序来自 Sheet） */
     var order = state.categories.map(function (c) { return c.categoryId; });
     var groups = {};
-    state.products.forEach(function (p) {
+    list.forEach(function (p) {
       var key = p.categoryId || '_';
       if (!groups[key]) groups[key] = [];
       groups[key].push(p);
     });
 
-    var html = '';
     var keys = Object.keys(groups).sort(function (a, b) {
       var ia = order.indexOf(a), ib = order.indexOf(b);
       if (ia < 0) ia = 999;
@@ -237,6 +279,7 @@ var MENU = (function () {
       return ia - ib;
     });
 
+    var html = '';
     keys.forEach(function (key) {
       var cat = state.categories.filter(function (c) { return c.categoryId === key; })[0];
       if (cat) {
@@ -246,24 +289,38 @@ var MENU = (function () {
       groups[key].forEach(function (p) { html += productCard(p); });
     });
 
-    box.innerHTML = html;
+    el.list.innerHTML = html;
 
-    Array.prototype.forEach.call(box.querySelectorAll('.product-card'), function (el) {
-      el.addEventListener('click', function () {
-        UI.go('product.html?id=' + encodeURIComponent(el.getAttribute('data-id')));
+    if (el.hint) {
+      el.hint.textContent = (state.search || state.tag || state.categoryId)
+        ? '找到 ' + list.length + ' 款' : '共 ' + list.length + ' 款 · 点一下加入';
+    }
+  }
+
+  function renderTags() {
+    var strip = document.getElementById('tagStrip');
+    if (!strip) return;
+    var tags = visibleTags();
+    if (state.tag && tags.indexOf(state.tag) === -1) state.tag = '';
+    if (!tags.length) { strip.innerHTML = ''; return; }
+
+    strip.innerHTML = tags.map(function (t) {
+      return '<div class="tag-chip' + (t === state.tag ? ' active' : '') + '" data-tag="' +
+        UI.esc(t) + '">' + UI.esc(t) + '</div>';
+    }).join('');
+
+    Array.prototype.forEach.call(strip.querySelectorAll('.tag-chip'), function (node) {
+      node.addEventListener('click', function () {
+        var t = node.getAttribute('data-tag');
+        state.tag = (state.tag === t) ? '' : t;
+        renderProducts();
       });
     });
-
-    var hint = document.getElementById('menuHint');
-    if (hint) {
-      hint.textContent = state.search || state.tag
-        ? '找到 ' + state.products.length + ' 款'
-        : '共 ' + state.products.length + ' 款';
-    }
   }
 
   function productCard(p) {
     var sold = p.available === false;
+    var groups = state.optionsByProduct[p.productId] || [];
     var thumb = p.imageURL
       ? '<div class="product-thumb"><img src="' + UI.esc(p.imageURL) + '" alt="" ' +
         'onerror="this.parentNode.textContent=\'🍸\'"></div>'
@@ -275,7 +332,8 @@ var MENU = (function () {
         '<span class="promo-badge">PROMO</span>';
     }
 
-    return '<div class="product-card' + (sold ? ' is-sold' : '') + '" data-id="' + UI.esc(p.productId) + '">' +
+    return '<div class="product-card' + (sold ? ' is-sold' : '') + '" data-id="' +
+      UI.esc(p.productId) + '">' +
       thumb +
       '<div class="product-info">' +
         '<div class="product-name">' + UI.esc(p.nameEN) + '</div>' +
@@ -283,32 +341,409 @@ var MENU = (function () {
         (p.descriptionEN || p.descriptionZH
           ? '<div class="product-desc">' + UI.esc(p.descriptionZH || p.descriptionEN) + '</div>'
           : '') +
-        '<div class="product-price-row">' + priceHtml + '</div>' +
+        '<div class="product-price-row">' + priceHtml +
+          (groups.length && !sold ? '<span class="card-hint">' + groups.length + ' 个规格可选</span>' : '') +
+        '</div>' +
         (sold ? '<span class="sold-out-badge">SOLD OUT 售罄</span>' : '') +
       '</div>' +
-      '<div class="product-add"' + (sold ? ' style="opacity:.3"' : '') + '>' + (sold ? '✕' : '+') + '</div>' +
+      '<button class="product-add"' + (sold ? ' disabled' : '') + ' data-add="' +
+        UI.esc(p.productId) + '">' + (sold ? '✕' : '+') + '</button>' +
     '</div>';
   }
 
-  /** 给测试用：不碰 DOM 也能检查状态 */
+  /* ---------------------------------------------------------
+     规格抽屉
+     --------------------------------------------------------- */
+
+  function findProduct(productId) {
+    var hit = null;
+    state.products.forEach(function (p) { if (!hit && p.productId === productId) hit = p; });
+    return hit;
+  }
+
+  function optionGroupsOf(productId) {
+    return state.optionsByProduct[productId] || [];
+  }
+
+  function openProduct(productId) {
+    var p = findProduct(productId);
+    if (!p || p.available === false) return;
+
+    var groups = optionGroupsOf(productId);
+    var selected = {};
+    groups.forEach(function (g) {
+      if (g.options && g.options.length) selected[g.optionGroup] = g.options[0].optionId;
+    });
+
+    state.sheet = { mode: 'product', product: p, groups: groups, selected: selected, qty: 1, note: '' };
+    renderSheet();
+    openSheets(el.productSheet);
+  }
+
+  function sheetUnitPrice() {
+    var s = state.sheet;
+    if (!s) return 0;
+    var total = Number(s.product.price) || 0;
+    s.groups.forEach(function (g) {
+      var chosen = chosenOf(g);
+      if (chosen) total += Number(chosen.priceAdjustment) || 0;
+    });
+    return total;
+  }
+
+  function chosenOf(group) {
+    var s = state.sheet;
+    if (!s) return null;
+    var id = s.selected[group.optionGroup];
+    if (!id) return null;
+    var hit = null;
+    (group.options || []).forEach(function (o) { if (!hit && o.optionId === id) hit = o; });
+    return hit;
+  }
+
+  function missingRequired() {
+    var s = state.sheet;
+    if (!s) return [];
+    return s.groups.filter(function (g) { return g.required && !s.selected[g.optionGroup]; });
+  }
+
+  function renderSheet() {
+    var s = state.sheet;
+    if (!s) return;
+
+    set('sheetTitle', s.product.nameEN || '');
+    set('sheetSub', (s.product.nameZH ? s.product.nameZH + ' · ' : '') + UI.money(sheetUnitPrice()));
+    set('sheetQtyValue', s.qty);
+
+    var html = '';
+    s.groups.forEach(function (g) {
+      html += '<div class="option-group">' +
+        '<div class="sheet-group-head">' +
+          '<span class="option-group-title">' + UI.esc(g.nameEN || g.optionGroup) + '</span>' +
+          '<span class="option-group-sub">' + UI.esc(g.nameZH || '') + '</span>' +
+          (g.required ? '<span class="required-mark">必选</span>' : '') +
+        '</div>';
+      (g.options || []).forEach(function (o) {
+        var sel = s.selected[g.optionGroup] === o.optionId ? ' selected' : '';
+        html += '<div class="option-row' + sel + '" data-group="' + UI.esc(g.optionGroup) +
+          '" data-option="' + UI.esc(o.optionId) + '">' +
+          '<div class="option-radio"></div>' +
+          '<div class="option-name">' + UI.esc(o.nameEN) +
+            (o.nameZH ? ' <span class="tiny muted">' + UI.esc(o.nameZH) + '</span>' : '') +
+          '</div>' +
+          '<div class="option-price">' +
+            (Number(o.priceAdjustment) > 0 ? '+' + UI.money(o.priceAdjustment) : UI.money(0)) +
+          '</div>' +
+        '</div>';
+      });
+      html += '</div>';
+    });
+
+    html += '<div class="sheet-note">' +
+      '<div class="bilingual-zh" style="font-size:13px">备注 <span class="tiny muted-2">SPECIAL REQUEST</span></div>' +
+      '<textarea class="textarea mt-8" id="sheetNote" rows="2" maxlength="200" ' +
+        'placeholder="例如：不要太甜 / Less sugar">' + UI.esc(s.note) + '</textarea>' +
+    '</div>';
+
+    el.sheetBody.innerHTML = html;
+
+    Array.prototype.forEach.call(el.sheetBody.querySelectorAll('.option-row'), function (node) {
+      node.addEventListener('click', function () {
+        s.selected[node.getAttribute('data-group')] = node.getAttribute('data-option');
+        renderSheetOnly();
+        updateSheetCta();
+      });
+    });
+
+    var note = document.getElementById('sheetNote');
+    if (note) {
+      note.addEventListener('input', function () { s.note = note.value; });
+    }
+
+    updateSheetCta();
+    log('product sheet for ' + s.product.productId + ' (no network)');
+  }
+
+  /** 只切换选中样式，避免重画把备注吃掉 */
+  function renderSheetOnly() {
+    var s = state.sheet;
+    if (!s || !el.sheetBody) return;
+    Array.prototype.forEach.call(el.sheetBody.querySelectorAll('.option-row'), function (node) {
+      var on = s.selected[node.getAttribute('data-group')] === node.getAttribute('data-option');
+      node.classList.toggle('selected', on);
+    });
+    set('sheetSub', (s.product.nameZH ? s.product.nameZH + ' · ' : '') + UI.money(sheetUnitPrice()));
+  }
+
+  function updateSheetCta() {
+    var btn = document.getElementById('sheetAddBtn');
+    if (!btn) return;
+    var missing = missingRequired();
+    var total = sheetUnitPrice() * (state.sheet ? state.sheet.qty : 1);
+
+    if (missing.length) {
+      btn.innerHTML = '<span>请选择 ' +
+        UI.esc(missing[0].nameZH || missing[0].nameEN || missing[0].optionGroup) + '</span>';
+      btn.disabled = true;
+      return;
+    }
+    btn.disabled = state.ordering && state.ordering.open === false;
+    btn.innerHTML = '<span>加入购物车 ADD · ' + UI.money(total) + '</span>';
+  }
+
+  function setSheetQty(n) {
+    var s = state.sheet;
+    if (!s) return;
+    s.qty = Math.max(1, Math.min(MAX_QTY, n));
+    set('sheetQtyValue', s.qty);
+    var minus = document.getElementById('sheetQtyMinus');
+    var plus = document.getElementById('sheetQtyPlus');
+    if (minus) minus.disabled = s.qty <= 1;
+    if (plus) plus.disabled = s.qty >= MAX_QTY;
+    updateSheetCta();
+  }
+
+  function addSheetToCart() {
+    var s = state.sheet;
+    if (!s) return;
+    if (missingRequired().length) { updateSheetCta(); return; }
+
+    var options = [];
+    s.groups.forEach(function (g) {
+      var o = chosenOf(g);
+      if (o) {
+        options.push({
+          optionGroup: g.optionGroup,
+          optionId: o.optionId,
+          nameEN: o.nameEN,
+          nameZH: o.nameZH
+        });
+      }
+    });
+
+    addToCart(s.product, options, s.qty, s.note, sheetUnitPrice());
+  }
+
+  /** 没有规格的商品：卡片上的 + 直接加入（一次点击就完成） */
+  function quickAdd(productId) {
+    var p = findProduct(productId);
+    if (!p || p.available === false) return;
+    var groups = optionGroupsOf(productId);
+
+    if (groups.length) { openProduct(productId); return; }
+
+    if (state.ordering && state.ordering.open === false) {
+      UI.toast('目前未开放线上点单', 'error');
+      return;
+    }
+    addToCart(p, [], 1, '', Number(p.price) || 0);
+  }
+
+  /** unitPriceSen 由呼叫端算好（含规格加价），这样购物车条显示的金额才会跟结帐一致 */
+  function addToCart(p, options, qty, note, unitPriceSen) {
+    if (state.ordering && state.ordering.open === false) {
+      UI.toast('目前未开放线上点单', 'error');
+      return;
+    }
+
+    var res = CART.add({
+      productId: p.productId,
+      nameEN: p.nameEN,
+      nameZH: p.nameZH,
+      unitPrice: Number(unitPriceSen) || Number(p.price) || 0,
+      quantity: qty,
+      options: options,
+      note: String(note || '').slice(0, 200)
+    });
+
+    if (!res.ok) { UI.toast(res.message, 'error'); return; }
+
+    closeSheets();
+    renderCartBar();
+    renderCart();
+    UI.toast('已加入 · ' + (p.nameZH || p.nameEN), 'success');
+  }
+
+  /* ---------------------------------------------------------
+     购物车条 / 抽屉
+     --------------------------------------------------------- */
+
+  function renderCartBar() {
+    var bar = document.getElementById('cartBar');
+    var n = CART.count();
+    set('cbCount', n);
+    set('cbTotal', UI.money(CART.subtotalSen()));
+    if (bar) bar.style.display = n > 0 ? '' : 'none';
+
+    var badge = document.getElementById('topCartBadge');
+    if (badge) {
+      badge.textContent = n;
+      badge.style.display = n > 0 ? '' : 'none';
+    }
+  }
+
+  function openCart() {
+    renderCart();
+    openSheets(el.cartSheet);
+  }
+
+  function renderCart() {
+    if (!el.cartBody) return;
+    var items = CART.items();
+
+    set('cartSheetSub', items.length
+      ? items.length + ' 项 · ' + UI.money(CART.subtotalSen())
+      : '空 EMPTY');
+
+    if (!items.length) {
+      el.cartBody.innerHTML = '<div class="a-empty-lite">购物车是空的<br>' +
+        '<span class="tiny muted-2">从酒单点一下就可以加进来</span></div>';
+      var go = document.getElementById('cartSheetGo');
+      if (go) go.disabled = true;
+      return;
+    }
+
+    el.cartBody.innerHTML = items.map(function (it) {
+      var optText = (it.options || []).map(function (o) {
+        return o.nameZH || o.nameEN || '';
+      }).filter(Boolean).join(' · ');
+
+      return '<div class="cart-line" data-line="' + UI.esc(it.lineId) + '">' +
+        '<div class="cl-main">' +
+          '<div class="cl-name">' + UI.esc(it.nameZH || it.nameEN) + '</div>' +
+          (optText ? '<div class="cl-opt">' + UI.esc(optText) + '</div>' : '') +
+          (it.note ? '<div class="cl-note">备注 ' + UI.esc(it.note) + '</div>' : '') +
+          '<div class="cl-price">' + UI.money(CART.lineTotalSen(it)) + '</div>' +
+        '</div>' +
+        '<div class="qty-ctrl cl-qty">' +
+          '<button class="qty-btn" data-dec="' + UI.esc(it.lineId) + '">−</button>' +
+          '<span class="qty-value">' + it.quantity + '</span>' +
+          '<button class="qty-btn" data-inc="' + UI.esc(it.lineId) + '">+</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    var go = document.getElementById('cartSheetGo');
+    if (go) go.disabled = false;
+
+    Array.prototype.forEach.call(el.cartBody.querySelectorAll('[data-inc]'), function (node) {
+      node.addEventListener('click', function () {
+        var id = node.getAttribute('data-inc');
+        var line = findLine(id);
+        if (line) CART.setQuantity(id, line.quantity + 1);
+        refreshCartUi();
+      });
+    });
+    Array.prototype.forEach.call(el.cartBody.querySelectorAll('[data-dec]'), function (node) {
+      node.addEventListener('click', function () {
+        var id = node.getAttribute('data-dec');
+        var line = findLine(id);
+        if (!line) return;
+        if (line.quantity <= 1) CART.remove(id);
+        else CART.setQuantity(id, line.quantity - 1);
+        refreshCartUi();
+      });
+    });
+  }
+
+  function findLine(lineId) {
+    var hit = null;
+    CART.items().forEach(function (it) { if (!hit && it.lineId === lineId) hit = it; });
+    return hit;
+  }
+
+  function refreshCartUi() {
+    renderCart();
+    renderCartBar();
+  }
+
+  function goCheckout() {
+    if (!CART.count()) { UI.toast('购物车是空的 / Cart is empty', 'error'); return; }
+    UI.go('checkout.html');
+  }
+
+  /* ---------------------------------------------------------
+     抽屉开关
+     --------------------------------------------------------- */
+
+  function openSheets(which) {
+    if (!el.sheet) return;
+    el.sheet.style.display = '';
+    if (el.productSheet) el.productSheet.style.display = which === el.productSheet ? '' : 'none';
+    if (el.cartSheet)    el.cartSheet.style.display    = which === el.cartSheet ? '' : 'none';
+    document.body.classList.add('sheet-open');
+    /* 进场动画（下一帧才加 class，才会动） */
+    setTimeout(function () {
+      if (el.productSheet && el.productSheet.style.display !== 'none') el.productSheet.classList.add('in');
+      if (el.cartSheet && el.cartSheet.style.display !== 'none') el.cartSheet.classList.add('in');
+    }, 10);
+  }
+
+  function closeSheets() {
+    if (!el.sheet) return;
+    if (el.productSheet) { el.productSheet.classList.remove('in'); el.productSheet.style.display = 'none'; }
+    if (el.cartSheet)    { el.cartSheet.classList.remove('in');    el.cartSheet.style.display = 'none'; }
+    el.sheet.style.display = 'none';
+    document.body.classList.remove('sheet-open');
+    state.sheet = null;
+  }
+
+  /* ---------------------------------------------------------
+     事件委派（清单重画也不用重新绑）
+     --------------------------------------------------------- */
+
+  document.addEventListener('click', function (e) {
+    var node = e.target;
+    while (node && node.nodeType === 1) {
+      if (node.getAttribute && node.getAttribute('data-add')) {
+        e.stopPropagation();
+        quickAdd(node.getAttribute('data-add'));
+        return;
+      }
+      if (node.classList && node.classList.contains('product-card')) {
+        openProduct(node.getAttribute('data-id'));       // 卡片本身 → 开规格抽屉
+        return;
+      }
+      node = node.parentNode;
+    }
+  });
+
+  function set(id, value) {
+    var node = document.getElementById(id);
+    if (node) node.textContent = value;
+  }
+
+  /* ---------------- 测试用 ---------------- */
+
   function debugState() {
     return {
-      loading: state.loading,
       loaded: state.loaded,
       errorCode: state.error ? state.error.code : null,
       categories: state.categories.length,
       products: state.products.length,
-      ordering: state.ordering,
-      search: state.search,
+      visible: visibleProducts().length,
       tag: state.tag,
-      categoryId: state.categoryId
+      categoryId: state.categoryId,
+      search: state.search,
+      cartCount: CART.count(),
+      cartSubtotal: CART.subtotalSen(),
+      sheet: state.sheet ? {
+        productId: state.sheet.product.productId,
+        groups: state.sheet.groups.length,
+        qty: state.sheet.qty
+      } : null
     };
   }
 
   return {
     init: init,
     load: load,
+    openProduct: openProduct,
+    quickAdd: quickAdd,
+    openCart: openCart,
+    closeSheets: closeSheets,
+    setSheetQty: setSheetQty,
+    addSheetToCart: addSheetToCart,
     debugState: debugState
   };
-
 })();

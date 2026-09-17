@@ -126,6 +126,7 @@ var CLAIM = (function () {
         if (!AUTH.handleSessionError(res.error)) UI.toast(res.error.message, 'error');
         return;
       }
+      API.cache.clear();            // 积分 / 钱包 / 订单都变了
       renderResult(res.data);
     });
   }

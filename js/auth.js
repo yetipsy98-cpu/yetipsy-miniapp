@@ -36,6 +36,7 @@ var AUTH = (function () {
   function setCustomerSession(token, profile) {
     set(S.CUSTOMER_TOKEN, token);
     if (profile) set(S.CUSTOMER_PROFILE, JSON.stringify(profile));
+    dropReadCache();          // 换人登入 → 不能拿到上一位会员的快取
   }
 
   function getCustomerProfile() {
@@ -51,6 +52,14 @@ var AUTH = (function () {
   function clearCustomer() {
     del(S.CUSTOMER_TOKEN);
     del(S.CUSTOMER_PROFILE);
+    dropReadCache();
+  }
+
+  /** 只读快取由 API 层管；auth 只负责在换人时叫它清掉 */
+  function dropReadCache() {
+    try {
+      if (typeof API !== 'undefined' && API.cache && API.cache.clear) API.cache.clear();
+    } catch (e) {}
   }
 
   function isCustomerLoggedIn() {
@@ -92,6 +101,7 @@ var AUTH = (function () {
   function clearStaff() {
     del(S.STAFF_TOKEN);
     del(S.STAFF_PROFILE);
+    dropReadCache();
   }
 
   function isStaffLoggedIn() {

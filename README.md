@@ -41,10 +41,21 @@ Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积�
 主流程 B —— mini app 的单（自助点单，顾客自己下单）：
 
 ```
-顾客开酒单 → 加入购物车 → 选桌号或自取 → 结帐（可用钱包抵扣）
+顾客开酒单（★ 一页搞定：选规格 → 加入购物车 → 看购物车 → 去结帐，
+           不用一直换页等载入）
+→ 选桌号或自取 → 结帐（可用钱包抵扣）
 → 员工订单看板接单 → 制作 → 完成（收款后才完成）
 → 完成时自动发 Points / Reward（§22），写进同一位会员的资料
 ```
+
+> **2.1.2 起，会员端不再「每点一次等一次」：**
+> · 首页载完会在背景先抓好酒单 / 我的订单 / 钱包（预载）
+> · 酒单页用快取先画，搜寻 / 分类 / 风味筛选全部在本机做，不打后端
+> · 点商品 → 底部抽屉选规格（规格跟着酒单一起回来）→ 加入购物车，
+>   底部购物车条随时看件数与金额，不用跳去 cart.html
+> · 只读资料用 stale-while-revalidate 快取（酒单 10 分钟、钱包 / 订单 1 分钟），
+>   登入 / 登出会换 scope 并清空，换人用同一支手机不会看到上一位会员的资料
+> · 下单 / 兑奖 / 改资料后会清掉快取，下一次读取一定是最新的
 
 Foodcourt Claim（1.x 原流程，保留但已移出员工首页、入口在 MORE，仅 MANAGER / OWNER）：
 
@@ -339,11 +350,12 @@ Jason 登入 → 酒单 → Mojito×2 + Long Island = RM72 → 钱包抵 RM8 →
 同时确认 AppOrder / OrderItems / PointTransaction / WalletTransaction /
 AuditLog 都正确写入，而 §85 的 Foodcourt 认领照常运作。
 
-顾客端完整流程已可用：
-`menu.html`（酒单 + 搜寻 + 分类 + 风味筛选 + 售罄）→
-`product.html`（规格 Size / ICE / SWEETNESS + 数量 + 备注）→
-`cart.html`（购物车）→ `checkout.html`（后端报价 + 桌号 + 钱包 + 确认）→
+顾客端完整流程：
+`menu.html`（★ 单页点单：搜寻 / 分类 / 风味 / 规格抽屉 / 购物车条，全部不换页）→
+`checkout.html`（后端报价 + 桌号 / 外带 + 钱包 + 确认）→
 `order.html`（订单进度追踪）/ `orders.html`（我的订单 + 再点一次）。
+`product.html`（规格 + 备注的完整页）与 `cart.html`（购物车页）保留给
+直接连结与返回键使用，功能与抽屉相同。
 
 员工端：`admin/orderboard.html` —— 三栏看板（NEW / CONFIRMED / PREPARING / READY）、
 等待计时、新单提示音（可 MUTE）、收款、完成、取消、一键暂停接单。
