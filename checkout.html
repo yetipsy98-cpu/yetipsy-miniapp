@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0D0D0D">
+<title>YETIPSY — Checkout 结帐</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div class="page page-with-cta">
+
+  <div class="row-between" style="padding: 6px 2px 12px;">
+    <a href="cart.html" style="color:var(--muted)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <div class="brand-mark" style="font-size:17px;letter-spacing:5px;text-indent:5px;">YETIPSY</div>
+    <div style="width:20px"></div>
+  </div>
+
+  <div class="bilingual-zh" style="font-size:20px">确认订单</div>
+  <div class="bilingual-en">CONFIRM YOUR ORDER</div>
+
+  <div id="checkoutBody" class="mt-12"></div>
+
+</div>
+
+<div class="sticky-cta" id="stickyCta" style="display:none">
+  <button class="btn btn-primary" id="placeOrderBtn" disabled><span>载入中…</span></button>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/cart.js"></script>
+<script src="js/checkout.js"></script>
+<script>
+  CHECKOUT.init();
+</script>
+
+<script>
+/* PWA：註冊 Service Worker（只 Cache App Shell，不 Cache 任何敏感资料） */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('service-worker.js').catch(function () {});
+  });
+}
+</script>
+</body>
+</html>

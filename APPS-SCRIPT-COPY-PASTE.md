@@ -1,6 +1,6 @@
 # YETIPSY · Google Apps Script 全部档案（复制贴上用）
 
-**16 个档案 · 版本 1.4.0 · 会员登录 = 手机号码 + 密码（不用 WhatsApp OTP）**
+**18 个档案 · 版本 1.4.0 · 会员登录 = 手机号码 + 密码（不用 WhatsApp OTP）**
 
 > 这份文件由 `node demo/build-copypaste.js` 从 `apps-script/*.gs` 产生。
 > 改了后端记得重跑，`npm test` 会检查两者是否同步。
@@ -10,8 +10,8 @@
 ## 怎么用这个档案
 
 1. 打开 <https://script.google.com>，建立（或打开）你的 Apps Script 专案。
-2. 预设会有一个 `Code.gs` → 点它右边三个点 → **删除**（下面第 16 个会取代它）。
-3. 依照下表顺序新增 16 个档案：点 **+ → 指令码（Script）**，
+2. 预设会有一个 `Code.gs` → 点它右边三个点 → **删除**（下面第 18 个会取代它）。
+3. 依照下表顺序新增 18 个档案：点 **+ → 指令码（Script）**，
    输入名称时**不要**打 `.gs`（例如输入 `Config`，不是 `Config.gs`）。
 4. 在下面的每一节里，复制那个代码框里的**全部内容**，贴到对应的档案里
    （档案里已经有内容的话，先 Ctrl+A 全选删掉再贴）。
@@ -38,13 +38,15 @@
 | 9 | `Customers` | 595 | ★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料 |
 | 10 | `Orders` | 134 | 消费纪录与统计 |
 | 11 | `Menu` | 721 | ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） |
-| 12 | `Claims` | 395 | QR / 4 位 Code 认领（只存 token 的 hash） |
-| 13 | `Promotions` | 154 | 优惠规则 |
-| 14 | `Admin` | 209 | 员工端：Dashboard、会员查询、手动调整、重设会员密码、设置 |
-| 15 | `Auth` | 89 | ping / getPublicSettings / staffLogin / staffLogout |
-| 16 | `Code` | 210 | ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 |
+| 12 | `Checkout` | 330 | ★ 2.0 结帐报价：后端重算价格、钱包上限、Quote 5 分钟有效期、防重复下单的识别码 |
+| 13 | `AppOrders` | 370 | ★ 2.0 订单：placeOrder（幂等）、订单查询、取消、再点一次、名称与单价快照 |
+| 14 | `Claims` | 395 | QR / 4 位 Code 认领（只存 token 的 hash） |
+| 15 | `Promotions` | 154 | 优惠规则 |
+| 16 | `Admin` | 209 | 员工端：Dashboard、会员查询、手动调整、重设会员密码、设置 |
+| 17 | `Auth` | 89 | ping / getPublicSettings / staffLogin / staffLogout |
+| 18 | `Code` | 219 | ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 |
 
-> ⚠️ **16 个档案全部贴完再执行**，少一个会报 `xxx is not defined`。
+> ⚠️ **18 个档案全部贴完再执行**，少一个会报 `xxx is not defined`。
 
 ---
 
@@ -3551,7 +3553,727 @@ function seedDemoMenu() {
 
 ---
 
-## 12. Claims.gs
+## 12. Checkout.gs
+
+> Apps Script 里的档案名称：**`Checkout`**（不要打 .gs）
+> ★ 2.0 结帐报价：后端重算价格、钱包上限、Quote 5 分钟有效期、防重复下单的识别码 · 330 行 · SHA-256 `77e3fe37a9ea0736`
+
+```javascript
+/* =============================================================
+   YETIPSY — Checkout.gs（2.0 Phase 5）
+   -------------------------------------------------------------
+   结帐报价（§42 / §43 / §44）
+
+   流程：Cart → createCheckoutQuote() → 顾客确认 → placeOrder()
+
+   不能违反的规则：
+   · §41/§42 前端只能送 ProductID / Quantity / Options。价格一律由
+     Backend 读 Products 重算，前端送来的任何金额都被忽略。
+   · §66 即使商品已在 Cart 里，Checkout 仍要再验一次库存。
+   · §8 规格必须属于该商品、必须是 ACTIVE、必选组不能漏。
+   · §43 Quote 有短效期（CHECKOUT_QUOTE_EXPIRY_MINUTES），过期要重新报价。
+   · §44 每次 Quote 附一个 IdempotencyKey，placeOrder 用它防重复下单。
+   · §10 这里只「记录」钱包要用多少，**不扣钱**；扣钱在订单确认时（§54）。
+   · §82 报价里含钱包余额 → 绝不进 CacheService 的长期缓存，
+     只用短效 Quote 键，且钱包数字每次现读。
+   ============================================================= */
+
+var QUOTE_CACHE_PREFIX = 'checkoutquote:';
+
+/** Quote 有效秒数（§43，预设 5 分钟） */
+function quoteTtlSeconds() {
+  var minutes = numSetting('CHECKOUT_QUOTE_EXPIRY_MINUTES', 5);
+  if (!isFinite(minutes) || minutes <= 0) minutes = 5;
+  return Math.min(3600, Math.round(minutes * 60));      // 最多 1 小时
+}
+
+/* -------------------------------------------------------------
+   1. 校验购物车（§42）
+   ------------------------------------------------------------- */
+
+/**
+ * 把前端送的 cart 逐项对照 Products / ProductOptions 重算。
+ * 回传 { ok:true, lines:[...], subtotalSen, itemCount } 或 { ok:false, error }
+ *
+ * 前端送来的每一项只认这几个栏位：
+ *   { productId, quantity, options:[optionId...], note }
+ * 其余（price / amount / total / discount…）一律忽略。
+ */
+function priceCart(cartItems) {
+  var maxItems = numSetting('MAX_ORDER_ITEMS', 20);
+  if (!cartItems || !cartItems.length) {
+    return { ok: false, error: err('INVALID_INPUT', 'Cart is empty. / 购物车是空的。') };
+  }
+  if (cartItems.length > maxItems) {
+    return { ok: false, error: err('TOO_MANY_ITEMS',
+      'Max ' + maxItems + ' items per order. / 单张订单最多 ' + maxItems + ' 项。') };
+  }
+
+  var today = todayKeyOf();
+  var lines = [];
+  var subtotal = 0;
+  var itemCount = 0;
+
+  for (var i = 0; i < cartItems.length; i++) {
+    var raw = cartItems[i] || {};
+    var product = dbById('products', String(raw.productId || ''));
+
+    if (!product || String(product.status).toUpperCase() !== 'ACTIVE') {
+      return { ok: false, error: err('PRODUCT_NOT_FOUND',
+        'Product not found: ' + String(raw.productId || '(empty)')) };
+    }
+    /* §66 已经放进 Cart 也要再验一次 */
+    if (String(product.available).toUpperCase() === 'FALSE') {
+      return { ok: false, error: err('PRODUCT_UNAVAILABLE',
+        (product.nameEN || product.productId) + ' is sold out. / 已售完。') };
+    }
+
+    var qty = Math.round(Number(raw.quantity));
+    if (!isFinite(qty) || qty < 1 || qty > 99) {
+      return { ok: false, error: err('INVALID_QUANTITY',
+        'Invalid quantity for ' + (product.nameEN || product.productId)) };
+    }
+
+    /* 规格：必须属于这个商品、必须 ACTIVE、同组不能选两个、必选组不能漏 */
+    var allOptions = dbFilter('productOptions', function (o) {
+      return o.productId === product.productId && String(o.status).toUpperCase() === 'ACTIVE';
+    });
+
+    var wantedIds = {};
+    (Array.isArray(raw.options) ? raw.options : []).forEach(function (id) {
+      wantedIds[String(id)] = true;
+    });
+
+    var chosen = [];
+    var seenGroups = {};
+    var optionsPrice = 0;
+    for (var j = 0; j < allOptions.length; j++) {
+      var opt = allOptions[j];
+      if (!wantedIds[opt.optionId]) continue;
+      if (seenGroups[opt.optionGroup]) {
+        return { ok: false, error: err('INVALID_INPUT',
+          'Only one option per group (' + opt.optionGroup + '). / 同一组规格只能选一个。') };
+      }
+      seenGroups[opt.optionGroup] = true;
+      chosen.push({
+        optionId: opt.optionId,
+        optionGroup: opt.optionGroup,
+        nameEN: opt.nameEN || '',
+        nameZH: opt.nameZH || ''
+      });
+      optionsPrice += Math.round(Number(opt.priceAdjustmentSen) || 0);
+    }
+
+    var requiredGroups = {};
+    allOptions.forEach(function (o) {
+      if (String(o.required).toUpperCase() === 'TRUE') requiredGroups[o.optionGroup] = true;
+    });
+    var missing = Object.keys(requiredGroups).filter(function (g) { return !seenGroups[g]; });
+    if (missing.length) {
+      return { ok: false, error: err('OPTION_REQUIRED',
+        'Please choose ' + missing.join(', ') + '. / 请选择必选规格：' + missing.join('、')) };
+    }
+
+    /* §30 快照：名称与单价在下单当下就固定下来 */
+    var price = effectivePriceSen(product, today);
+    var unitPrice = price.priceSen;
+    var lineTotal = (unitPrice + optionsPrice) * qty;
+
+    subtotal += lineTotal;
+    itemCount += qty;
+    lines.push({
+      productId: product.productId,
+      productNameSnapshot: product.nameEN || product.nameZH || product.productId,
+      productNameZhSnapshot: product.nameZH || '',
+      unitPriceSen: unitPrice,
+      quantity: qty,
+      options: chosen,
+      optionsPriceSen: optionsPrice,
+      lineTotalSen: lineTotal,
+      customerNote: String(raw.note || '').slice(0, 200),
+      onPromo: price.onPromo
+    });
+  }
+
+  if (subtotal <= 0) {
+    return { ok: false, error: err('INVALID_AMOUNT', 'Order total must be above 0.') };
+  }
+
+  return { ok: true, lines: lines, subtotalSen: subtotal, itemCount: itemCount };
+}
+
+/* -------------------------------------------------------------
+   2. 桌号 / 取餐方式（§11）
+   ------------------------------------------------------------- */
+
+/** 回传 { ok, orderType, tableNumber } 或 { ok:false, error } */
+function resolveOrderType(data) {
+  var type = String((data && data.orderType) || '').trim().toUpperCase();
+  var table = String((data && data.tableNumber) || '').trim().toUpperCase().slice(0, 12);
+
+  var allowTable = boolSetting('ALLOW_TABLE_ORDER', true);
+  var allowPickup = boolSetting('ALLOW_PICKUP', true);
+
+  if (!type) type = table ? 'TABLE' : 'COUNTER';
+
+  if (type === 'TABLE') {
+    if (!allowTable) {
+      return { ok: false, error: err('INVALID_INPUT',
+        'Table orders are not available. / 目前不提供桌号点单。') };
+    }
+    if (!table) {
+      return { ok: false, error: err('INVALID_INPUT',
+        'Please enter your table number. / 请输入桌号。') };
+    }
+  } else if (type === 'COUNTER' || type === 'PICKUP' || type === 'TAKEAWAY') {
+    if (!allowPickup) {
+      return { ok: false, error: err('INVALID_INPUT',
+        'Pickup is not available. / 目前不提供自取。') };
+    }
+    type = (type === 'PICKUP') ? 'COUNTER' : type;
+    table = '';
+  } else {
+    return { ok: false, error: err('INVALID_INPUT',
+      'Unknown order type: ' + type + ' / 不正确的取餐方式。') };
+  }
+
+  return { ok: true, orderType: type, tableNumber: table };
+}
+
+/* -------------------------------------------------------------
+   3. createCheckoutQuote（§43 / §60）
+   ------------------------------------------------------------- */
+
+/**
+ * data: { items:[{productId, quantity, options:[optionId], note}],
+ *         orderType:'TABLE'|'COUNTER'|'TAKEAWAY', tableNumber:'A12',
+ *         useWallet:true|false, customerNote:'...' }
+ */
+function createCheckoutQuote(data, token) {
+  var ctx = requireCustomer(token);
+  if (ctx.error) return ctx.error;
+  var customer = ctx.customer;
+
+  /* §64 点单开关 */
+  var win = orderingWindowState();
+  if (!win.enabled) return err('ORDERING_CLOSED');
+  if (win.paused) return err('ORDERING_PAUSED');
+  if (!win.open) {
+    return err('ORDERING_CLOSED',
+      'Ordering hours ' + win.openTime + ' – ' + win.closeTime +
+      '. / 点单时间 ' + win.openTime + ' – ' + win.closeTime + '。');
+  }
+
+  var priced = priceCart(data && data.items);
+  if (!priced.ok) return priced.error;
+
+  var placement = resolveOrderType(data);
+  if (!placement.ok) return placement.error;
+
+  /* §10 钱包：这里只「算」能用多少，不扣钱 */
+  var useWallet = !!(data && data.useWallet);
+  var plan = walletRedemptionPlan(customer, priced.subtotalSen);
+  var walletApplied = useWallet && plan.allowed ? plan.usableAmount : 0;
+
+  var finalAmount = priced.subtotalSen - walletApplied;
+  if (finalAmount < 0) finalAmount = 0;
+
+  var quoteToken = randomToken(16);
+  var idempotencyKey = randomToken(16);
+  var ttl = quoteTtlSeconds();
+  var now = Date.now();
+
+  var quote = {
+    quoteToken: quoteToken,
+    customerId: customer.customerId,
+    lines: priced.lines,
+    itemCount: priced.itemCount,
+    subtotalSen: priced.subtotalSen,
+    useWallet: useWallet,
+    walletBalanceSen: plan.walletBalance,       // 报价当下的余额（§82 不做长期缓存）
+    walletMaxUsableSen: plan.maxUsable,
+    walletAppliedSen: walletApplied,
+    walletReason: useWallet && !plan.allowed ? plan.reason : '',
+    discountSen: 0,
+    finalAmountSen: finalAmount,
+    orderType: placement.orderType,
+    tableNumber: placement.tableNumber,
+    customerNote: String((data && data.customerNote) || '').slice(0, 200),
+    idempotencyKey: idempotencyKey,
+    createdAt: nowISO(),
+    expiresAtMs: now + ttl * 1000
+  };
+
+  rateLimitSet(QUOTE_CACHE_PREFIX + quoteToken, quote, ttl);
+
+  return ok({
+    quoteToken: quoteToken,
+    idempotencyKey: idempotencyKey,
+    expiresInMinutes: Math.round(ttl / 60 * 10) / 10,
+    lines: quote.lines,
+    itemCount: quote.itemCount,
+    subtotal: quote.subtotalSen,
+    wallet: {
+      requested: useWallet,
+      balance: plan.walletBalance,
+      maxUsable: plan.maxUsable,
+      applied: walletApplied,
+      maxPercent: plan.maxPercent,
+      minBill: plan.minBill,
+      allowed: plan.allowed,
+      reason: quote.walletReason
+    },
+    discount: 0,
+    finalAmount: finalAmount,
+    customerPays: finalAmount,
+    orderType: quote.orderType,
+    tableNumber: quote.tableNumber,
+    /* §57 预告积分。注意要传「毛额 + 钱包抵扣」，因为 pointsForAmount()
+       在 NET_PAID 模式下自己会做 billAmount - walletUsed；
+       传已经扣过钱包的 finalAmount 会扣两次。
+       真正发放仍以完成订单时后端计算为准（§22）。 */
+    estimatedPoints: pointsForAmount(priced.subtotalSen, walletApplied),
+    ordering: win
+  });
+}
+
+/* -------------------------------------------------------------
+   4. 读取 / 校验 Quote（给 placeOrder 用）
+   ------------------------------------------------------------- */
+
+/** 取出并验证 Quote；回传 { ok, quote } 或 { ok:false, error } */
+function loadQuote(quoteToken, customerId) {
+  var key = QUOTE_CACHE_PREFIX + String(quoteToken || '');
+  var quote = rateLimitGet(key);
+  if (!quote || !quote.quoteToken) {
+    return { ok: false, error: err('QUOTE_EXPIRED') };
+  }
+  if (String(quote.customerId) !== String(customerId)) {
+    /* 别人的 Quote 不能用（§12 防伪造） */
+    return { ok: false, error: err('QUOTE_EXPIRED', 'Quote does not match this member.') };
+  }
+  if (Number(quote.expiresAtMs) < Date.now()) {
+    rateLimitClear(key);
+    return { ok: false, error: err('QUOTE_EXPIRED') };
+  }
+  return { ok: true, quote: quote };
+}
+
+/** 用掉 Quote（下单成功或作废时呼叫），避免同一张被用两次 */
+function consumeQuote(quoteToken) {
+  rateLimitClear(QUOTE_CACHE_PREFIX + String(quoteToken || ''));
+}
+
+/**
+ * 顾客可以主动重新取得报价（例如回到 Cart 改了东西）。
+ * 单纯查询，不产生新的 IdempotencyKey。
+ */
+function getCheckoutQuote(data, token) {
+  var ctx = requireCustomer(token);
+  if (ctx.error) return ctx.error;
+
+  var found = loadQuote(data && data.quoteToken, ctx.customer.customerId);
+  if (!found.ok) return found.error;
+  var q = found.quote;
+
+  return ok({
+    quoteToken: q.quoteToken,
+    idempotencyKey: q.idempotencyKey,
+    expiresInMinutes: Math.max(0, Math.round((Number(q.expiresAtMs) - Date.now()) / 6000) / 10),
+    lines: q.lines,
+    itemCount: q.itemCount,
+    subtotal: q.subtotalSen,
+    walletApplied: q.walletAppliedSen,
+    finalAmount: q.finalAmountSen,
+    orderType: q.orderType,
+    tableNumber: q.tableNumber
+  });
+}
+```
+
+---
+
+## 13. AppOrders.gs
+
+> Apps Script 里的档案名称：**`AppOrders`**（不要打 .gs）
+> ★ 2.0 订单：placeOrder（幂等）、订单查询、取消、再点一次、名称与单价快照 · 370 行 · SHA-256 `b01ff1543b7363eb`
+
+```javascript
+/* =============================================================
+   YETIPSY — AppOrders.gs（2.0 Phase 6）
+   -------------------------------------------------------------
+   建立订单 / 查询订单 / 取消请求（§60 / §75）
+
+   状态流（§16）：SUBMITTED → CONFIRMED → PREPARING → READY → COMPLETED
+                                                    └→ CANCELLED
+
+   不能违反的规则：
+   · §44 同一个 IdempotencyKey 只能产生一张订单。连按两次 PLACE ORDER
+         第二次会拿回同一张订单，不会变成两单。
+   · §41 金额一律来自 Quote（Quote 又是后端自己算的），前端送的金额被忽略。
+   · §54 钱包在这一步只「记录」walletRequestedSen，**不扣钱**；
+         真正扣钱在员工确认收款时，取消要能全额退回。
+   · §22 SUBMITTED 不给积分、不给 Reward、不算 Visit。
+         这些一律等到 COMPLETED（Phase 8）。
+   · §45 OrderNumber（YT260917001）只是显示用，内部一律用 AppOrderID。
+   · §49 等待时间由 CreatedAt 算，不额外写库。
+   · §53 SUBMITTED 且未被 Accept 时，顾客可以 REQUEST CANCEL。
+   ============================================================= */
+
+/* -------------------------------------------------------------
+   1. 对外形状
+   ------------------------------------------------------------- */
+
+function publicAppOrder(o, items) {
+  var created = o.createdAt ? new Date(o.createdAt).getTime() : 0;
+  return {
+    appOrderId: o.appOrderId,
+    orderNumber: o.orderNumber,
+    orderType: o.orderType,
+    tableNumber: o.tableNumber || '',
+    itemCount: Number(o.itemCount) || 0,
+    subtotal: Number(o.subtotalSen) || 0,
+    walletRequested: Number(o.walletRequestedSen) || 0,
+    walletUsed: Number(o.walletUsedSen) || 0,
+    discount: Number(o.discountSen) || 0,
+    finalAmount: Number(o.finalAmountSen) || 0,
+    pointsEarned: Number(o.pointsEarned) || 0,
+    orderStatus: o.orderStatus,
+    paymentMethod: o.paymentMethod || '',
+    paymentStatus: o.paymentStatus || 'UNPAID',
+    customerNote: o.customerNote || '',
+    channel: o.channel || 'YETIPSY_APP',
+    createdAt: o.createdAt || '',
+    confirmedAt: o.confirmedAt || '',
+    readyAt: o.readyAt || '',
+    completedAt: o.completedAt || '',
+    cancelledAt: o.cancelledAt || '',
+    cancelReason: o.cancelReason || '',
+    /* §49 等待秒数由 CreatedAt 现算，不存库 */
+    waitingSeconds: created ? Math.max(0, Math.floor((Date.now() - created) / 1000)) : 0,
+    items: items || []
+  };
+}
+
+function publicOrderItem(it) {
+  return {
+    orderItemId: it.orderItemId,
+    productId: it.productId,
+    name: it.productNameSnapshot || '',
+    nameZH: it.productNameSnapshot && it.productNameZh ? it.productNameZh : '',
+    unitPrice: Number(it.unitPriceSen) || 0,
+    quantity: Number(it.quantity) || 0,
+    options: parseOptionsJson(it.optionsJSON),
+    optionsPrice: Number(it.optionsPriceSen) || 0,
+    lineTotal: Number(it.lineTotalSen) || 0,
+    note: it.customerNote || ''
+  };
+}
+
+function parseOptionsJson(json) {
+  try {
+    var arr = JSON.parse(String(json || '[]'));
+    return Array.isArray(arr) ? arr : [];
+  } catch (e) { return []; }
+}
+
+/** 显示用订单编号 YT260917001（§45） */
+function nextOrderNumber() {
+  var d = new Date();
+  var tz = String(setting('TIMEZONE', 'Asia/Kuala_Lumpur'));
+  var ymd;
+  try {
+    ymd = new Date().toLocaleDateString('en-CA', { timeZone: tz }).replace(/-/g, '');
+  } catch (e) {
+    ymd = d.toISOString().slice(0, 10).replace(/-/g, '');
+  }
+  var yymmdd = ymd.slice(2);                       // 20260917 → 260917
+  return dbNextId('YT' + yymmdd, 'ordernum:' + yymmdd, 3);
+}
+
+/* -------------------------------------------------------------
+   2. placeOrder（§60 / §75）
+   ------------------------------------------------------------- */
+
+/**
+ * data: { quoteToken, idempotencyKey, orderType, tableNumber,
+ *         useWallet, paymentMethod, customerNote }
+ *
+ * 金额完全来自 Quote；前端送来的 subtotal / total / wallet 一律忽略。
+ */
+function placeOrder(data, token) {
+  var ctx = requireCustomer(token);
+  if (ctx.error) return ctx.error;
+  var customer = ctx.customer;
+
+  /* §44 幂等：同一个 key 已经下过单就直接回那一张 */
+  var idemKey = String((data && data.idempotencyKey) || '').trim();
+  if (!idemKey) {
+    return err('INVALID_INPUT', 'Missing idempotency key. / 缺少防重复下单的识别码。');
+  }
+  var existing = dbFind('appOrders', function (o) {
+    return o.idempotencyKey === idemKey && o.customerId === customer.customerId;
+  });
+  if (existing) {
+    return ok({
+      order: publicAppOrder(existing, orderItemsOf(existing.appOrderId)),
+      duplicate: true,
+      message: 'This order was already submitted. / 这张订单已经提交过了。'
+    });
+  }
+
+  /* §64 点单开关（Quote 之后可能已经被员工暂停） */
+  var win = orderingWindowState();
+  if (!win.enabled) return err('ORDERING_CLOSED');
+  if (win.paused) return err('ORDERING_PAUSED');
+  if (!win.open) return err('ORDERING_CLOSED');
+
+  /* §43 Quote 必须还在有效期内，而且属于这位会员 */
+  var found = loadQuote(data && data.quoteToken, customer.customerId);
+  if (!found.ok) return found.error;
+  var quote = found.quote;
+
+  /* Quote 里的 idempotencyKey 必须跟送来的一致，避免拿旧 Quote 配新 key 绕过 */
+  if (quote.idempotencyKey !== idemKey) {
+    return err('QUOTE_MISMATCH',
+      'This checkout link has changed. Please review your cart again. / 结帐资讯已变动，请重新确认。');
+  }
+
+  /* §66 下单前再验一次库存（Quote 之后可能卖完） */
+  for (var i = 0; i < quote.lines.length; i++) {
+    var p = dbById('products', quote.lines[i].productId);
+    if (!p || String(p.status).toUpperCase() !== 'ACTIVE') {
+      return err('PRODUCT_NOT_FOUND', quote.lines[i].productNameSnapshot);
+    }
+    if (String(p.available).toUpperCase() === 'FALSE') {
+      return err('PRODUCT_UNAVAILABLE',
+        (p.nameEN || p.productId) + ' is sold out. / 已售完。');
+    }
+  }
+
+  /* §54 钱包只「要求」，这一步不扣钱 */
+  var walletRequested = Number(quote.walletAppliedSen) || 0;
+  if (walletRequested > (Number(customer.walletBalance) || 0)) {
+    /* Quote 之后余额被用掉了 → 请重新结帐，不要静默改金额 */
+    return err('QUOTE_MISMATCH',
+      'Wallet balance changed. Please checkout again. / 钱包余额已变动，请重新结帐。');
+  }
+
+  var paymentMethod = String((data && data.paymentMethod) || 'COUNTER').toUpperCase();
+  if (['COUNTER', 'CASH', 'DUITNOW', 'CARD', 'FOODCOURT', 'ONLINE'].indexOf(paymentMethod) === -1) {
+    paymentMethod = 'COUNTER';
+  }
+
+  var appOrder = {
+    appOrderId: dbNextId('APO', 'apporder', 6),
+    orderNumber: nextOrderNumber(),
+    customerId: customer.customerId,
+    orderType: quote.orderType,
+    tableNumber: quote.tableNumber || '',
+    itemCount: Number(quote.itemCount) || quote.lines.length,
+    subtotalSen: Number(quote.subtotalSen) || 0,
+    walletRequestedSen: walletRequested,
+    walletUsedSen: 0,                 // §54 确认收款时才写
+    discountSen: Number(quote.discountSen) || 0,
+    finalAmountSen: Number(quote.finalAmountSen) || 0,
+    pointsEarned: 0,                  // §22 完成后才发
+    orderStatus: 'SUBMITTED',
+    paymentMethod: paymentMethod,
+    paymentStatus: 'UNPAID',
+    paymentReference: '',
+    quoteToken: quote.quoteToken,
+    idempotencyKey: idemKey,
+    customerNote: quote.customerNote || '',
+    channel: 'YETIPSY_APP',
+    ordersTxId: '',
+    handledBy: '',
+    createdAt: nowISO(),
+    confirmedAt: '',
+    readyAt: '',
+    completedAt: '',
+    cancelledAt: '',
+    cancelledBy: '',
+    cancelReason: '',
+    updatedAt: nowISO()
+  };
+  dbInsert('appOrders', appOrder);
+
+  /* §30 明细：名称与单价都在这一刻快照下来 */
+  quote.lines.forEach(function (line) {
+    dbInsert('orderItems', {
+      orderItemId: dbNextId('OIT', 'orderitem', 6),
+      appOrderId: appOrder.appOrderId,
+      productId: line.productId,
+      productNameSnapshot: line.productNameSnapshot,
+      unitPriceSen: Number(line.unitPriceSen) || 0,
+      quantity: Number(line.quantity) || 1,
+      optionsJSON: JSON.stringify(line.options || []),
+      optionsPriceSen: Number(line.optionsPriceSen) || 0,
+      lineTotalSen: Number(line.lineTotalSen) || 0,
+      customerNote: line.customerNote || '',
+      createdAt: nowISO()
+    });
+  });
+
+  consumeQuote(quote.quoteToken);      // 一张 Quote 只能用一次
+
+  audit(customer.customerId, 'CUSTOMER', 'PLACE_ORDER', 'APP_ORDER', appOrder.appOrderId,
+        '', appOrder.orderNumber + ' | ' + appOrder.finalAmountSen + ' | ' + appOrder.orderType +
+        (appOrder.tableNumber ? ' ' + appOrder.tableNumber : ''));
+
+  return ok({
+    order: publicAppOrder(appOrder, orderItemsOf(appOrder.appOrderId)),
+    duplicate: false
+  });
+}
+
+function orderItemsOf(appOrderId) {
+  return dbFilter('orderItems', function (it) {
+    return it.appOrderId === appOrderId;
+  }).map(publicOrderItem);
+}
+
+/* -------------------------------------------------------------
+   3. 查询（§60）
+   ------------------------------------------------------------- */
+
+/** getAppOrder —— 顾客看自己的订单（§17 订单追踪） */
+function getAppOrder(data, token) {
+  var ctx = requireCustomer(token);
+  if (ctx.error) return ctx.error;
+
+  var o = dbById('appOrders', String((data && data.appOrderId) || ''));
+  if (!o) return err('ORDER_NOT_FOUND');
+  /* 只能看自己的（§12 防伪造 CustomerID） */
+  if (o.customerId !== ctx.customer.customerId) return err('ORDER_NOT_FOUND');
+
+  return ok({ order: publicAppOrder(o, orderItemsOf(o.appOrderId)) });
+}
+
+/** getMyOrders —— 订单列表（§37 再点一次也要用） */
+function getMyOrders(data, token) {
+  var ctx = requireCustomer(token);
+  if (ctx.error) return ctx.error;
+
+  var limit = Math.min(50, Math.max(1, Math.round(Number((data && data.limit) || 20)) || 20));
+  var status = String((data && data.status) || '').trim().toUpperCase();
+
+  var list = dbFilter('appOrders', function (o) {
+    if (o.customerId !== ctx.customer.customerId) return false;
+    if (status && o.orderStatus !== status) return false;
+    return true;
+  }).slice().reverse().slice(0, limit);
+
+  return ok({
+    orders: list.map(function (o) {
+      var pub = publicAppOrder(o, orderItemsOf(o.appOrderId));
+      /* 列表不需要完整明细，给前几项就够画卡片 */
+      pub.items = pub.items.slice(0, 4);
+      return pub;
+    }),
+    count: list.length
+  });
+}
+
+/* -------------------------------------------------------------
+   4. 取消（§53）
+   ------------------------------------------------------------- */
+
+/**
+ * requestOrderCancellation —— SUBMITTED 且员工还没 Accept 时，顾客可以要求取消。
+ * 已经 CONFIRMED / PREPARING 之后一律要员工处理（回 CANCEL_NOT_ALLOWED）。
+ */
+function requestOrderCancellation(data, token) {
+  var ctx = requireCustomer(token);
+  if (ctx.error) return ctx.error;
+
+  var o = dbById('appOrders', String((data && data.appOrderId) || ''));
+  if (!o) return err('ORDER_NOT_FOUND');
+  if (o.customerId !== ctx.customer.customerId) return err('ORDER_NOT_FOUND');
+
+  if (o.orderStatus === 'CANCELLED') {
+    return ok({ order: publicAppOrder(o, orderItemsOf(o.appOrderId)), alreadyCancelled: true });
+  }
+  if (o.orderStatus !== 'SUBMITTED') {
+    return err('CANCEL_NOT_ALLOWED',
+      'This order is already being prepared. Please ask our staff. / ' +
+      '这张订单已开始制作，请联系店员。');
+  }
+  if (o.orderStatus === 'COMPLETED') return err('ORDER_ALREADY_FINAL');
+
+  o.orderStatus = 'CANCELLED';
+  o.cancelledAt = nowISO();
+  o.cancelledBy = ctx.customer.customerId;
+  o.cancelReason = String((data && data.reason) || 'Cancelled by customer').slice(0, 200);
+  o.updatedAt = nowISO();
+  /* §54 这一步没扣过钱包，所以不需要 reversal；walletUsedSen 保持 0 */
+
+  audit(ctx.customer.customerId, 'CUSTOMER', 'REQUEST_ORDER_CANCEL', 'APP_ORDER',
+        o.appOrderId, 'SUBMITTED', 'CANCELLED | ' + o.cancelReason);
+
+  return ok({ order: publicAppOrder(o, orderItemsOf(o.appOrderId)) });
+}
+
+/* -------------------------------------------------------------
+   5. 再点一次（§37）
+   ------------------------------------------------------------- */
+
+/**
+ * reorder —— 把旧订单里「仍然有货」的商品整理成购物车，
+ * 由前端放进 CART。价格用现在的价格（不是旧价格），因为要重新报价。
+ */
+function reorder(data, token) {
+  var ctx = requireCustomer(token);
+  if (ctx.error) return ctx.error;
+
+  var o = dbById('appOrders', String((data && data.appOrderId) || ''));
+  if (!o) return err('ORDER_NOT_FOUND');
+  if (o.customerId !== ctx.customer.customerId) return err('ORDER_NOT_FOUND');
+
+  var today = todayKeyOf();
+  var available = [];
+  var unavailable = [];
+
+  orderItemsOf(o.appOrderId).forEach(function (it) {
+    var p = dbById('products', it.productId);
+    if (!p || String(p.status).toUpperCase() !== 'ACTIVE' ||
+        String(p.available).toUpperCase() === 'FALSE') {
+      unavailable.push({ productId: it.productId, name: it.name });
+      return;
+    }
+    /* 规格也要还在，否则顾客会拿到选不到的选项 */
+    var optionIds = (it.options || []).map(function (x) { return x.optionId; }).filter(function (id) {
+      var opt = dbById('productOptions', String(id));
+      return opt && opt.productId === p.productId && String(opt.status).toUpperCase() === 'ACTIVE';
+    });
+    var price = effectivePriceSen(p, today);
+    available.push({
+      productId: p.productId,
+      nameEN: p.nameEN,
+      nameZH: p.nameZH,
+      unitPrice: price.priceSen,
+      quantity: Number(it.quantity) || 1,
+      options: optionIds,
+      note: it.note || ''
+    });
+  });
+
+  return ok({
+    appOrderId: o.appOrderId,
+    items: available,
+    unavailable: unavailable,
+    /* 价格可能已经变过，前端要重新走一次 Checkout Quote */
+    priceChanged: available.some(function (it, i) {
+      var old = orderItemsOf(o.appOrderId)[i];
+      return old && Number(old.unitPrice) !== Number(it.unitPrice);
+    })
+  });
+}
+```
+
+---
+
+## 14. Claims.gs
 
 > Apps Script 里的档案名称：**`Claims`**（不要打 .gs）
 > QR / 4 位 Code 认领（只存 token 的 hash） · 395 行 · SHA-256 `86d5ad15a7718205`
@@ -3956,7 +4678,7 @@ function claimReward(data, token) {
 
 ---
 
-## 13. Promotions.gs
+## 15. Promotions.gs
 
 > Apps Script 里的档案名称：**`Promotions`**（不要打 .gs）
 > 优惠规则 · 154 行 · SHA-256 `097df3e93b5828af`
@@ -4120,7 +4842,7 @@ function reportPromotions() {
 
 ---
 
-## 14. Admin.gs
+## 16. Admin.gs
 
 > Apps Script 里的档案名称：**`Admin`**（不要打 .gs）
 > 员工端：Dashboard、会员查询、手动调整、重设会员密码、设置 · 209 行 · SHA-256 `668612dea354d975`
@@ -4339,7 +5061,7 @@ function resetCustomerPassword(data, token) {
 
 ---
 
-## 15. Auth.gs
+## 17. Auth.gs
 
 > Apps Script 里的档案名称：**`Auth`**（不要打 .gs）
 > ping / getPublicSettings / staffLogin / staffLogout · 89 行 · SHA-256 `02c0d70a4595e296`
@@ -4438,10 +5160,10 @@ function getStaffSession(data, token) {
 
 ---
 
-## 16. Code.gs
+## 18. Code.gs
 
 > Apps Script 里的档案名称：**`Code`**（不要打 .gs）
-> ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 · 210 行 · SHA-256 `b431b9268c9f4a0c`
+> ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 · 219 行 · SHA-256 `43c9d87632684876`
 
 ```javascript
 /* =============================================================
@@ -4545,7 +5267,16 @@ function getHandlers() {
     updateProduct: updateProduct,
     archiveProduct: archiveProduct,
     createProductOption: createProductOption,
-    updateProductOption: updateProductOption
+    updateProductOption: updateProductOption,
+
+    /* ===== 2.0 点单：结帐与订单（Phase 5 / 6）===== */
+    createCheckoutQuote: createCheckoutQuote,   // §43 后端重算价格 + 5 分钟 Quote
+    getCheckoutQuote: getCheckoutQuote,
+    placeOrder: placeOrder,                     // §44 IdempotencyKey 防重复下单
+    getAppOrder: getAppOrder,                   // §17 订单追踪
+    getMyOrders: getMyOrders,
+    requestOrderCancellation: requestOrderCancellation,   // §53
+    reorder: reorder                            // §37
   };
 }
 

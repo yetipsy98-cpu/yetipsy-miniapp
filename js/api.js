@@ -227,6 +227,39 @@ var API = (function () {
     },
     getProductOptions: function (productId) {
       return call('getProductOptions', { productId: productId }, { sessionType: 'customer' });
+    },
+
+    /* ============ 2.0 点单：结帐（Phase 5，§43）============ */
+    /**
+     * 取得结帐报价。价格由后端重算，这里送过去的金额一律被忽略（§41）。
+     * @param {object} req { items:[{productId,quantity,options:[optionId],note}],
+     *                       orderType:'TABLE'|'COUNTER'|'TAKEAWAY', tableNumber,
+     *                       useWallet, customerNote }
+     */
+    createCheckoutQuote: function (req) {
+      return call('createCheckoutQuote', req || {}, { sessionType: 'customer' });
+    },
+    getCheckoutQuote: function (quoteToken) {
+      return call('getCheckoutQuote', { quoteToken: quoteToken }, { sessionType: 'customer' });
+    },
+
+    /* ============ 2.0 点单：订单（Phase 6，§44 §17）============ */
+    /** 下单必须带 Quote 给的 idempotencyKey，连按两次也只会有一张订单 */
+    placeOrder: function (req) {
+      return call('placeOrder', req || {}, { sessionType: 'customer' });
+    },
+    getAppOrder: function (appOrderId) {
+      return call('getAppOrder', { appOrderId: appOrderId }, { sessionType: 'customer' });
+    },
+    getMyOrders: function (filters) {
+      return call('getMyOrders', filters || {}, { sessionType: 'customer' });
+    },
+    requestOrderCancellation: function (appOrderId, reason) {
+      return call('requestOrderCancellation',
+        { appOrderId: appOrderId, reason: reason || '' }, { sessionType: 'customer' });
+    },
+    reorder: function (appOrderId) {
+      return call('reorder', { appOrderId: appOrderId }, { sessionType: 'customer' });
     }
   };
 

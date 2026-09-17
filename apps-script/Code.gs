@@ -99,7 +99,16 @@ function getHandlers() {
     updateProduct: updateProduct,
     archiveProduct: archiveProduct,
     createProductOption: createProductOption,
-    updateProductOption: updateProductOption
+    updateProductOption: updateProductOption,
+
+    /* ===== 2.0 点单：结帐与订单（Phase 5 / 6）===== */
+    createCheckoutQuote: createCheckoutQuote,   // §43 后端重算价格 + 5 分钟 Quote
+    getCheckoutQuote: getCheckoutQuote,
+    placeOrder: placeOrder,                     // §44 IdempotencyKey 防重复下单
+    getAppOrder: getAppOrder,                   // §17 订单追踪
+    getMyOrders: getMyOrders,
+    requestOrderCancellation: requestOrderCancellation,   // §53
+    reorder: reorder                            // §37
   };
 }
 

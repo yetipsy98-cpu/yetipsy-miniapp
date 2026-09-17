@@ -15,15 +15,32 @@
 | 1 | 审计现有 1.x（§70） | ✅ 完成 · `docs/AUDIT-1.x.md` |
 | 2 | 数据库升级 `upgradeToV2()`（§71） | ✅ 完成 · 5 张新表 + 12 个新设定，不动旧资料 · `test:upgrade` 142 项 |
 | 3 | Menu（§72） | ✅ 完成 · `Menu.gs` + `menu.html` `product.html` · `test:menu` 139 项 · `test:menuui` 88 项 |
-| 4 | Cart（§73） | 🟡 顾客端购物车完成（`cart.html` + `js/cart.js` LocalStorage）；结帐前的后端验价在 Phase 5 |
-| 5 | Checkout + Quote（§74） | ⬜ 未开始 |
-| 6 | 建立订单（§75） | ⬜ 未开始 |
+| 4 | Cart（§73） | ✅ 完成 · `cart.html` + `js/cart.js`（LocalStorage，价格最终由后端验证） |
+| 5 | Checkout + Quote（§74） | ✅ 完成 · `Checkout.gs` · Quote 5 分钟 · IdempotencyKey · `test:checkout` 155 项 |
+| 6 | 建立订单（§75） | ✅ 完成 · `AppOrders.gs` · `placeOrder` 幂等 · 订单追踪页 |
 | 7 | 员工订单看板（§76） | ⬜ 未开始 |
 | 8 | 会员整合（§77） | ⬜ 未开始 |
 | 9 | Wallet 接入 Checkout（§78） | ⬜ 未开始 |
 | 10 | Owner 菜单管理（§79） | 🟡 后端 7 个 action 已就位并通过权限测试；`admin/menu.html` 页面未做 |
 | 11 | Analytics（§80） | ⬜ 未开始 |
 | 12 | 安全审计（§81） | ⬜ 未开始 |
+
+### Phase 5+6 已验证的规则
+
+| 规则 | 怎么验的 |
+|---|---|
+| §84 MVP | Mojito×2 + Long Island = 小计 7200；钱包 RM8.68 全用（20% 上限 1440）；应付 6332；预估积分 63；订单号 `YT260917001`；桌号 A12；状态 SUBMITTED / UNPAID |
+| §41/§42 前端不能定价 | items 里塞 `price:1 / lineTotal:1`、外层塞 `subtotal:1 / total:1 / discount:99999` → 小计仍是 2200 |
+| §43 Quote | 用过即失效；假 token 被拒；**别人的 Quote 报 QUOTE_EXPIRED**；TTL 压到 0 秒后立刻过期 |
+| §44 幂等 | 同 key 连下两次 → `duplicate:true` 且 AppOrders 只有 1 列；没带 key 被拒；拿旧 Quote 配新 key 报 QUOTE_MISMATCH |
+| §54 钱包 | 下单后 `walletRequested=868` 但 `walletUsed=0`，钱包余额没变；取消后仍是 0（没扣过所以不需 reversal） |
+| §22 完成才发 | SUBMITTED 时 `pointsEarned=0`、会员 `currentPoints/totalVisits/totalSpend` 全部不变 |
+| §66 售罄 | 报价后员工标售罄 → 下单被 `PRODUCT_UNAVAILABLE` 挡下，且没有产生订单 |
+| §64/§65 开关 | 非营业时间 / `ORDERING_PAUSED` 都不能报价；**报价之后才被暂停 → 下单也被挡** |
+| §30 快照 | 下单后把 Mojito 改成 RM25、再下架 → 旧订单仍显示 RM22.00、总额 7200、名称读得到 |
+| §37 再点一次 | 2 项都能重新加入并保留规格；卖完的那项被排除并列进 `unavailable` |
+| §12 防伪造 | 别人的订单 `getAppOrder` / `cancel` / `reorder` 全部 ORDER_NOT_FOUND |
+| §57 积分基础 | 修掉一个真实错误：原本把「已扣钱包的 finalAmount」再传进 `pointsForAmount()` 造成扣两次（54 分），改成传毛额后正确得到 63 分 |
 
 ### Phase 3 已验证的规则（不是「看起来对」，是测试跑出来的）
 
