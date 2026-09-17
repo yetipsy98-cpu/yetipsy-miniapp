@@ -7,7 +7,7 @@
      · Wallet / Customer / Staff 任何敏感数据
    ============================================================= */
 
-var CACHE_NAME = 'yetipsy-v1.1.0';
+var CACHE_NAME = 'yetipsy-v1.6.1';   // 改版就 +1，让旧快取自动清掉（见 demo/smoke-ui.js 的版本对照）
 
 var SHELL = [
   './',
@@ -18,6 +18,18 @@ var SHELL = [
   './wallet.html',
   './activity.html',
   './profile.html',
+  './code.html',
+  './menu.html',
+  './product.html',
+  './cart.html',
+  './checkout.html',
+  './order.html',
+  './orders.html',
+  './admin/redeem.html',
+  './admin/orderboard.html',
+  './admin/menu.html',
+  './admin/analytics.html',
+  './admin/grant.html',
   './css/app.css',
   './css/admin.css',
   './js/config.js',
@@ -30,6 +42,20 @@ var SHELL = [
   './js/wallet.js',
   './js/activity.js',
   './js/profile.js',
+  './js/code.js',
+  './js/menu.js',
+  './js/product.js',
+  './js/cart.js',
+  './js/cart-page.js',
+  './js/admin-orderboard.js',
+  './js/admin-menu.js',
+  './js/admin-analytics.js',
+  './js/admin-grant.js',
+  './js/scanner.js',
+  './js/checkout.js',
+  './js/order.js',
+  './js/orders.js',
+  './js/admin-redeem.js',
   './js/admin.js',
   './js/admin-dashboard.js',
   './js/admin-claim.js',
@@ -39,6 +65,7 @@ var SHELL = [
   './js/admin-audit.js',
   './js/admin-staff.js',
   './js/vendor/qrcode.js',
+  './js/vendor/jsbarcode.min.js',
   './js/vendor/jsQR.js',
   './manifest.json',
   './assets/icons/icon-192.png',
@@ -99,7 +126,31 @@ self.addEventListener('fetch', function (event) {
     return;
   }
 
-  // 5) 静态资源 → Stale-while-revalidate
+  // 5) 程式码（.js / .css / .html）→ Network first
+  //    ★ 以前这里是 cache-first，结果改版后浏览器还在跑旧的 js/api.js，
+  //      新页面呼叫 API.customer.checkPhone 就变成「点了没反应」。
+  //      程式码一律先走网络，只有断线才用快取。
+  var isCode = /\.(js|css|html)(\?|$)/i.test(url.pathname) ||
+    url.pathname === '/' || url.pathname === '';
+
+  if (isCode) {
+    event.respondWith(
+      fetch(req).then(function (res) {
+        if (res && res.status === 200 && res.type === 'basic') {
+          var copy = res.clone();
+          caches.open(CACHE_NAME).then(function (cache) { cache.put(req, copy); });
+        }
+        return res;
+      }).catch(function () {
+        return caches.match(req).then(function (hit) {
+          return hit || caches.match('./index.html');
+        });
+      })
+    );
+    return;
+  }
+
+  // 6) 其他静态资源（图标 / manifest）→ Stale-while-revalidate
   event.respondWith(
     caches.match(req).then(function (hit) {
       var network = fetch(req).then(function (res) {

@@ -1,16 +1,44 @@
 {
   "name": "yetipsy-miniapp",
-  "version": "1.1.0",
-  "description": "YETIPSY MINI APP 1.1 — FOODCOURT EDITION. Membership / Points / Reward / Wallet on Google Sheets + Apps Script + GitHub Pages (RM0).",
+  "version": "1.6.1",
+  "description": "YETIPSY MINI APP 1.3 — FOODCOURT EDITION. Membership / Points / Reward / Wallet on Google Sheets + Google Apps Script + GitHub Pages (RM0). 前端在 GitHub Pages，后端程式码在 repo 的 apps-script/，资料在 Google Sheets。",
   "private": true,
   "scripts": {
     "demo": "node demo/server.js",
-    "test": "node demo/tests.js && node demo/test-apps-script.js",
+    "demo:reset": "node demo/server.js --reset",
+    "build:copypaste": "node demo/build-copypaste.js",
+    "test": "node demo/test-apps-script.js && node demo/tests.js && node demo/smoke-ui.js && node demo/e2e-ui.js && node demo/test-login-ui.js && node demo/test-copypaste.js && node demo/test-scan-ui.js && node demo/test-home-ui.js && node demo/test-upgrade.js && node demo/test-menu.js && node demo/test-menu-ui.js && node demo/test-checkout.js && node demo/test-orderboard.js && node demo/test-order-ui.js && node demo/test-security.js && node demo/test-analytics.js && node demo/test-mvp.js && node demo/test-admin-ui.js && node demo/test-grant.js",
     "test:api": "node demo/tests.js",
     "test:backend": "node demo/test-apps-script.js",
     "test:ui": "node demo/smoke-ui.js",
-    "test:e2e": "node demo/e2e-ui.js"
+    "test:e2e": "node demo/e2e-ui.js",
+    "deploy:backend": "cd apps-script && clasp push --force && clasp deploy",
+    "test:login": "node demo/test-login-ui.js",
+    "test:copypaste": "node demo/test-copypaste.js",
+    "test:scan": "node demo/test-scan-ui.js",
+    "test:home": "node demo/test-home-ui.js",
+    "test:upgrade": "node demo/test-upgrade.js",
+    "test:menu": "node demo/test-menu.js",
+    "test:menuui": "node demo/test-menu-ui.js",
+    "test:checkout": "node demo/test-checkout.js",
+    "test:orderboard": "node demo/test-orderboard.js",
+    "test:orderui": "node demo/test-order-ui.js",
+    "test:security": "node demo/test-security.js",
+    "test:analytics": "node demo/test-analytics.js",
+    "test:mvp": "node demo/test-mvp.js",
+    "test:admin-ui": "node demo/test-admin-ui.js",
+    "test:grant": "node demo/test-grant.js"
   },
-  "keywords": ["yetipsy", "loyalty", "membership", "pwa", "google-apps-script"],
-  "license": "MIT"
+  "keywords": [
+    "yetipsy",
+    "loyalty",
+    "membership",
+    "pwa",
+    "google-apps-script",
+    "google-sheets"
+  ],
+  "license": "MIT",
+  "devDependencies": {
+    "jsdom": "^30.0.1"
+  }
 }

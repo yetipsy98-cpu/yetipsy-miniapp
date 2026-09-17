@@ -9,6 +9,29 @@
 <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
 <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
 <link rel="stylesheet" href="css/app.css">
+<style>
+/* 登录流程专用（三步：号码 → 注册 / 密码） */
+.step-head { margin-bottom: 18px; }
+.step-title { font-size: 17px; font-weight: 650; letter-spacing: .4px; }
+.step-sub { font-size: 11px; letter-spacing: 1.6px; color: var(--muted-2); margin-top: 5px; }
+.step-phone {
+  display: inline-block; margin-top: 10px; padding: 5px 10px;
+  border: 1px solid var(--line); border-radius: 999px;
+  font-size: 12px; color: var(--gold); letter-spacing: .8px;
+}
+.link-back {
+  background: none; border: 0; padding: 0; color: var(--muted-2);
+  font-size: 11px; letter-spacing: 1.4px; text-decoration: underline; cursor: pointer;
+}
+.pw-hint { font-size: 11px; color: var(--muted-2); line-height: 1.7; margin-top: 8px; }
+.pw-hint b { color: var(--text); }
+.shake { animation: yt-shake .32s ease; }
+@keyframes yt-shake {
+  0%,100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+</style>
 </head>
 <body>
 
@@ -24,50 +47,144 @@
   <div id="demoBanner"></div>
 
   <div class="card">
-    <div class="field">
-      <div class="label">
-        <span>手机号码</span>
-        <span class="l-en">MOBILE NUMBER</span>
+
+    <!-- ============ STEP 1 · 手机号码 ============ -->
+    <div id="phoneStep">
+      <div class="step-head">
+        <div class="step-title">手机号码</div>
+        <div class="step-sub">MOBILE NUMBER</div>
       </div>
-      <div class="phone-row">
-        <select id="countryInput" class="phone-country" aria-label="Country code">
-          <option value="+60">🇲🇾 +60</option>
-          <option value="+65">🇸🇬 +65</option>
-        </select>
-        <input id="phoneInput" class="input big" type="tel" inputmode="numeric"
-               autocomplete="tel" placeholder="12 345 6789" maxlength="14">
+
+      <div class="field">
+        <div class="phone-row">
+          <select id="countryInput" class="phone-country" aria-label="Country code">
+            <option value="+60">🇲🇾 +60</option>
+            <option value="+65">🇸🇬 +65</option>
+          </select>
+          <input id="phoneInput" class="input big" type="tel" inputmode="numeric"
+                 autocomplete="tel" placeholder="12 345 6789" maxlength="14">
+        </div>
+        <div class="tiny muted-2 mt-8">
+          我们会先检查这个号码有没有注册过 · We’ll check if this number is registered
+        </div>
       </div>
-      <div class="tiny muted-2 mt-8">支持马来西亚与新加坡号码 · Malaysia & Singapore numbers</div>
+
+      <button id="continueBtn" class="btn btn-primary">
+        <span id="continueLabel">继续<span class="btn-sub-label">CONTINUE</span></span>
+      </button>
     </div>
 
-    <div class="field">
-      <div class="label">
-        <span>名字（可不填）</span>
-        <span class="l-en">NAME — OPTIONAL</span>
+    <!-- ============ STEP 2A · 没注册过 → 设密码注册 ============ -->
+    <div id="registerStep" hidden>
+      <div class="step-head">
+        <div class="step-title">这个号码还没注册</div>
+        <div class="step-sub">CREATE YOUR ACCOUNT</div>
+        <div class="step-phone" id="registerPhone"></div>
       </div>
-      <input id="nameInput" class="input" type="text" autocomplete="name" placeholder="Jason" maxlength="40">
+
+      <div class="field">
+        <div class="label"><span>名字（可不填）</span><span class="l-en">NAME — OPTIONAL</span></div>
+        <input id="nameInput" class="input" type="text" autocomplete="name" placeholder="Jason" maxlength="40">
+      </div>
+
+      <div class="field">
+        <div class="label"><span>设置密码</span><span class="l-en">SET PASSWORD</span></div>
+        <input id="newPwInput" class="input big" type="password" autocomplete="new-password"
+               placeholder="至少 8 位" maxlength="60">
+        <div class="pw-hint" id="pwRuleHint"></div>
+      </div>
+
+      <div class="field">
+        <div class="label"><span>确认密码</span><span class="l-en">CONFIRM PASSWORD</span></div>
+        <input id="newPw2Input" class="input big" type="password" autocomplete="new-password"
+               placeholder="再输入一次" maxlength="60">
+      </div>
+
+      <button id="registerBtn" class="btn btn-primary">
+        <span>注册并进入<span class="btn-sub-label">SIGN UP</span></span>
+      </button>
+      <div class="center mt-16">
+        <button class="link-back" id="backFromRegister" type="button">← 更换号码 CHANGE NUMBER</button>
+      </div>
     </div>
 
-    <div id="otpBox" class="field" hidden>
-      <div class="label"><span>WhatsApp 验证码</span><span class="l-en">WHATSAPP OTP</span></div>
-      <input id="otpInput" class="input big" type="tel" inputmode="numeric" autocomplete="one-time-code" placeholder="6 位验证码" maxlength="6">
-      <div class="tiny muted-2 mt-8" id="otpHint">验证码将发送到你的 WhatsApp</div>
+    <!-- ============ STEP 2B · 已注册 → 输入密码 ============ -->
+    <div id="passwordStep" hidden>
+      <div class="step-head">
+        <div class="step-title">欢迎回来 <span id="welcomeName"></span></div>
+        <div class="step-sub">ENTER YOUR PASSWORD</div>
+        <div class="step-phone" id="loginPhone"></div>
+      </div>
+
+      <div class="field">
+        <div class="label"><span>密码</span><span class="l-en">PASSWORD</span></div>
+        <input id="pwInput" class="input big" type="password" autocomplete="current-password"
+               placeholder="••••••••" maxlength="60">
+        <div class="pw-hint">忘记密码？请告诉店员，由 Manager 帮你重设。<br>
+          <span class="muted-2">Forgot it? Ask our staff to reset it for you.</span></div>
+      </div>
+
+      <button id="loginBtn" class="btn btn-primary">
+        <span>登录<span class="btn-sub-label">SIGN IN</span></span>
+      </button>
+      <div class="center mt-16">
+        <button class="link-back" id="backFromLogin" type="button">← 更换号码 CHANGE NUMBER</button>
+      </div>
     </div>
-    <button id="continueBtn" class="btn btn-primary">
-      <span id="continueLabel">继续<span class="btn-sub-label">CONTINUE</span></span>
-    </button>
-    <button id="resendBtn" class="btn btn-ghost mt-8" type="button" hidden>重新发送验证码 · RESEND OTP</button>
+
+    <!-- ============ STEP 2C · 旧会员第一次设密码 ============ -->
+    <div id="setupStep" hidden>
+      <div class="step-head">
+        <div class="step-title">第一次使用密码登录</div>
+        <div class="step-sub">SET YOUR PASSWORD</div>
+        <div class="step-phone" id="setupPhone"></div>
+      </div>
+
+      <div class="field">
+        <div class="label"><span>名字（可不填）</span><span class="l-en">NAME — OPTIONAL</span></div>
+        <input id="setupNameInput" class="input" type="text" autocomplete="name" placeholder="Jason" maxlength="40">
+      </div>
+
+      <div class="pw-hint" style="margin-bottom:16px">
+        我们找到你的会员资料了。为了安全，请先设定一组密码，之后用
+        「手机号码 + 密码」登录。<br>
+        <span class="muted-2">We found your membership. Please set a password to continue.</span>
+      </div>
+
+      <div class="field">
+        <div class="label"><span>设置密码</span><span class="l-en">SET PASSWORD</span></div>
+        <input id="setupPwInput" class="input big" type="password" autocomplete="new-password"
+               placeholder="至少 8 位" maxlength="60">
+        <div class="pw-hint" id="setupRuleHint"></div>
+      </div>
+
+      <div class="field">
+        <div class="label"><span>确认密码</span><span class="l-en">CONFIRM PASSWORD</span></div>
+        <input id="setupPw2Input" class="input big" type="password" autocomplete="new-password"
+               placeholder="再输入一次" maxlength="60">
+      </div>
+
+      <button id="setupBtn" class="btn btn-primary">
+        <span>设定密码并进入<span class="btn-sub-label">SET &amp; CONTINUE</span></span>
+      </button>
+      <div class="center mt-16">
+        <button class="link-back" id="backFromSetup" type="button">← 更换号码 CHANGE NUMBER</button>
+      </div>
+    </div>
+
   </div>
 
   <div class="privacy">
     继续即表示你同意 Yetipsy 使用你的手机号码与消费记录，用于：会员身份识别、积分累计、
     奖励发放、消费记录与优惠通知。我们不会为了会员系统收集不必要的个人资料。
+    密码以加密方式（Salted SHA-256）储存，任何人都看不到明文。
     <br><br>
     <span class="muted-2">By continuing you agree that Yetipsy stores your phone number and
-    purchase history for membership, points, rewards, transaction records and promotions only.</span>
+    purchase history for membership, points, rewards, transaction records and promotions only.
+    Your password is stored as a salted hash — never in plain text.</span>
   </div>
 
-  <div class="footnote">YETIPSY MINI APP 1.1 · FOODCOURT EDITION</div>
+  <div class="footnote">YETIPSY MINI APP 1.6 · ORDERING EDITION</div>
 </div>
 
 <script src="js/config.js"></script>
@@ -77,114 +194,283 @@
 <script>
 (function () {
 
-  var phoneInput = document.getElementById('phoneInput');
-  var nameInput  = document.getElementById('nameInput');
-  var countryInput = document.getElementById('countryInput');
-  var otpBox = document.getElementById('otpBox');
-  var otpInput = document.getElementById('otpInput');
-  var resendBtn = document.getElementById('resendBtn');
-  var btn        = document.getElementById('continueBtn');
-  var otpRequested = false;
+  var STEPS = ['phoneStep', 'registerStep', 'passwordStep', 'setupStep'];
+  var phoneInput    = document.getElementById('phoneInput');
+  var countryInput  = document.getElementById('countryInput');
+  var passwordMin   = YETIPSY_CONFIG.PASSWORD_MIN_LENGTH || 8;
 
-  if (YETIPSY_CONFIG.IS_DEMO()) {
+  var current = { phone: '', name: '', exists: false, needsSetup: false };
+
+  /* ---------------- 环境提示 ---------------- */
+
+  if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
     document.getElementById('demoBanner').innerHTML =
-      '<div class="demo-banner">DEMO MODE · 演示模式 · 任意手机号码即可登录<br>' +
+      '<div class="demo-banner" style="border-color:#E2696B;color:#E2696B">' +
+      'BACKEND NOT CONFIGURED · 未配置后端<br>' +
+      '<span class="tiny">请在 js/config.js 填入 API_URL（Google Apps Script Web App URL）。</span></div>';
+  } else if (YETIPSY_CONFIG.IS_DEMO()) {
+    document.getElementById('demoBanner').innerHTML =
+      '<div class="demo-banner">DEMO MODE · 演示模式 · 资料只存在这台手机<br>' +
       '<a href="#" id="resetDemoBtn" style="color:inherit;text-decoration:underline">重置演示资料 / RESET DEMO DATA</a></div>';
-    bindReset();
+    var resetBtn = document.getElementById('resetDemoBtn');
+    if (resetBtn) {
+      resetBtn.addEventListener('click', function (e) {
+        e.preventDefault();
+        try {
+          localStorage.removeItem('yetipsy_mock_db_v1');
+          localStorage.removeItem('yt_customer_token');
+          localStorage.removeItem('yt_customer_profile');
+          localStorage.removeItem('yt_staff_token');
+          localStorage.removeItem('yt_staff_profile');
+        } catch (err) {}
+        UI.toast('演示资料已重置 / Demo data reset', 'success');
+        setTimeout(function () { location.reload(); }, 700);
+      });
+    }
   }
 
-
-  /* 重置演示资料（只影响这台浏览器） */
-  function bindReset() {
-    var btn = document.getElementById('resetDemoBtn');
-    if (!btn) return;
-    btn.addEventListener('click', function (e) {
-      e.preventDefault();
-      try {
-        localStorage.removeItem('yetipsy_mock_db_v1');
-        localStorage.removeItem('yt_customer_token');
-        localStorage.removeItem('yt_customer_profile');
-        localStorage.removeItem('yt_staff_token');
-        localStorage.removeItem('yt_staff_profile');
-      } catch (err) {}
-      UI.toast('演示资料已重置 / Demo data reset', 'success');
-      setTimeout(function () { location.reload(); }, 700);
-    });
-  }
-
-  // 已登录直接回首页
+  /* 已登录直接回首页 */
   if (AUTH.isCustomerLoggedIn()) {
     UI.go(UI.getParam('redirect') || 'index.html');
     return;
   }
 
-  phoneInput.focus();
-
-  // 自动格式化显示：12 345 6789
-  phoneInput.addEventListener('input', function () {
-    var d = this.value.replace(/[^0-9]/g, '').slice(0, 11);
-    this.value = d;
+  /* 密码长度规则以后端为准 */
+  API.system.getPublicSettings().then(function (res) {
+    if (res.success && res.data && res.data.passwordMinLength) {
+      passwordMin = Number(res.data.passwordMinLength) || passwordMin;
+      renderRuleHints();
+    }
   });
 
-  function setLabel(zh, en) {
-    document.getElementById('continueLabel').innerHTML = zh + '<span class="btn-sub-label">' + en + '</span>';
+  function renderRuleHints() {
+    var text = '至少 <b>' + passwordMin + '</b> 位 · 建议使用字母 + 数字<br>' +
+      '<span class="muted-2">At least ' + passwordMin + ' characters.</span>';
+    var a = document.getElementById('pwRuleHint');
+    var b = document.getElementById('setupRuleHint');
+    if (a) a.innerHTML = text;
+    if (b) b.innerHTML = text;
+  }
+  renderRuleHints();
+
+  phoneInput.focus();
+
+  /* ---------------- 步骤切换 ---------------- */
+
+  function show(id) {
+    STEPS.forEach(function (s) { document.getElementById(s).hidden = (s !== id); });
+    var focusMap = {
+      phoneStep: phoneInput,
+      registerStep: document.getElementById('nameInput'),
+      passwordStep: document.getElementById('pwInput'),
+      setupStep: document.getElementById('setupPwInput')
+    };
+    if (focusMap[id]) setTimeout(function () { focusMap[id].focus(); }, 60);
+  }
+
+  function backToPhone() {
+    show('phoneStep');
+    phoneInput.focus();
+  }
+
+  /* ---------------- 工具 ---------------- */
+
+  function readPhone() {
+    return UI.normalizePhone(phoneInput.value, countryInput.value);
   }
 
   function validPhone() {
-    return UI.normalizePhone(phoneInput.value, countryInput.value).slice(countryInput.value.length).length >= 8;
+    return UI.isValidPhone(phoneInput.value, countryInput.value);
   }
 
-  function sendOtp(phone) {
-    UI.setLoading(btn, true, '发送中 SENDING');
-    return API.customer.requestOtp(phone).then(function (res) {
-      UI.setLoading(btn, false);
-      if (!res.success) { UI.toast(res.error.message, 'error'); return false; }
-      otpRequested = true;
-      otpBox.hidden = false;
-      resendBtn.hidden = false;
-      setLabel('验证并登录', 'VERIFY & LOGIN');
-      document.getElementById('otpHint').textContent = '验证码已发送到 ' + phone + ' 的 WhatsApp · 10 分钟内有效';
-      otpInput.focus();
-      UI.toast('验证码已发送 / OTP sent', 'success');
-      return true;
-    });
+  function shake(el) {
+    el.classList.remove('shake');
+    void el.offsetWidth;
+    el.classList.add('shake');
   }
 
-  function submit() {
-    var phone = UI.normalizePhone(phoneInput.value, countryInput.value);
-    var name  = nameInput.value.trim();
+  function passwordOk(a, b, inputEl) {
+    if (a.length < passwordMin) {
+      UI.toast('密码至少 ' + passwordMin + ' 位 / Min ' + passwordMin + ' characters', 'error');
+      shake(inputEl); inputEl.focus(); return false;
+    }
+    if (a !== b) {
+      UI.toast('两次输入的密码不一样 / Passwords do not match', 'error');
+      shake(inputEl); inputEl.focus(); return false;
+    }
+    return true;
+  }
+
+  function done(res) {
+    if (!res.success) return false;
+    AUTH.setCustomerSession(res.data.token, res.data.customer);
+    UI.go(UI.getParam('redirect') || 'index.html');
+    return true;
+  }
+
+  function failWith(res, inputEl) {
+    UI.setLoading(document.querySelector('.btn-primary:not([hidden])'), false);
+    UI.toast(res.error.message || res.error.code, 'error');
+    if (inputEl) { shake(inputEl); inputEl.focus(); }
+  }
+
+  /* ---------------- STEP 1 → 查号码 ---------------- */
+
+  function checkPhone() {
     if (!validPhone()) {
       UI.toast('请输入有效的手机号码 / Please enter a valid mobile number', 'error');
-      phoneInput.focus(); return;
+      shake(phoneInput); phoneInput.focus(); return;
     }
-    if (YETIPSY_CONFIG.OTP_ENABLED && !otpRequested) { sendOtp(phone); return; }
-    if (YETIPSY_CONFIG.OTP_ENABLED && !/^\d{6}$/.test(otpInput.value.trim())) {
-      UI.toast('请输入 6 位验证码 / Enter the 6-digit OTP', 'error'); otpInput.focus(); return;
-    }
-    UI.setLoading(btn, true, YETIPSY_CONFIG.OTP_ENABLED ? '验证中 VERIFYING' : '连接中 CONNECTING');
-    var request = YETIPSY_CONFIG.OTP_ENABLED
-      ? API.customer.verifyOtp(phone, otpInput.value.trim()).then(function (verify) {
-          if (!verify.success) return verify;
-          return API.customer.login(phone, name, verify.data && verify.data.verificationToken);
-        })
-      : API.customer.login(phone, name);
-    request.then(function (res) {
+
+    var btn = document.getElementById('continueBtn');
+    UI.setLoading(btn, true, '检查中 CHECKING');
+
+    API.customer.checkPhone(readPhone()).then(function (res) {
       UI.setLoading(btn, false);
       if (!res.success) { UI.toast(res.error.message, 'error'); return; }
-      AUTH.setCustomerSession(res.data.token, res.data.customer);
-      UI.go(UI.getParam('redirect') || 'index.html');
+
+      current.phone = res.data.phone;
+      current.exists = res.data.exists;
+      current.needsSetup = res.data.needsPasswordSetup;
+      if (res.data.passwordMinLength) {
+        passwordMin = Number(res.data.passwordMinLength) || passwordMin;
+        renderRuleHints();
+      }
+
+      if (!current.exists) {
+        /* 没重复 → 跳注册 */
+        document.getElementById('registerPhone').textContent = current.phone;
+        show('registerStep');
+        UI.toast('这个号码还没注册，来建立会员吧 / Let’s create your account', 'info');
+        return;
+      }
+
+      /* 重复 → 填密码 */
+      if (current.needsSetup) {
+        document.getElementById('setupPhone').textContent = current.phone;
+        show('setupStep');
+        return;
+      }
+      document.getElementById('loginPhone').textContent = current.phone;
+      document.getElementById('welcomeName').textContent = res.data.displayName || '';
+      show('passwordStep');
     });
   }
 
-  btn.addEventListener('click', submit);
-  resendBtn.addEventListener('click', function () {
-    if (validPhone()) sendOtp(UI.normalizePhone(phoneInput.value, countryInput.value));
-  });
-  nameInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') submit();
+  /* ---------------- STEP 2A · 注册 ---------------- */
+
+  function doRegister() {
+    var a = document.getElementById('newPwInput').value;
+    var name = document.getElementById('nameInput').value.trim();
+    var b = document.getElementById('newPw2Input').value;
+    if (!passwordOk(a, b, document.getElementById('newPwInput'))) return;
+
+    var btn = document.getElementById('registerBtn');
+    UI.setLoading(btn, true, '注册中 SIGNING UP');
+
+    API.customer.register(current.phone, name, a).then(function (res) {
+      UI.setLoading(btn, false);
+      if (done(res)) return;
+      /* 号码刚好在这期间被别人注册了 → 改成请他登录 */
+      if (res.error.code === 'PHONE_ALREADY_REGISTERED') {
+        UI.toast('这个号码已经注册了，请输入密码 / Already registered, please sign in', 'info');
+        document.getElementById('loginPhone').textContent = current.phone;
+        show('passwordStep');
+        return;
+      }
+      UI.toast(res.error.message, 'error');
+    });
+  }
+
+  /* ---------------- STEP 2B · 登录 ---------------- */
+
+  function doLogin() {
+    var pw = document.getElementById('pwInput').value;
+    if (!pw) {
+      UI.toast('请输入密码 / Please enter your password', 'error');
+      document.getElementById('pwInput').focus(); return;
+    }
+
+    var btn = document.getElementById('loginBtn');
+    UI.setLoading(btn, true, '登录中 SIGNING IN');
+
+    API.customer.login(current.phone, pw).then(function (res) {
+      UI.setLoading(btn, false);
+      if (done(res)) return;
+
+      if (res.error.code === 'PASSWORD_SETUP_REQUIRED') {
+        document.getElementById('setupPhone').textContent = current.phone;
+        show('setupStep');
+        return;
+      }
+      if (res.error.code === 'CUSTOMER_NOT_FOUND') {
+        document.getElementById('registerPhone').textContent = current.phone;
+        show('registerStep');
+        return;
+      }
+      document.getElementById('pwInput').value = '';
+      failWith(res, document.getElementById('pwInput'));
+    });
+  }
+
+  /* ---------------- STEP 2C · 第一次设密码 ---------------- */
+
+  function doSetup() {
+    var a = document.getElementById('setupPwInput').value;
+    var b = document.getElementById('setupPw2Input').value;
+    if (!passwordOk(a, b, document.getElementById('setupPwInput'))) return;
+
+    var btn = document.getElementById('setupBtn');
+    UI.setLoading(btn, true, '设定中 SAVING');
+
+    API.customer.setFirstPassword(current.phone, a,
+      document.getElementById('setupNameInput').value.trim()).then(function (res) {
+      UI.setLoading(btn, false);
+      if (done(res)) return;
+      if (res.error.code === 'PASSWORD_CHANGE_STAFF') {
+        UI.toast('请联系店员重设密码 / Please ask our staff to reset it', 'error');
+        return;
+      }
+      failWith(res, document.getElementById('setupPwInput'));
+    });
+  }
+
+  /* ---------------- 事件 ---------------- */
+
+  document.getElementById('continueBtn').addEventListener('click', checkPhone);
+  document.getElementById('registerBtn').addEventListener('click', doRegister);
+  document.getElementById('loginBtn').addEventListener('click', doLogin);
+  document.getElementById('setupBtn').addEventListener('click', doSetup);
+
+  document.getElementById('backFromRegister').addEventListener('click', backToPhone);
+  document.getElementById('backFromLogin').addEventListener('click', backToPhone);
+  document.getElementById('backFromSetup').addEventListener('click', backToPhone);
+
+  phoneInput.addEventListener('input', function () {
+    this.value = this.value.replace(/[^0-9]/g, '').slice(0, 11);
   });
   phoneInput.addEventListener('keydown', function (e) {
-    if (e.key === 'Enter') nameInput.focus();
+    if (e.key === 'Enter') checkPhone();
+  });
+  document.getElementById('nameInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') doRegister();
+  });
+  document.getElementById('setupNameInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') doSetup();
+  });
+
+  ['newPwInput', 'newPw2Input'].forEach(function (id) {
+    document.getElementById(id).addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') doRegister();
+    });
+  });
+  document.getElementById('pwInput').addEventListener('keydown', function (e) {
+    if (e.key === 'Enter') doLogin();
+  });
+  ['setupPwInput', 'setupPw2Input'].forEach(function (id) {
+    document.getElementById(id).addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') doSetup();
+    });
   });
 
 })();
@@ -198,5 +484,5 @@ if ('serviceWorker' in navigator) {
   });
 }
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3bec9dc6b9daedc',t:'MTc4OTU1MDM1NQ=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>

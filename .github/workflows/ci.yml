@@ -1,0 +1,51 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    name: 测试（前端契约 + Apps Script 后端 + 端到端）
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: 安装测试用依赖（jsdom 给登录页 DOM 测试用）
+        run: npm install --no-audit --no-fund
+
+      - name: 后端测试（直接执行 apps-script/*.gs · 86 项）
+        run: node demo/test-apps-script.js
+
+      - name: API 测试（25 组 / 196 项）
+        run: node demo/tests.js
+
+      - name: 前端健全性检查（页面 ↔ API ↔ 后端契约 · 330 项）
+        run: node demo/smoke-ui.js
+
+      - name: 端到端 HTTP 测试（demo server + apps-script · 52 项）
+        run: node demo/e2e-ui.js
+
+      - name: 登录页 DOM 测试（jsdom 真的开 login.html 点按钮 · 27 项）
+        run: node demo/test-login-ui.js
+
+      - name: 复制贴上文件校验（APPS-SCRIPT-COPY-PASTE.md 跟 .gs 同步且可执行 · 60 项）
+        run: node demo/test-copypaste.js
+
+      - name: 条码 / 扫码抵扣 DOM 测试（jsdom 真的开页面 · 56 项）
+        run: node demo/test-scan-ui.js
+
+      - name: 首页活动区块 DOM 测试（失败不能伪装成「暂无活动」· 12 项）
+        run: node demo/test-home-ui.js
+
+      - name: 确认没有把 demo 资料档提交进来
+        run: |
+          if [ -f demo/demo-data.json ]; then
+            echo "demo/demo-data.json 不应该被提交（里面有测试资料）"
+            exit 1
+          fi

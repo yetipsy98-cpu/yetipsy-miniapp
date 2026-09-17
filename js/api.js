@@ -16,7 +16,14 @@ var API = (function () {
 
   var NETWORK_ERROR = {
     code: 'NETWORK_ERROR',
-    message: 'Network error. Please try again. / 网络错误，请重试。'
+    message: 'Cannot reach the server. Please check your connection. / 无法连接后端，请检查网络或 API URL。'
+  };
+
+  /* 线上版没有填 API_URL：不允许静默使用本机演示资料 */
+  var NOT_CONFIGURED = {
+    code: 'BACKEND_NOT_CONFIGURED',
+    message: 'Backend API URL is not configured. Set API_URL in js/config.js. / ' +
+             '尚未配置后端 API 地址，请在 js/config.js 填入 API_URL。'
   };
 
   function log() {
@@ -34,6 +41,12 @@ var API = (function () {
   function call(action, data, options) {
     options = options || {};
     var sessionType = options.sessionType || 'auto';
+
+    /* 线上版（REQUIRE_BACKEND）却没有 API_URL → 立刻报错，不假装成功 */
+    if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
+      log('[API] backend not configured');
+      return Promise.resolve({ success: false, data: null, error: NOT_CONFIGURED });
+    }
 
     var payload = {
       action: action,
@@ -116,14 +129,33 @@ var API = (function () {
      CUSTOMER API
      ======================================================== */
   var customer = {
-    login: function (phone, name, otp) {
-      return call('customerLogin', { phone: phone, name: name, verificationToken: otp || '' }, { sessionType: null });
+    /* ① 先查号码：exists = false → 跳注册；exists = true → 问密码 */
+    checkPhone: function (phone) {
+      return call('checkCustomerPhone', { phone: phone }, { sessionType: null });
     },
-    requestOtp: function (phone) {
-      return call('requestCustomerOtp', { phone: phone, channel: YETIPSY_CONFIG.OTP_CHANNEL || 'WHATSAPP' }, { sessionType: null });
+    /* ② 注册（号码还没被用过） */
+    register: function (phone, name, password) {
+      return call('customerRegister',
+        { phone: phone, name: name || '', password: password }, { sessionType: null });
     },
-    verifyOtp: function (phone, code) {
-      return call('verifyCustomerOtp', { phone: phone, code: code }, { sessionType: null });
+    /* ③ 登录（号码已存在 → 必须密码正确） */
+    login: function (phone, password) {
+      return call('customerLogin', { phone: phone, password: password }, { sessionType: null });
+    },
+    /* ④ 旧会员（还没有密码）第一次设密码 */
+    setFirstPassword: function (phone, password, name) {
+      return call('customerSetFirstPassword',
+        { phone: phone, password: password, name: name || '' }, { sessionType: null });
+    },
+    /* ⑤ 会员自己改密码 */
+    /** 会员条码内容（员工扫码验证身分用；N 秒自动换一条） */
+    getMemberCode: function () {
+      return call('getMemberCode', {}, { sessionType: 'customer' });
+    },
+
+    changePassword: function (currentPassword, newPassword) {
+      return call('changeCustomerPassword',
+        { currentPassword: currentPassword, newPassword: newPassword }, { sessionType: 'customer' });
     },
     logout: function () {
       return call('customerLogout', {}, { sessionType: 'customer' });
@@ -162,10 +194,25 @@ var API = (function () {
       return call('getClaimByCode', { code: code }, { sessionType: 'auto' });
     },
 
+    /* 认领一张 Foodcourt 小票。tokenOrCode 可以是三种形式：
+         · 32 位 token（顾客扫店员 QR 取得）
+         · 4 位短码（顾客手输，字母表刻意去掉易看错的 I / O / 0 / 1）
+         · { token: ..., code: ... } 物件（js/claim.js 用这个）
+
+       ★ 字串不能一律当 token 送：后端 findClaimByTokenOrCode 见到 token
+         非空就只查 token 哈希、直接返回，永远不会退回查短码 ——
+         把 4 位短码当 token 送会拿到 INVALID_CLAIM_TOKEN。
+         参数名叫 tokenOrCode，行为就得真的两种都收。 */
     claimOrder: function (tokenOrCode) {
-      var payload = (typeof tokenOrCode === 'string')
-        ? { token: tokenOrCode }
-        : (tokenOrCode || {});
+      var payload;
+      if (typeof tokenOrCode === 'string') {
+        var s = tokenOrCode.trim();
+        payload = /^[A-Z2-9]{4}$/.test(s.toUpperCase())
+          ? { code: s.toUpperCase() }
+          : { token: s };
+      } else {
+        payload = tokenOrCode || {};
+      }
       return call('claimOrder', payload, { sessionType: 'auto' });
     },
     getPendingReward: function (rewardId) {
@@ -173,6 +220,61 @@ var API = (function () {
     },
     claimReward: function (rewardId) {
       return call('claimReward', { rewardId: rewardId }, { sessionType: 'customer' });
+    },
+
+    /* ============ 2.0 点单：菜单（Phase 3）============ */
+    /**
+     * 一次拿 Categories + Products + Options（§82）。
+     * filter: { search, tag, categoryId }
+     */
+    getMenu: function (filter) {
+      return call('getMenu', filter || {}, { sessionType: 'customer' });
+    },
+    getCategories: function () {
+      return call('getCategories', {}, { sessionType: 'customer' });
+    },
+    getProducts: function (categoryId) {
+      return call('getProducts', { categoryId: categoryId || '' }, { sessionType: 'customer' });
+    },
+    /** Product Detail：商品 + 规格分组，一次就够 */
+    getProduct: function (productId) {
+      return call('getProduct', { productId: productId }, { sessionType: 'customer' });
+    },
+    getProductOptions: function (productId) {
+      return call('getProductOptions', { productId: productId }, { sessionType: 'customer' });
+    },
+
+    /* ============ 2.0 点单：结帐（Phase 5，§43）============ */
+    /**
+     * 取得结帐报价。价格由后端重算，这里送过去的金额一律被忽略（§41）。
+     * @param {object} req { items:[{productId,quantity,options:[optionId],note}],
+     *                       orderType:'TABLE'|'COUNTER'|'TAKEAWAY', tableNumber,
+     *                       useWallet, customerNote }
+     */
+    createCheckoutQuote: function (req) {
+      return call('createCheckoutQuote', req || {}, { sessionType: 'customer' });
+    },
+    getCheckoutQuote: function (quoteToken) {
+      return call('getCheckoutQuote', { quoteToken: quoteToken }, { sessionType: 'customer' });
+    },
+
+    /* ============ 2.0 点单：订单（Phase 6，§44 §17）============ */
+    /** 下单必须带 Quote 给的 idempotencyKey，连按两次也只会有一张订单 */
+    placeOrder: function (req) {
+      return call('placeOrder', req || {}, { sessionType: 'customer' });
+    },
+    getAppOrder: function (appOrderId) {
+      return call('getAppOrder', { appOrderId: appOrderId }, { sessionType: 'customer' });
+    },
+    getMyOrders: function (filters) {
+      return call('getMyOrders', filters || {}, { sessionType: 'customer' });
+    },
+    requestOrderCancellation: function (appOrderId, reason) {
+      return call('requestOrderCancellation',
+        { appOrderId: appOrderId, reason: reason || '' }, { sessionType: 'customer' });
+    },
+    reorder: function (appOrderId) {
+      return call('reorder', { appOrderId: appOrderId }, { sessionType: 'customer' });
     }
   };
 
@@ -218,20 +320,26 @@ var API = (function () {
     getCustomerHistory: function (customerId) {
       return call('getCustomerHistory', { customerId: customerId }, { sessionType: 'staff' });
     },
+    /** 扫顾客的会员条码 → 回传顾客资料 + verifyToken（抵扣时必须带回） */
+    scanMemberCode: function (payload) {
+      return call('scanMemberCode', { payload: payload }, { sessionType: 'staff' });
+    },
+
     calculateWalletRedemption: function (customerId, billSen) {
       return call('calculateWalletRedemption', {
         customerId: customerId,
         billAmount: billSen
       }, { sessionType: 'staff' });
     },
-    redeemWallet: function (customerId, billSen, walletSen, externalOrderId, source, note) {
+    redeemWallet: function (customerId, billSen, walletSen, externalOrderId, source, note, verifyToken) {
       return call('redeemWallet', {
         customerId: customerId,
         billAmount: billSen,
         walletAmount: walletSen,
         externalOrderId: externalOrderId || '',
         source: source || 'DIRECT',
-        note: note || ''
+        note: note || '',
+        verifyToken: verifyToken || ''
       }, { sessionType: 'staff' });
     },
     getOrders: function (limit, filters) {
@@ -246,6 +354,94 @@ var API = (function () {
     },
     cancelOrder: function (orderId, reason) {
       return call('cancelOrder', { orderId: orderId, reason: reason || '' }, { sessionType: 'staff' });
+    },
+
+    /* ===== 2.0 点单：库存状态（§61，Staff 唯一的菜单权限 §32）===== */
+    /** @param {boolean} available  false = SOLD OUT */
+    setProductAvailability: function (productId, available) {
+      return call('setProductAvailability',
+        { productId: productId, available: !!available }, { sessionType: 'staff' });
+    },
+    /** 上架 / 下架（状态类操作，任何员工都能做 §32） */
+    setProductStatus: function (productId, status) {
+      return call('setProductStatus',
+        { productId: productId, status: status }, { sessionType: 'staff' });
+    },
+
+    /* ============ 2.0 员工端主流程：扫会员码 → 输金额 → 自动进分 ============ */
+    /**
+     * @param {object} data { customerId, billAmount(sen), verifyToken,
+     *                        externalOrderId?, source?, note? }
+     * 后端按 POINTS_PER_RM 与 REWARD_TIERS 自动发积分与 Reward（§57 §58），
+     * 并按 §56 六小时内只算一次到店。
+     */
+    grantOrder: function (data) {
+      return call('grantOrder', data || {}, { sessionType: 'staff' });
+    },
+
+    /* ===== 2.0 点单：菜单管理（§62，MANAGER / OWNER 限定）===== */
+    createCategory: function (data) {
+      return call('createCategory', data || {}, { sessionType: 'staff' });
+    },
+    updateCategory: function (data) {
+      return call('updateCategory', data || {}, { sessionType: 'staff' });
+    },
+    createProduct: function (data) {
+      return call('createProduct', data || {}, { sessionType: 'staff' });
+    },
+    updateProduct: function (data) {
+      return call('updateProduct', data || {}, { sessionType: 'staff' });
+    },
+    archiveProduct: function (productId) {
+      return call('archiveProduct', { productId: productId }, { sessionType: 'staff' });
+    },
+    createProductOption: function (data) {
+      return call('createProductOption', data || {}, { sessionType: 'staff' });
+    },
+    updateProductOption: function (data) {
+      return call('updateProductOption', data || {}, { sessionType: 'staff' });
+    },
+
+    /* ============ 2.0 点单：员工订单看板（Phase 7，§19 §20 §61）============ */
+    getIncomingOrders: function () {
+      return call('getIncomingOrders', {}, { sessionType: 'staff' });
+    },
+    getActiveOrders: function () {
+      return call('getActiveOrders', {}, { sessionType: 'staff' });
+    },
+    acceptOrder: function (appOrderId) {
+      return call('acceptOrder', { appOrderId: appOrderId }, { sessionType: 'staff' });
+    },
+    startPreparing: function (appOrderId) {
+      return call('startPreparing', { appOrderId: appOrderId }, { sessionType: 'staff' });
+    },
+    markReady: function (appOrderId) {
+      return call('markReady', { appOrderId: appOrderId }, { sessionType: 'staff' });
+    },
+    /** §54 这一步才真的扣钱包 */
+    markPaymentPaid: function (appOrderId, paymentMethod, paymentReference) {
+      return call('markPaymentPaid', {
+        appOrderId: appOrderId,
+        paymentMethod: paymentMethod || 'COUNTER',
+        paymentReference: paymentReference || ''
+      }, { sessionType: 'staff' });
+    },
+    /** §55 幂等：连按两次只会发一次积分 */
+    completeOrder: function (appOrderId) {
+      return call('completeOrder', { appOrderId: appOrderId }, { sessionType: 'staff' });
+    },
+    cancelAppOrder: function (appOrderId, reason) {
+      return call('cancelAppOrder',
+        { appOrderId: appOrderId, reason: reason || '' }, { sessionType: 'staff' });
+    },
+    /** §65 暂停 / 恢复接单 */
+    setOrderingPaused: function (paused) {
+      return call('setOrderingPaused', { paused: !!paused }, { sessionType: 'staff' });
+    },
+    /* 2.0 菜单管理（§32）—— 只有 MANAGER / OWNER 能改。
+       用 getAdminMenu：回传全部状态（含已下架）的商品 */
+    getAdminMenu: function () {
+      return call('getAdminMenu', {}, { sessionType: 'staff' });
     }
   };
 
@@ -306,6 +502,23 @@ var API = (function () {
     },
     resetStaffPassword: function (staffId, password) {
       return call('resetStaffPassword', { staffId: staffId, password: password }, { sessionType: 'staff' });
+    },
+    /* ============ 2.0 业绩分析（Phase 11，§50 §51 §52 §62）============ */
+    getSalesAnalytics: function (days) {
+      return call('getSalesAnalytics', { days: days || 7 }, { sessionType: 'staff' });
+    },
+    getProductAnalytics: function (days, limit) {
+      return call('getProductAnalytics',
+        { days: days || 7, limit: limit || 10 }, { sessionType: 'staff' });
+    },
+    getMemberAnalytics: function (days) {
+      return call('getMemberAnalytics', { days: days || 30 }, { sessionType: 'staff' });
+    },
+
+    /* 会员忘记密码 / 号码被抢注 → Manager+ 在这里重设 */
+    resetCustomerPassword: function (customerId, password) {
+      return call('resetCustomerPassword',
+        { customerId: customerId, password: password }, { sessionType: 'staff' });
     }
   };
 

@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0D0D0D">
+<title>YETIPSY — Product</title>
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" href="assets/icons/icon-192.png">
+<link rel="apple-touch-icon" href="assets/icons/icon-192.png">
+<link rel="stylesheet" href="css/app.css">
+</head>
+<body>
+
+<div class="page page-with-cta">
+
+  <div class="row-between" style="padding: 6px 2px 12px;">
+    <a href="menu.html" style="color:var(--muted)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg>
+    </a>
+    <div class="brand-mark" style="font-size:17px;letter-spacing:5px;text-indent:5px;">YETIPSY</div>
+    <a href="cart.html" style="color:var(--muted)">
+      <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M6 7h12l-1.2 12.2a1.8 1.8 0 0 1-1.8 1.6H9a1.8 1.8 0 0 1-1.8-1.6Z"/><path d="M9 7V5.5A3 3 0 0 1 12 3a3 3 0 0 1 3 2.5V7"/></svg>
+    </a>
+  </div>
+
+  <div id="productBody"></div>
+
+</div>
+
+<div class="sticky-cta" id="stickyCta">
+  <button class="btn btn-primary" id="addToCartBtn" disabled><span>载入中…</span></button>
+</div>
+
+<script src="js/config.js"></script>
+<script src="js/api.js"></script>
+<script src="js/auth.js"></script>
+<script src="js/ui.js"></script>
+<script src="js/cart.js"></script>
+<script src="js/product.js"></script>
+<script>
+  PRODUCT.init();
+</script>
+
+<script>
+/* PWA：註冊 Service Worker（只 Cache App Shell，不 Cache 任何敏感资料） */
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', function () {
+    navigator.serviceWorker.register('service-worker.js').catch(function () {});
+  });
+}
+</script>
+</body>
+</html>

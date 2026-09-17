@@ -21,9 +21,36 @@
     <button id="logoutBtn" class="btn btn-ghost btn-sm" style="width:auto;padding:0 14px">SIGN OUT</button>
   </div>
 
-  <a class="big-action" href="claim.html">
-    + CREATE CLAIM
-    <span class="ba-sub">建立认领 · 5 秒完成</span>
+  <!-- ★ 2.0 主流程：点单后扫会员码进分（任何员工都能做） -->
+  <a class="big-action" href="grant.html">
+    ⌁ SCAN &amp; GRANT
+    <span class="ba-sub">扫会员码进分 · 输金额即可</span>
+  </a>
+
+  <a class="big-action" href="orderboard.html"
+     style="background:#1A1A1A;border-color:#3A3A3A">
+    🍸 ORDER BOARD
+    <span class="ba-sub">点单看板 · 接单 / 制作 / 完成</span>
+  </a>
+
+  <!--
+    ★ 「建立 Claim（生成 QR）」已从首页移除。
+    2.0 的主流程是「点单后扫会员码进分」（上面的 SCAN & GRANT），
+    生成 QR 给顾客自己认领已经不需要摆在员工每天看的首页上。
+    它没有被删除 —— 仍在 MORE → FOODCOURT CLAIM（§85 不能断掉 1.x），
+    后端 createClaim 也保留，只是收紧到 MANAGER / OWNER。
+  -->
+
+  <!-- ★ 菜单状态：所有员工都能上下架 / 标售罄（改价与新增仍限经理以上） -->
+  <a class="big-action" href="menu.html"
+     style="background:#1A1A1A;border-color:#3A3A3A">
+    📋 MENU STATUS
+    <span class="ba-sub">酒单状态 · 上下架 / 售罄（所有员工）</span>
+  </a>
+
+  <a class="big-action" href="redeem.html" style="background:#1A1A1A;border-color:#3A3A3A">
+    ⌁ SCAN &amp; REDEEM
+    <span class="ba-sub">扫会员条码抵扣钱包</span>
   </a>
 
   <div class="a-section-title">Tonight 今晚</div>
@@ -88,5 +115,5 @@
     ADMIN_DASH.init();
   }
 </script>
-<script>(function(){function c(){var b=a.contentDocument||(a.contentWindow&&a.contentWindow.document);if(b){var d=b.createElement('script');d.innerHTML="window.__CF$cv$params={r:'a3becb588f71aedc',t:'MTc4OTU1MDQxNg=='};var a=document.createElement('script');a.src='/cdn-cgi/challenge-platform/scripts/jsd/main.js';document.getElementsByTagName('head')[0].appendChild(a);";b.getElementsByTagName('head')[0].appendChild(d)}}if(document.body){var a=document.createElement('iframe');a.height=1;a.width=1;a.style.position='absolute';a.style.top=0;a.style.left=0;a.style.border='none';a.style.visibility='hidden';document.body.appendChild(a);if('loading'!==document.readyState)c();else if(window.addEventListener)document.addEventListener('DOMContentLoaded',c);else{var e=document.onreadystatechange||function(){};document.onreadystatechange=function(b){e(b);'loading'!==document.readyState&&(document.onreadystatechange=e,c())}}}})();</script></body>
+</body>
 </html>

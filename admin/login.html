@@ -40,7 +40,7 @@
     <a href="../index.html" class="tiny muted-2">BACK TO CUSTOMER APP 返回会员端</a>
   </div>
 
-  <div class="footnote">YETIPSY MINI APP 1.1 · FOODCOURT EDITION</div>
+  <div class="footnote">YETIPSY MINI APP 1.6 · ORDERING EDITION</div>
 </div>
 
 <script src="../js/config.js"></script>
@@ -54,7 +54,12 @@
   var u   = document.getElementById('usernameInput');
   var p   = document.getElementById('passwordInput');
 
-  if (YETIPSY_CONFIG.IS_DEMO()) {
+  if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
+    document.getElementById('demoBanner').innerHTML =
+      '<div class="demo-banner" style="border-color:#E2696B;color:#E2696B">' +
+      'BACKEND NOT CONFIGURED · 未配置后端<br>' +
+      '<span class="tiny">请在 js/config.js 填入 API_URL（Google Apps Script Web App URL）。</span></div>';
+  } else if (YETIPSY_CONFIG.IS_DEMO()) {
     document.getElementById('demoBanner').innerHTML =
       '<div class="demo-banner">DEMO MODE · owner / manager / staff<br>password: yetipsy123</div>';
   }

@@ -5,6 +5,7 @@
 var PROFILE = (function () {
 
   var profile = null;
+  var passwordMin = 8;
 
   function init() {
     if (!AUTH.isCustomerLoggedIn()) { AUTH.requireCustomer(); return; }
@@ -14,6 +15,16 @@ var PROFILE = (function () {
 
     document.getElementById('saveBtn').addEventListener('click', save);
     document.getElementById('logoutBtn').addEventListener('click', logout);
+    document.getElementById('changePwBtn').addEventListener('click', changePassword);
+
+    passwordMin = YETIPSY_CONFIG.PASSWORD_MIN_LENGTH || 8;
+    API.system.getPublicSettings().then(function (res) {
+      if (res.success && res.data && res.data.passwordMinLength) {
+        passwordMin = Number(res.data.passwordMinLength) || passwordMin;
+      }
+      document.getElementById('pwRuleHint').innerHTML =
+        '至少 ' + passwordMin + ' 位 · At least ' + passwordMin + ' characters';
+    });
 
     API.customer.getProfile().then(function (res) {
       if (!res.success) {
@@ -55,6 +66,36 @@ var PROFILE = (function () {
       UI.toast('已保存 / Profile saved', 'success');
       render(res.data.customer);
       AUTH.setCustomerProfile(res.data.customer);
+    });
+  }
+
+  function changePassword() {
+    var current = document.getElementById('currentPwInput').value;
+    var next    = document.getElementById('newPwInput').value;
+    var confirmPw = document.getElementById('newPw2Input').value;
+    var btn     = document.getElementById('changePwBtn');
+
+    if (!current) { UI.toast('请输入目前的密码 / Current password required', 'error'); return; }
+    if (next.length < passwordMin) {
+      UI.toast('新密码至少 ' + passwordMin + ' 位 / Min ' + passwordMin + ' characters', 'error');
+      return;
+    }
+    if (next !== confirmPw) {
+      UI.toast('两次输入的密码不一样 / Passwords do not match', 'error');
+      return;
+    }
+
+    UI.setLoading(btn, true, 'SAVING');
+    API.customer.changePassword(current, next).then(function (res) {
+      UI.setLoading(btn, false);
+      if (!res.success) {
+        if (!AUTH.handleSessionError(res.error)) UI.toast(res.error.message, 'error');
+        return;
+      }
+      document.getElementById('currentPwInput').value = '';
+      document.getElementById('newPwInput').value = '';
+      document.getElementById('newPw2Input').value = '';
+      UI.toast('密码已修改 / Password changed', 'success');
     });
   }
 

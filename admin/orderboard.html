@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B0B0B">
+<title>YETIPSY STAFF — 订单看板</title>
+<link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/admin.css">
+<style>
+/* ---- 看板（§19 三栏，大按钮） ---- */
+.board-bar {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 8px 0 12px;
+}
+.board-bar .a-sub.warn { color: var(--a-gold); }
+#boardToday { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 12px; }
+#boardToday .dc-value { font-size: 17px; }
+
+.lane { margin-bottom: 18px; }
+.lane-head {
+  display: flex; align-items: baseline; gap: 8px;
+  border-left: 3px solid var(--a-line); padding-left: 10px; margin-bottom: 10px;
+}
+.lane-zh { font-size: 15px; font-weight: 700; letter-spacing: 1px; }
+.lane-en { font-size: 10px; letter-spacing: 1.6px; color: var(--a-muted); }
+.lane-count {
+  margin-left: auto; min-width: 22px; text-align: center;
+  background: var(--a-line); color: #0B0B0B; font-weight: 750;
+  border-radius: 999px; padding: 1px 8px; font-size: 12px;
+}
+
+.board-card {
+  border: 1px solid var(--a-line); border-radius: 14px;
+  padding: 12px; margin-bottom: 10px; background: rgba(255,255,255,.02);
+}
+.bc-top { display: flex; justify-content: space-between; align-items: center; }
+.bc-num { font-size: 18px; font-weight: 750; letter-spacing: 1.4px; }
+.bc-wait { font-variant-numeric: tabular-nums; color: var(--a-gold); font-weight: 700; font-size: 15px; }
+.bc-meta { font-size: 11px; letter-spacing: 1px; color: var(--a-muted); margin-top: 3px; }
+.bc-meta.gold { color: var(--a-gold); }
+.bc-items { margin-top: 8px; border-top: 1px solid var(--a-line); padding-top: 6px; }
+.bc-items .a-item { display: flex; justify-content: space-between; font-size: 12.5px; padding: 2px 0; }
+.bc-note {
+  font-size: 11px; color: var(--a-gold); margin-top: 6px;
+  border-left: 2px solid var(--a-gold); padding-left: 8px;
+}
+.bc-item-note { color: var(--a-gold); font-size: 11px; }
+.bc-pay { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.bc-total { margin-left: auto; font-size: 16px; font-weight: 750; color: var(--a-gold); }
+.bc-sub { display: flex; gap: 6px; align-items: center; margin-top: 8px; flex-wrap: wrap; }
+.chip {
+  border: 1px solid var(--a-line); background: transparent; color: inherit;
+  border-radius: 999px; padding: 3px 10px; font-size: 10.5px; letter-spacing: 1px;
+  cursor: pointer;
+}
+.chip-on { border-color: var(--a-gold); color: var(--a-gold); }
+.big-action {
+  width: 100%; margin-top: 10px; padding: 14px;
+  border: none; border-radius: 12px; cursor: pointer;
+  background: var(--a-gold); color: #0B0B0B;
+  font-size: 14px; font-weight: 750; letter-spacing: 1.6px;
+}
+.big-action:disabled { opacity: .55; }
+</style>
+</head>
+<body class="admin">
+
+<div class="a-page">
+
+  <div class="board-bar">
+    <span class="a-sub" id="boardStatus">载入中…</span>
+    <button class="chip" id="muteBtn" style="margin-left:auto">🔔 声音 SOUND</button>
+    <button class="chip" id="refreshBtn">刷新 REFRESH</button>
+    <button class="chip" id="pauseBtn">暂停接单 PAUSE</button>
+  </div>
+
+  <div id="boardToday"></div>
+
+  <div id="boardBody"></div>
+
+</div>
+
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/admin.js"></script>
+<script src="../js/admin-orderboard.js"></script>
+<script>
+  if (ADMIN.requireAuth()) {
+    ADMIN.renderShell({ title: 'ORDER BOARD' });
+    ADMIN_ORDERBOARD.init();
+  }
+</script>
+</body>
+</html>

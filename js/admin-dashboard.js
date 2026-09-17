@@ -20,6 +20,15 @@ var ADMIN_DASH = (function () {
 
   function init() {
     document.getElementById('logoutBtn').addEventListener('click', ADMIN.logout);
+
+    /*
+     * ★ 2.0：「建立 Claim（生成 QR）」已经不在首页了。
+     * 主流程改成「点单后扫会员码进分」（grant.html，所有员工都能做），
+     * 生成 QR 给顾客自己认领变成备用路径 —— 入口移到 MORE 页，
+     * 后端 createClaim 也收紧到 MANAGER / OWNER。
+     * 所以这里不需要再按角色隐藏首页按钮（按钮本身已经移除）。
+     */
+
     renderDate();
     load();
   }
