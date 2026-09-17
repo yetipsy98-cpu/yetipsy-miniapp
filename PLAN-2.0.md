@@ -25,6 +25,26 @@
 | 11 | Analytics（§80） | ⬜ 未开始 |
 | 12 | 安全审计（§81） | ✅ 完成 · §81 的 12 项逐条验 · `test:security` 214 项 |
 
+### §84 / §85 最终验收（`npm run test:mvp`，115 项）
+
+计划书最后那条现场流程，已经做成自动化测试逐步跑通：
+
+| 步骤 | 实测 |
+|---|---|
+| Jason 登入 → MENU | 注册成功，酒单 4 项，Mojito RM22.00 / Long Island RM28.00 |
+| Mojito×2 + Long Island | 小计 RM72.00 |
+| Wallet RM8 | 抵扣 RM8.00（20% 上限是 RM14.40，所以全额可用） |
+| Checkout · Table A12 | 应付 **RM64.00**、预估积分 **64**（正好对上 §57 的例子） |
+| PLACE ORDER | 订单号 `YT260917001`、SUBMITTED / UNPAID、`walletUsed = 0`（还没扣） |
+| Staff receives | 看板 NEW 栏 1 张，看得到会员是 Jason |
+| ACCEPT → PREPARING → READY | 状态逐步推进 |
+| 确认收款 | **这时才扣钱包**，`walletUsed = 800`，余额归零 |
+| COMPLETED | 钱包扣一次、积分发一次（64）、到店算一次、Reward 产生一次 |
+| **Jason opens reward** | `claimReward` → **钱包收到 Reward 全额**；重复打开回 `REWARD_ALREADY_CLAIMED`，不会进帐两次 |
+| Google Sheets | AppOrder 1 张 · OrderItems 2 笔（含快照 Mojito / RM22.00）· PointTransaction 1 笔 64 分 · WalletTransaction 3 笔（存入 / REDEEM −800 / REWARD）· Rewards 1 笔 CLAIMED · 1.x Orders 1 笔 `YETIPSY_APP` · AuditLog 含 PLACE_ORDER / ACCEPT / PREPARING / READY / PAYMENT / COMPLETE / ISSUE_POINTS / ISSUE_REWARD / CLAIM_REWARD |
+| §85 Foodcourt | Create Claim → Claim → 86 分 + Reward 照常；会员条码 / 钱包 / 消费记录 / 积分 / Reward / 会员页全部照常；Reward 也能兑换进钱包；AppOrders 0 张（没走点单流程） |
+| §86 两条通路 | Foodcourt RM50（50 分）+ App RM32（32 分）= 积分 82、总消费 RM82.00、**到店仍只 1 次**；通路业绩 FOODCOURT RM50.00 / YETIPSY_APP RM32.00 / 合计 RM82.00 不重复计算 |
+
 ### Phase 10+11 已验证的规则
 
 | 规则 | 怎么验的 |
