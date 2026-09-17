@@ -655,9 +655,10 @@ Android：设定 → 清除浏览器快取，或重新加入主画面。
 
 ## 完成检查表
 
-- [ ] Google Sheet 出现 12 个分页
-- [ ] Apps Script 15 个档案都到位（或用 GitHub Actions 推送）
-- [ ] `setupDatabase()` 执行成功
+**全新部署（第一次装）**
+
+- [ ] 20 个 `.gs` 档案都到位（或用 GitHub Actions 推送）
+- [ ] `setupDatabase()` 执行成功 → Google Sheet 出现 **17 个分页**
 - [ ] `bootstrapOwner()` 建立老板账号，程式码已删除
 - [ ] 员工账号已在 STAFF ACCOUNTS 建立
 - [ ] Web App 已部署，URL 已复制
@@ -666,9 +667,23 @@ Android：设定 → 清除浏览器快取，或重新加入主画面。
 - [ ] PART G 测试清单全部完成
 - [ ] 两个 QR（会员端 / 员工端）贴在吧台
 
+**从 1.x 升级（已经有会员资料）**
+
+- [ ] ★ **没有**跑 `setupDatabase()`（见 PART B-2 的警告）
+- [ ] 改跑 `upgradeToV2({ backup: true })` → `dataIntact: true`、`problems: []`
+- [ ] `reportUpgradeStatus()` → `ready: true`、`missingSheets: []`
+- [ ] Google Sheet 从 12 个分页变成 **17 个**（多出 5 张 2.0 表）
+- [ ] 既有会员的积分 / 钱包 / Claim 一笔都没掉
+- [ ] 20 个 `.gs` 档案都到位，Web App 已重新部署
+
+> 分页数的由来：1.x 是 12 张，2.0 新增 `Categories` / `Products` /
+> `ProductOptions` / `AppOrders` / `OrderItems` 共 5 张 = **17 张**。
+> 这个 17 跟 `Config.gs` 的 `SCHEMA` 键数一致，`demo/test-copypaste.js`
+> 会挡住两者脱节。
+
 ```
-YETIPSY MINI APP 1.2 · FOODCOURT EDITION
-Validate the business model before scaling the technology.
+YETIPSY MINI APP 1.6 · ORDERING EDITION
+Mobile ordering + retention. 价格一律由后端决定。
 ```
 
 ## 会员条码与扫码抵扣（本版规则）

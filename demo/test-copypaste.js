@@ -264,6 +264,49 @@ suite.group('04 · DEPLOYMENT.md 的粘贴顺序表跟实作一致', (t) => {
   t.check('有「先删掉预设 Code.gs」的说明',
     /先把预设的\s*`Code\.gs`/.test(dep));
   t.check('有「少一个系统会出错」的警告', dep.indexOf('少一个系统会出错') !== -1);
+
+  /* -------------------------------------------------------------
+     ★ 末尾「完成检查表」里的数字也要跟实作一致。
+     为什么：那张表是老板部署完最后勾掉的东西，数字对不上会被读成
+     「部署失败」而回去重装 —— 而重装（重跑 setupDatabase）正是会
+     清掉会员资料的那个动作。
+
+     注意 group 03 检查的分页数读的是 APPS-SCRIPT-COPY-PASTE.md
+     （DOC 常量），**不看这份 DEPLOYMENT.md**，所以这里要单独挡。
+     ------------------------------------------------------------- */
+  const schemaBox2 = {};
+  vm.createContext(schemaBox2);
+  vm.runInContext(read(path.join(ROOT, 'apps-script', 'Config.gs')), schemaBox2,
+    { filename: 'Config.gs' });
+  const realSheets = Object.keys(schemaBox2.SCHEMA).length;
+
+  t.check('★ 检查表写的分页数 == Config.gs SCHEMA（' + realSheets + '）',
+    dep.indexOf('出现 **' + realSheets + ' 个分页**') !== -1,
+    '找「出现 **' + realSheets + ' 个分页**」');
+  t.check('★ 检查表写的 .gs 档案数 == FILE_ORDER（' + FILE_ORDER.length + '）',
+    dep.indexOf('- [ ] ' + FILE_ORDER.length + ' 个 `.gs` 档案都到位') !== -1);
+  /* 升级路径的分页数：1.x 是 12，升级后应等于 SCHEMA */
+  t.check('★ 升级检查表讲明 12 → ' + realSheets + ' 张',
+    dep.indexOf('从 12 个分页变成 **' + realSheets + ' 个**') !== -1);
+
+  /* ★ 升级路径绝不能叫老板跑 setupDatabase —— 那会重写表头、删多出来的栏 */
+  const upgradeSection = dep.slice(dep.indexOf('**从 1.x 升级'));
+  t.check('★ 升级检查表明确写「没有跑 setupDatabase()」',
+    upgradeSection.indexOf('**没有**跑 `setupDatabase()`') !== -1);
+  t.check('★ 升级检查表要求跑 upgradeToV2({ backup: true })',
+    upgradeSection.indexOf('upgradeToV2({ backup: true })') !== -1);
+  t.check('★ 升级检查表要求确认 dataIntact: true',
+    upgradeSection.indexOf('dataIntact: true') !== -1);
+  t.check('★ 升级检查表要求确认既有会员资料没掉',
+    upgradeSection.indexOf('一笔都没掉') !== -1);
+
+  /* 页脚版本不该停在旧版（这份 .md 不在 smoke-ui 的 PRODUCTION_PAGES 里，
+     所以没人挡过它 —— 之前就一直写着 1.2） */
+  const pkg2 = JSON.parse(read(path.join(ROOT, 'package.json')));
+  const short2 = pkg2.version.split('.').slice(0, 2).join('.');
+  const foot = dep.match(/YETIPSY MINI APP ([0-9]+\.[0-9]+) ·/);
+  t.check('★ DEPLOYMENT.md 页脚版本跟 package.json 一致',
+    !!foot && foot[1] === short2, foot ? foot[1] : '(找不到页脚)');
 });
 
 /* =============================================================
