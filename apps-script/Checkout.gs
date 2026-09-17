@@ -291,7 +291,9 @@ function loadQuote(quoteToken, customerId) {
     /* 别人的 Quote 不能用（§12 防伪造） */
     return { ok: false, error: err('QUOTE_EXPIRED', 'Quote does not match this member.') };
   }
-  if (Number(quote.expiresAtMs) < Date.now()) {
+  /* 「在 T 时刻到期」= T 时刻就失效，所以用 <=。
+     用 < 的话，到期那一毫秒仍会被当成有效（TTL 0 时会变成随机结果）。 */
+  if (Number(quote.expiresAtMs) <= Date.now()) {
     rateLimitClear(key);
     return { ok: false, error: err('QUOTE_EXPIRED') };
   }

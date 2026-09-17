@@ -23,7 +23,31 @@
 | 9 | Wallet 接入 Checkout（§78） | ⬜ 未开始 |
 | 10 | Owner 菜单管理（§79） | 🟡 后端 7 个 action 已就位并通过权限测试；`admin/menu.html` 页面未做 |
 | 11 | Analytics（§80） | ⬜ 未开始 |
-| 12 | 安全审计（§81） | ⬜ 未开始 |
+| 12 | 安全审计（§81） | ✅ 完成 · §81 的 12 项逐条验 · `test:security` 214 项 |
+
+### Phase 9+12 已验证的规则（§81 的 12 项逐条试）
+
+| §81 项目 | 结果 |
+|---|---|
+| Change Product Price in Browser | items 里塞 `unitPrice:1 / lineTotal:1`、下单再塞 `subtotal:1 / finalAmount:1` → 小计仍 7200、OrderItem 快照仍 2200 |
+| Fake Wallet Amount | 声称余额 99900、`maxPercent:100` → 后端只认自己的 868 与 20% 上限 |
+| Fake CustomerID | 塞别人的 customerId → 订单仍挂在自己名下；`getMyOrders` 塞别人的 id 也只回自己的；看板会员资料不由前端决定 |
+| Fake Order Total | `discount:7199 / pointsEarned:99999` → 全部被忽略；负数量 `INVALID_QUANTITY`、21 项 `TOO_MANY_ITEMS` |
+| Double Place Order | 同一 payload 连送 6 次 → 1 张订单、2 个 OrderItem；没带 key 被拒 |
+| Double Complete | 连按 6 次 → PointTx / Rewards / 1.x Orders / COMPLETE_ORDER 审计各 1 笔 |
+| Complete Unpaid Order | SUBMITTED~READY 全部挡下，积分 0、不写 1.x Orders、钱包没扣 |
+| Use Wallet Twice | 两张订单同时要求同一笔 RM8.68 → 第一张收款成功，**第二张 `INSUFFICIENT_WALLET`**，余额不会被扣成负数；取消第二张不会凭空退钱 |
+| Order Sold-Out Product | 报价后标售罄 → 下单 `PRODUCT_UNAVAILABLE`，0 订单 0 品项 0 扣款 |
+| Unauthorized Product Edit | 顾客 / 匿名全部 `INVALID_SESSION`；**普通员工可以标售罄但不能改价、不能建商品**（`UNAUTHORIZED`，§32） |
+| Unauthorized Order Completion | 9 个看板 action 用顾客 token / 匿名 / 假 token / 别的会员 全部挡下，订单仍在 READY |
+| Replay API Request | 下单 payload 重放 11 次 → 1 张订单；换 key 重放 `QUOTE_EXPIRED`；拿别人的 Quote 被挡；重放收款只扣一次、重放完成只发一次积分 |
+
+**§83 锁**：占住 script lock 后再打 `markPaymentPaid` → `SERVER_BUSY`，钱包没扣、订单仍 UNPAID；
+放锁后正常；每个请求结束后锁都有释放。
+
+**修掉一个真实的边界错误**：`loadQuote()` 用 `expiresAtMs < Date.now()` 判断过期。
+到期那一毫秒仍会被当成有效 —— TTL 0 时变成「同一毫秒就读得到、跨毫秒就读不到」的随机结果
+（全套测试里偶发失败就是这么来的）。改成 `<=` 后连跑 5 轮稳定通过。
 
 ### Phase 7+8 已验证的规则
 

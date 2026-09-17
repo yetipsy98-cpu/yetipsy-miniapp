@@ -38,7 +38,7 @@
 | 9 | `Customers` | 595 | ★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料 |
 | 10 | `Orders` | 134 | 消费纪录与统计 |
 | 11 | `Menu` | 721 | ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） |
-| 12 | `Checkout` | 330 | ★ 2.0 结帐报价：后端重算价格、钱包上限、Quote 5 分钟有效期、防重复下单的识别码 |
+| 12 | `Checkout` | 332 | ★ 2.0 结帐报价：后端重算价格、钱包上限、Quote 5 分钟有效期、防重复下单的识别码 |
 | 13 | `AppOrders` | 370 | ★ 2.0 订单：placeOrder（幂等）、订单查询、取消、再点一次、名称与单价快照 |
 | 14 | `OrderBoard` | 463 | ★ 2.0 员工看板：接单 / 制作 / 完成（幂等）、收款才扣钱包、取消退回、6 小时内只算一次到店 |
 | 15 | `Claims` | 401 | QR / 4 位 Code 认领（只存 token 的 hash） |
@@ -3557,7 +3557,7 @@ function seedDemoMenu() {
 ## 12. Checkout.gs
 
 > Apps Script 里的档案名称：**`Checkout`**（不要打 .gs）
-> ★ 2.0 结帐报价：后端重算价格、钱包上限、Quote 5 分钟有效期、防重复下单的识别码 · 330 行 · SHA-256 `77e3fe37a9ea0736`
+> ★ 2.0 结帐报价：后端重算价格、钱包上限、Quote 5 分钟有效期、防重复下单的识别码 · 332 行 · SHA-256 `f70c500d9a20f08f`
 
 ```javascript
 /* =============================================================
@@ -3853,7 +3853,9 @@ function loadQuote(quoteToken, customerId) {
     /* 别人的 Quote 不能用（§12 防伪造） */
     return { ok: false, error: err('QUOTE_EXPIRED', 'Quote does not match this member.') };
   }
-  if (Number(quote.expiresAtMs) < Date.now()) {
+  /* 「在 T 时刻到期」= T 时刻就失效，所以用 <=。
+     用 < 的话，到期那一毫秒仍会被当成有效（TTL 0 时会变成随机结果）。 */
+  if (Number(quote.expiresAtMs) <= Date.now()) {
     rateLimitClear(key);
     return { ok: false, error: err('QUOTE_EXPIRED') };
   }
