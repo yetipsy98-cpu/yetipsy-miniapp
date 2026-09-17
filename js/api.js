@@ -42,7 +42,7 @@ var API = (function () {
     options = options || {};
     var sessionType = options.sessionType || 'auto';
 
-    /* 线上版（REQUIRE_BACKEND）却没有 API_URL → 立刻报错，不假装成功 */
+    /* 线上版没有 API_URL → 立刻报错，不假装成功 */
     if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
       log('[API] backend not configured');
       return Promise.resolve({ success: false, data: null, error: NOT_CONFIGURED });
