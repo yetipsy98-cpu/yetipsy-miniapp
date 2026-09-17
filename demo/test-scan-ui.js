@@ -346,6 +346,94 @@ const server = spawn(process.execPath,
   [path.join(__dirname, 'server.js'), '--port', String(PORT), '--reset'],
   { cwd: path.join(__dirname, '..') });
 
+/* -------------------------------------------------------------
+   07 · 会员端认领页 claim.html（§68 不能坏）
+   -------------------------------------------------------------
+   为什么要有：这页之前只被 e2e-ui.js 检查过 HTTP 200，从来没在 jsdom
+   里真正执行过。而「HTTP 200 却因 ReferenceError 白屏」这一轮已经
+   吃过两次亏（admin-menu.js、reward.js）。
+
+   而且这页载入的 js/claim.js 定义了一个全域 SCANNER —— 与共用模组
+   js/scanner.js 的 MEMBER_SCANNER 是两回事（前者扫员工 QR、纯 jsQR）。
+   这里顺便钉住：这页有自己的 SCANNER，且没有被 MEMBER_SCANNER 污染。
+   ------------------------------------------------------------- */
+
+suite.group('07 · 会员端 claim.html 跑得起来且认领可用（§68 / §85）', async (t) => {
+  const page = await openPage(global.__JSDOM, '/claim.html', (w) => {
+    w.localStorage.setItem('yt_customer_token', global.__customerToken);
+    w.localStorage.setItem('yt_customer_profile',
+      JSON.stringify(global.__customerProfile));
+  });
+  const { win, doc } = page;
+
+  /* 页面本身要跑得起来，不能只是 HTTP 200 */
+  t.check('★ 页面执行成功（API 可用）', !!win.API);
+  t.check('★ 页面执行成功（UI 可用）', !!win.UI);
+  t.check('画面有认领按钮', !!doc.getElementById('claimBtn') ||
+    /认领|CLAIM/i.test(doc.body.textContent));
+
+  /* 这页有自己的 SCANNER（扫员工 QR），且不与共用模组混淆 */
+  t.check('★ claim.js 自己的全域 SCANNER 存在', typeof win.SCANNER === 'object');
+  t.equal('★ 这页不该有 MEMBER_SCANNER（那是扫会员条码的）',
+    typeof win.MEMBER_SCANNER, 'undefined');
+
+  /* 底部导航照常渲染（§68 的页面不能被 2.0 弄坏） */
+  t.check('底部导航已渲染', doc.querySelectorAll('.bottom-nav .nav-item').length >= 3,
+    doc.querySelectorAll('.bottom-nav .nav-item').length + ' 格');
+
+  /* 整条 Foodcourt 认领链：经理建 → 顾客认领 → 真的拿到积分 */
+  const before = (await post('getProfile', {}, global.__customerToken)).data.customer;
+
+  const made = await post('createClaim', {
+    source: 'FOODCOURT',
+    externalOrderId: 'SCANUI-' + Date.now(),
+    amount: 6000
+  }, global.__staffToken);
+  t.okIs(made, '★ 经理建立 Foodcourt Claim');
+
+  /* 用页面自己的 API 物件走认领 —— 证明这页所依赖的那条路是通的 */
+  const claimed = await win.API.customer.claimOrder(
+    { token: made.data.token, code: '' });
+  t.okIs(claimed, '★ 顾客认领成功');
+  t.equal('拿到 60 分', claimed.data.pointsEarned, 60);
+
+  const after = (await post('getProfile', {}, global.__customerToken)).data.customer;
+  t.equal('★ 积分真的进了会员资料',
+    after.currentPoints, before.currentPoints + 60);
+
+  page.dom.window.close();
+});
+
+suite.group('07b · 短码认领也能用（顾客手输的情况）', async (t) => {
+  const page = await openPage(global.__JSDOM, '/claim.html', (w) => {
+    w.localStorage.setItem('yt_customer_token', global.__customerToken);
+    w.localStorage.setItem('yt_customer_profile',
+      JSON.stringify(global.__customerProfile));
+  });
+  const { win } = page;
+  const before = (await post('getProfile', {}, global.__customerToken)).data.customer;
+
+  const made = await post('createClaim', {
+    source: 'FOODCOURT',
+    externalOrderId: 'SCANUI2-' + Date.now(),
+    amount: 4000
+  }, global.__staffToken);
+  t.okIs(made, '建立第二笔 Claim');
+  t.check('短码是 4 个字元', /^[A-Z2-9]{4}$/.test(made.data.claimCode),
+    made.data.claimCode);
+
+  /* 顾客只报得出 4 位短码（QR 扫不到的时候） */
+  const claimed = await win.API.customer.claimOrder(
+    { token: '', code: made.data.claimCode });
+  t.okIs(claimed, '★ 用短码认领成功');
+  t.equal('拿到 40 分', claimed.data.pointsEarned, 40);
+
+  const after = (await post('getProfile', {}, global.__customerToken)).data.customer;
+  t.equal('积分累计正确', after.currentPoints, before.currentPoints + 40);
+
+  page.dom.window.close();
+});
+
 /* harness 的 run() 回传 boolean：true = 全过 */
 suite.run().then((pass) => {
   server.kill('SIGKILL');
