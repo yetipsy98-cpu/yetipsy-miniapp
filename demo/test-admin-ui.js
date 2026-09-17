@@ -831,21 +831,37 @@ suite.group('08d · 员工首页：扫码进分是主操作，Claim 限经理', 
   t.check('★ 员工首页有扫码进分入口', staffHtml.indexOf('grant.html') >= 0);
   t.check('★ 扫码进分排在最前面',
     staffHtml.indexOf('grant.html') < staffHtml.indexOf('orderboard.html'));
-  const hidden = asStaff.doc.getElementById('createClaimAction');
-  t.check('★ 普通员工看不到建立 Claim',
-    !!hidden && hidden.style.display === 'none',
-    hidden ? hidden.style.display : '(元素不存在)');
+
+  /* ★「建立 Claim（生成 QR）」已从首页移除 —— 主流程改成扫会员码进分。
+     这不是「按角色隐藏」，而是首页根本没有这个按钮了。 */
+  t.equal('★ 首页已经没有建立 Claim 的元素',
+    asStaff.doc.getElementById('createClaimAction'), null);
+  const staffActions = asStaff.doc.querySelectorAll('.big-action');
+  const staffHrefs = Array.prototype.map.call(staffActions,
+    (a) => a.getAttribute('href'));
+  t.equal('★ 首页大按钮里没有 claim.html', staffHrefs.indexOf('claim.html'), -1);
+  t.check('★ 首页有菜单状态入口（所有员工）', staffHrefs.indexOf('menu.html') >= 0,
+    staffHrefs.join(','));
+  t.equal('★ 首页大按钮共 4 个', staffActions.length, 4);
   asStaff.dom.window.close();
 
-  /* 经理 */
+  /* 经理 / 老板：首页也不该再有生成 QR 的按钮（它是备用路径，放在 MORE） */
   const asMgr = await openPage(global.__JSDOM, '/admin/index.html',
     seedStaff(global.__managerToken, global.__managerProfile));
   await sleep(400);
-  const shown = asMgr.doc.getElementById('createClaimAction');
-  t.check('★ 经理看得到建立 Claim',
-    !!shown && shown.style.display !== 'none',
-    shown ? shown.style.display : '(元素不存在)');
+  const mgrHrefs = Array.prototype.map.call(
+    asMgr.doc.querySelectorAll('.big-action'), (a) => a.getAttribute('href'));
+  t.equal('★ 经理首页也没有 claim.html', mgrHrefs.indexOf('claim.html'), -1);
+  t.check('★ 经理首页同样有菜单状态入口', mgrHrefs.indexOf('menu.html') >= 0);
   asMgr.dom.window.close();
+
+  /* §85：Foodcourt Claim 不能被删掉 —— 它必须还能从 MORE 页到达 */
+  const asMore = await openPage(global.__JSDOM, '/admin/more.html',
+    seedStaff(global.__managerToken, global.__managerProfile));
+  await sleep(300);
+  t.check('★ MORE 页仍有 claim.html 入口（§85 不能断掉）',
+    !!asMore.doc.querySelector('a[href="claim.html"]'));
+  asMore.dom.window.close();
 });
 
 suite.group('08e · 员工菜单页：普通员工也能上下架', async (t) => {
