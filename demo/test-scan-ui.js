@@ -217,12 +217,25 @@ suite.group('02 · 员工扫码抵扣页（admin/redeem.html）', async (t) => {
   global.__redeemPage = page;
 
   t.check('ADMIN_REDEEM 载入了', typeof win.ADMIN_REDEEM === 'object' && !!win.ADMIN_REDEEM.init);
+  /*
+   * ★ 这页现在依赖共用扫码模组（js/scanner.js）。
+   * 少了那行 <script> 不会报错，只会在员工按「开启相机」时
+   * 抛 MEMBER_SCANNER is not defined —— 静态契约检查看不到，
+   * 所以在这里断言它真的被载入了。
+   */
+  t.check('★ MEMBER_SCANNER 共用模组已载入', !!win.MEMBER_SCANNER);
+  t.equal('★ 没有占用 SCANNER 这个全域名（那是 claim.js 的）',
+    typeof win.SCANNER, 'undefined');
   t.check('jsdom 没相机时会讲清楚',
     doc.getElementById('scanSupport').textContent.indexOf('手动输入') !== -1,
     doc.getElementById('scanSupport').textContent.slice(0, 40));
   t.check('一开始停在扫描步骤',
     doc.getElementById('stepScan').style.display !== 'none' &&
     doc.getElementById('stepVerify').style.display === 'none');
+  /* 没有相机 → 「开启相机」要收起来，只留手动输入 */
+  t.check('★ 没相机时隐藏「开启相机」按钮',
+    doc.getElementById('startScanBtn').style.display === 'none',
+    doc.getElementById('startScanBtn').style.display);
 });
 
 suite.group('03 · 输入顾客条码 → 确认是本人', async (t) => {
