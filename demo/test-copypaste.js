@@ -9,6 +9,8 @@
         走完整流程：setupDatabase → 查号码 → 注册 → 密码错 → 密码对
         → 改密码 → 员工重设密码
    03 · 文件里的数字（档案数 / 分页数 / 版本）跟实作一致
+   04 · DEPLOYMENT.md 那张粘贴顺序表跟 FILE_ORDER 逐项一致
+        （老板手动部署唯一照着抄的清单，漏一个档案 = 部署静默出错）
 
    为什么要有：这份文件是手动部署的唯一依据。如果它跟 repo 里的
    .gs 不同步，顾客贴上去的就是旧后端 —— 跟 Service Worker 快取
@@ -206,6 +208,60 @@ suite.group('03 · 文件里的说明跟实作一致', (t) => {
     'LOGIN_LOCK_MINUTES', 'PASSWORD_SELFSERVICE_SETUP'].every((k) => cfg.indexOf(k) !== -1));
   t.check('没有残留 OTP 说明',
     doc.indexOf('OTP_ENABLED') === -1 && doc.indexOf('WHATSAPP_TOKEN') === -1);
+});
+
+/* =============================================================
+   04 · DEPLOYMENT.md 的粘贴顺序表 == FILE_ORDER
+   -------------------------------------------------------------
+   为什么要有：老板是**手动复制粘贴**部署的，而 DEPLOYMENT.md 那张
+   双栏表格（1..20）就是他实际照抄的东西。它跟 apps-script/*.gs 是
+   两份独立维护的清单 —— 以后新增第 21 个 .gs、更新了 FILE_ORDER
+   并重新生成 APPS-SCRIPT-COPY-PASTE.md，这张表却会静默停在 20 个。
+
+   后果不是测试红，是**部署静默少一个档案**，而文档自己就写着
+   「20 个档案全部贴完再继续，少一个系统会出错」。所以在这里挡住。
+   ============================================================= */
+
+suite.group('04 · DEPLOYMENT.md 的粘贴顺序表跟实作一致', (t) => {
+  const dep = read(path.join(ROOT, 'DEPLOYMENT.md'));
+
+  /* 那张表是双栏的：| 1 | `Config` | 11 | `Menu` ★2.0 |
+     两栏都要抓，只抓左栏会漏掉一半。 */
+  const rows = dep.match(
+    /^\|\s*(\d+)\s*\|\s*`([^`]+)`[^\|]*\|\s*(\d+)\s*\|\s*`([^`]+)`[^\|]*\|\s*$/gm) || [];
+  const byNum = {};
+  rows.forEach((line) => {
+    const m = line.match(
+      /^\|\s*(\d+)\s*\|\s*`([^`]+)`[^\|]*\|\s*(\d+)\s*\|\s*`([^`]+)`[^\|]*\|\s*$/);
+    if (m) {
+      byNum[Number(m[1])] = m[2];
+      byNum[Number(m[3])] = m[4];
+    }
+  });
+  const nums = Object.keys(byNum).map(Number).sort((a, b) => a - b);
+  const depOrder = nums.map((n) => byNum[n] + '.gs');
+
+  t.equal('★ 表格抓到 ' + FILE_ORDER.length + ' 个档案', depOrder.length, FILE_ORDER.length);
+  t.check('★ 编号连续且从 1 开始',
+    JSON.stringify(nums) === JSON.stringify(FILE_ORDER.map((_, i) => i + 1)),
+    nums.join(','));
+  t.equal('★ 粘贴顺序 == FILE_ORDER（老板照这个顺序贴）',
+    JSON.stringify(depOrder), JSON.stringify(FILE_ORDER));
+
+  /* 逐个点名，失败时直接讲得出是第几个、差在哪 */
+  FILE_ORDER.forEach((f, i) => {
+    t.equal('  第 ' + (i + 1) + ' 个是 ' + f.replace('.gs', ''), depOrder[i], f);
+  });
+
+  /* 表里的名称不该带 .gs（Apps Script 建档时输入 .gs 会变成 Code.gs.gs） */
+  const withExt = Object.keys(byNum).filter((n) => /\.gs$/.test(byNum[n]));
+  t.equal('★ 表格里的档案名不带 .gs 副档名', withExt.length, 0,
+    withExt.map((n) => byNum[n]).join(','));
+
+  /* 提醒删掉预设 Code.gs 的说明要在（少这句，贴完会有两个 Code.gs） */
+  t.check('有「先删掉预设 Code.gs」的说明',
+    /先把预设的\s*`Code\.gs`/.test(dep));
+  t.check('有「少一个系统会出错」的警告', dep.indexOf('少一个系统会出错') !== -1);
 });
 
 /* harness 的 run() 回传的是 boolean：true = 全过 */
