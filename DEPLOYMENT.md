@@ -1,4 +1,4 @@
-# YETIPSY MINI APP 1.1 — 部署教学（零基础版）
+# YETIPSY MINI APP 1.6 — 部署教学（零基础版）
 
 > 这份文件假设你 **完全不会写程式**。
 > 只要照着做，每一步都做了什么都会说明。
@@ -405,10 +405,35 @@ https://你的账号.github.io/yetipsy-miniapp/
 
 - [ ] 打开 `/admin/login.html`，用 owner 账号登录
 - [ ] Dashboard 显示 Tonight 的资料（一开始都是 0）
+- [ ] ★ `SCAN & GRANT` 是**第一个**大按钮
+
+### G1-a. 主流程：扫码进分（★ 1.6）
+
+- [ ] 先用你自己的手机在会员端注册、登入，打开「会员码」页
+- [ ] 员工端按 `SCAN & GRANT`
+- [ ] ① 输入 `50.00` → 下一步
+- [ ] ② 按「开启相机」，扫手机上的会员码
+      （相机开不了就用「手动输入」，把条码下面那串字打进去）
+- [ ] ③ 画面显示你的名字与编号 → 按「确认进分」
+- [ ] 出现 `+50 分`；手机上的积分也变成 50
+- [ ] **没扫码就想送出** → 应该被挡下（`MEMBER_VERIFY_REQUIRED`）
+- [ ] **同一个码扫两次进分** → 第二次应该失败（`MEMBER_VERIFY_EXPIRED`，
+      因为验证码是一次性的）
+
+### G1-b. 次要流程：Foodcourt Claim（限 Manager / Owner）
+
 - [ ] `+ CREATE CLAIM` → 来源 `FOODCOURT`、单号 `TEST001`、金额 `50.00`
 - [ ] 出现 QR 与 4 位 Code
 - [ ] **再建立一次同样的 TEST001** → 应该出现「此订单号已存在」（重复保护正常）
 - [ ] 按 `CANCEL` 取消这笔测试 Claim
+- [ ] ★ 用一个 **STAFF**（普通员工）账号登入 → 首页**看不到** `CREATE CLAIM`
+
+### G1-c. 商品上下架（★ 1.6 所有员工都可以）
+
+- [ ] `MORE → MENU` → 任一商品 → 按「下架」
+- [ ] 用顾客手机打开酒单 → 那个商品**不见了**
+- [ ] 员工端按「上架」→ 顾客端刷新 → 商品回来了
+- [ ] ★ 用普通员工账号登入，同样能上下架；但**看不到**「新增商品」与「编辑」
 
 ## G2. 顾客端测试（用你自己的手机）
 
@@ -458,25 +483,45 @@ https://你的账号.github.io/yetipsy-miniapp/
 2. 确认 Dashboard 显示今天的资料
 3. 检查奖励预算：`budget RM50.00 · left RMxx.xx`
 
-## 每一笔交易
+## 每一笔交易（★ 1.6 主流程）
 
 ```
-顾客在 Foodcourt 点 Yetipsy 的酒
+顾客在 Foodcourt 点 Yetipsy 的酒，付了 RM86
         ↓
+员工：SCAN & GRANT（员工首页第一个按钮）
+        ↓
+① 输入消费金额 86.00 → 下一步
+        ↓
+② 扫顾客的会员码（会员端「会员码」页给他看）
+        ↓
+③ 确认是本人 → 确认进分
+        ↓
+系统自动：+86 积分 · 算一次到店 · 达门槛自动发 Reward
+```
+
+> **员工只输金额**，积分按 `POINTS_PER_RM` 自动算，Reward 达
+> `REWARD_MIN_SPEND` 自动发出 —— 不需要员工自己算，也不能自己填。
+>
+> **六小时内同一位顾客不会重复计到店次数**（`VISIT_SESSION_HOURS`），
+> 但积分照算。这是后端负责的，员工不用记。
+>
+> 顾客还没有会员码？请他先在会员端注册登入，「会员码」页就会显示。
+
+### 顾客没在场 / 事后补登（次要流程，限 Manager / Owner）
+
+```
 员工：CREATE CLAIM
-      来源 FOODCOURT
-      单号 FC8231
-      金额 86.00
+      来源 FOODCOURT · 单号 FC8231 · 金额 86.00
         ↓
-系统产生 QR + Code
-        ↓
-员工把画面（或 Code）给顾客
+系统产生 QR + Code → 员工把 Code 给顾客
         ↓
 顾客扫 QR 或输入 Code → 认领 → 积分 → 开奖
 ```
 
-> 顾客可以回家再注册、再认领。
-> Claim 24 小时内有效（可在 Settings 修改）。
+> 顾客可以回家再注册、再认领。Claim 24 小时内有效（可在 Settings 修改）。
+>
+> ⚠️ 1.6 起 **普通员工看不到 CREATE CLAIM** —— 因为主流程已经不需要它。
+> 只有 MANAGER / OWNER 用得到（顾客已经走了、要事后补登的情况）。
 
 ## 顾客回来用钱包
 
@@ -501,6 +546,9 @@ https://你的账号.github.io/yetipsy-miniapp/
 | `DAILY_REWARD_BUDGET` | 每日奖励预算（RM） | 50 |
 | `MAX_WALLET_USAGE_PERCENT` | 钱包最高抵扣比例 | 20 |
 | `MIN_WALLET_REDEEM_BILL` | 最低抵扣账单（RM） | 30 |
+| `MEMBER_VERIFY_SECONDS` | 扫会员码后的验证有效秒数 | 180 |
+| `REQUIRE_MEMBER_CODE_SCAN` | 进分／抵扣前是否一定要扫会员码 | TRUE |
+| `VISIT_SESSION_HOURS` | 几小时内算同一次到店（§56） | 6 |
 | `SILVER_THRESHOLD` / `GOLD_THRESHOLD` | 等级门槛 | 500 / 1500 |
 
 > 改完按 SAVE，立即生效，不需要重新部署。
