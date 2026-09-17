@@ -898,6 +898,51 @@ suite.group('08e · 员工菜单页：普通员工也能上下架', async (t) =>
   /* 恢复回去，别污染后面的测试 */
   await post('setProductStatus',
     { productId: target.productId, status: 'ACTIVE' }, global.__staffToken);
+
+  /* ★ 售罄按钮也要真的点过 —— 它跟上下架是不同的 API：
+       [data-status] → setProductStatus       切 status（上下架）
+       [data-toggle] → setProductAvailability 切 available（售罄）
+     这两个按钮长得像、又在同一列，很容易只验了一个。
+     之前 [data-toggle] 只被数过数量，从来没有「点了后端真的变」的证据。 */
+  const avail0 = await post('getAdminMenu', {}, global.__staffToken);
+  const avTarget = avail0.data.products[0];
+  const avBtn = doc.querySelector(
+    '#menuAdminBody [data-toggle="' + avTarget.productId + '"]');
+  t.check('★ 找得到那一列的售罄钮', !!avBtn);
+  const avBefore = avTarget.available;
+  avBtn.click();
+
+  const avChanged = await until(async () => {
+    const m = await post('getAdminMenu', {}, global.__staffToken);
+    const p = m.data.products.filter((x) => x.productId === avTarget.productId)[0];
+    return p && p.available === !avBefore;
+  }, 12000);
+  t.check('★ 普通员工真的把商品标成售罄了', avChanged,
+    avTarget.productId + ': available ' + avBefore + ' → ' + !avBefore);
+
+  /* 售罄要真的影响顾客端酒单，而不只是后台一个旗标。
+     ★ 这里自己注册一个会员：不能依赖不存在的 global，否则 getMenu 会带
+       空 token 失败、if 静默跳过 —— 断言没跑但测试数照样+1，比没测更糟。 */
+  const avReg = await post('customerRegister',
+    { phone: '0127778899', name: 'SoldOutViewer', password: 'test-pass-123' });
+  t.okIs(avReg, '★ 注册一个会员用来看顾客端酒单');
+  const custMenu = await post('getMenu', {}, avReg.data.token);
+  t.okIs(custMenu, '★ 顾客端取得酒单');
+  const cmProd = custMenu.data.products.filter(
+    (x) => x.productId === avTarget.productId)[0];
+  t.check('★ 售罄反映到顾客端酒单', !!cmProd && cmProd.available === false,
+    cmProd ? cmProd.productId + ' available=' + cmProd.available
+           : '(顾客端酒单里找不到 ' + avTarget.productId + ')');
+
+  /* 点回去，别污染后面的测试 */
+  const avBtn2 = doc.querySelector(
+    '#menuAdminBody [data-toggle="' + avTarget.productId + '"]');
+  if (avBtn2) avBtn2.click();
+  await until(async () => {
+    const m = await post('getAdminMenu', {}, global.__staffToken);
+    const p = m.data.products.filter((x) => x.productId === avTarget.productId)[0];
+    return p && p.available === avBefore;
+  }, 12000);
   page.dom.window.close();
 });
 
