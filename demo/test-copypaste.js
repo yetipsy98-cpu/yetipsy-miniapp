@@ -11,6 +11,8 @@
    03 · 文件里的数字（档案数 / 分页数 / 版本）跟实作一致
    04 · DEPLOYMENT.md 那张粘贴顺序表跟 FILE_ORDER 逐项一致
         （老板手动部署唯一照着抄的清单，漏一个档案 = 部署静默出错）
+   05 · ★ 用「文件里的字」跑 upgradeToV2()：既有老板唯一的升级路径，
+        从 1.x 线上状态一路升到 2.0，并逐格确认会员资料没被动过
 
    为什么要有：这份文件是手动部署的唯一依据。如果它跟 repo 里的
    .gs 不同步，顾客贴上去的就是旧后端 —— 跟 Service Worker 快取
@@ -262,6 +264,118 @@ suite.group('04 · DEPLOYMENT.md 的粘贴顺序表跟实作一致', (t) => {
   t.check('有「先删掉预设 Code.gs」的说明',
     /先把预设的\s*`Code\.gs`/.test(dep));
   t.check('有「少一个系统会出错」的警告', dep.indexOf('少一个系统会出错') !== -1);
+});
+
+/* =============================================================
+   05 · ★ 用「文件里的字」跑 upgradeToV2()（既有老板唯一的升级路径）
+   -------------------------------------------------------------
+   为什么要有：老板是手动粘贴部署的。group 02 已经证明粘贴档里的字
+   能跑 setupDatabase → 注册 → 登入，但 upgradeToV2() 之前**只在
+   test-upgrade.js 里跑过，而那个测试读的是 apps-script/*.gs**，
+   不是这份粘贴档。也就是说：老板真正会执行的那份 upgradeToV2()
+   代码，一次都没被跑过。
+
+   这条路径的代价是老板的真实会员资料 —— §67 的硬规则是
+   「绝不能删除既有会员资料」，跑错成 setupDatabase() 就会清掉。
+   所以这里用粘贴档的字，从「1.x 线上、还没升级」的状态一路跑到
+   升级完成，并且逐格确认会员资料没被动过。
+   ============================================================= */
+
+suite.group('05 · ★ 粘贴档里的 upgradeToV2() 真的能升级且不删资料', (t) => {
+  const V2_SHEETS = ['Categories', 'Products', 'ProductOptions', 'AppOrders', 'OrderItems'];
+  const V2_SETTINGS = ['ORDERING_ENABLED', 'ORDERING_PAUSED', 'ORDERING_OPEN_TIME',
+    'ORDERING_CLOSE_TIME', 'ALLOW_PICKUP', 'ALLOW_TABLE_ORDER', 'MAX_ORDER_ITEMS',
+    'VISIT_SESSION_HOURS', 'ORDER_POLL_SECONDS', 'CUSTOMER_ORDER_POLL_SECONDS',
+    'CHECKOUT_QUOTE_EXPIRY_MINUTES', 'MENU_CACHE_SECONDS'];
+  const V2_SEQUENCES = ['category', 'product', 'option', 'apporder', 'orderitem', 'ordernum'];
+
+  const shim = createShim({});
+  const sandbox = Object.assign({ console: console }, shim.globals);
+  sandbox.globalThis = sandbox;
+  vm.createContext(sandbox);
+  vm.runInContext(joinLikeBackend(global.__blocks), sandbox,
+    { filename: 'copy-paste.gs' });
+  const doPost = (payload) => JSON.parse(
+    sandbox.doPost({ postData: { contents: JSON.stringify(payload), type: 'text/plain' } })
+      .getContent());
+
+  /* ① 先用粘贴档的字建一个「1.x 线上」的世界，塞进真实会员资料 */
+  sandbox.setupDatabase();
+  sandbox.bootstrapOwner('owner', 'yetipsy123');
+  const reg = doPost({ action: 'customerRegister',
+    data: { phone: '0123456789', name: 'Jason', password: 'test-pass-123' } });
+  t.okIs(reg, '★ 用粘贴档的字注册会员');
+  const cid = reg.data.customer.customerId;
+  const own = doPost({ action: 'staffLogin',
+    data: { username: 'owner', password: 'yetipsy123' } }).data.token;
+  doPost({ action: 'manualPointAdjustment',
+    data: { customerId: cid, points: 320, reason: 'upgrade' }, token: own });
+  doPost({ action: 'manualWalletAdjustment',
+    data: { customerId: cid, amount: 5000, reason: 'upgrade' }, token: own });
+
+  /* ② 把 2.0 的东西剥掉，还原成「还没升级的 1.x 线上库」 */
+  V2_SHEETS.forEach((n) => { delete shim.spreadsheet.sheets[n]; });
+  const drop = (sheet, keys) => {
+    if (sheet) sheet.rows = sheet.rows.filter((r, i) => i === 0 || keys.indexOf(String(r[0])) < 0);
+  };
+  drop(shim.spreadsheet.sheets.Settings, V2_SETTINGS);
+  drop(shim.spreadsheet.sheets.Sequences, V2_SEQUENCES);
+  const sheetsBefore = shim.spreadsheet.getSheets().length;
+  t.equal('剥掉 V2 后剩 1.x 的分页数', sheetsBefore, 12, 
+    shim.spreadsheet.getSheets().map((s) => s.getName()).join(','));
+
+  /* 升级前的会员资料快照（逐格比对用） */
+  const custBefore = JSON.parse(JSON.stringify(shim.spreadsheet.sheets.Customers.rows));
+  const profBefore = doPost({ action: 'getProfile', data: {}, token: reg.data.token });
+  t.okIs(profBefore, '★ 升级前读得到会员资料');
+  t.equal('升级前积分 320', profBefore.data.customer.currentPoints, 320);
+  t.equal('升级前钱包 5000', profBefore.data.customer.walletBalance, 5000);
+
+  /* ③ ★ 跑粘贴档里的 upgradeToV2() */
+  const res = sandbox.upgradeToV2({ backup: true });
+  t.equal('★ upgradeToV2() 回传 success', res.success, true,
+    res.error ? JSON.stringify(res.error) : '');
+  const r = res.data;
+  t.equal('★ 升级完成标记', r.upgraded, true);
+  t.equal('★ 资料完整标记 dataIntact', r.dataIntact, true);
+  t.equal('★ 没有问题回报', r.problems.length, 0, JSON.stringify(r.problems));
+  t.equal('★ 新建 5 张 2.0 表', r.createdSheets.length, 5, JSON.stringify(r.createdSheets));
+  V2_SHEETS.forEach((name) => {
+    t.check('建了「' + name + '」', r.createdSheets.indexOf(name) >= 0);
+    t.check('Sheet「' + name + '」真的存在', !!shim.spreadsheet.getSheetByName(name));
+  });
+  t.equal('升级后分页总数 = 12 + 5', shim.spreadsheet.getSheets().length, sheetsBefore + 5);
+
+  /* ④ ★ 会员资料一格都不能变（§67 的核心承诺） */
+  t.equal('★ Customers 表逐格没变',
+    JSON.stringify(shim.spreadsheet.sheets.Customers.rows), JSON.stringify(custBefore));
+  const profAfter = doPost({ action: 'getProfile', data: {}, token: reg.data.token });
+  t.okIs(profAfter, '★ 升级后仍读得到会员资料');
+  t.equal('★ 升级后积分还是 320', profAfter.data.customer.currentPoints, 320);
+  t.equal('★ 升级后钱包还是 5000', profAfter.data.customer.walletBalance, 5000);
+  t.equal('★ CustomerID 没变', profAfter.data.customer.customerId, cid);
+  ['Customers', 'Orders', 'Claims', 'PointTx', 'WalletTx'].forEach((name) => {
+    t.equal('★ rowCounts[' + name + '] 前后一致',
+      r.rowCounts[name].after, r.rowCounts[name].before);
+  });
+
+  /* ⑤ 幂等：老板手滑跑第二次不能出事、不能重复建表 */
+  const again = sandbox.upgradeToV2({ backup: true });
+  t.equal('★ 重跑也回 success', again.success, true);
+  t.equal('★ 重跑没有重复建表', again.data.createdSheets.length, 0,
+    JSON.stringify(again.data.createdSheets));
+  t.equal('★ 重跑后分页总数不变',
+    shim.spreadsheet.getSheets().length, sheetsBefore + 5);
+  t.equal('★ 重跑后资料仍完整', again.data.dataIntact, true);
+
+  /* ⑥ 升级后 1.x 会员流程照常（§85），2.0 酒单也读得到 */
+  const login = doPost({ action: 'customerLogin',
+    data: { phone: '0123456789', password: 'test-pass-123' } });
+  t.okIs(login, '★ 升级后旧密码仍能登入');
+  const menu = doPost({ action: 'getMenu', data: {}, token: login.data.token });
+  t.okIs(menu, '★ 升级后 2.0 酒单可读（getMenu）');
+  t.check('★ 2.0 酒单回传商品阵列', Array.isArray(menu.data.products),
+    typeof menu.data.products);
 });
 
 /* harness 的 run() 回传的是 boolean：true = 全过 */
