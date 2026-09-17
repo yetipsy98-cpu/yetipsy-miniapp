@@ -483,3 +483,37 @@ body.admin.has-admin-nav { padding-bottom: calc(66px + env(safe-area-inset-botto
 .option-group-title { font-size: 12px; letter-spacing: 1px; color: var(--a-gold); }
 .option-group-sub { font-size: 11px; color: var(--a-muted); }
 #optionBody, #ticketLines { max-height: 46vh; }
+
+/* =============================================================
+   2.1.7 · POS 结账 + 连线提示 + 手动找会员
+   ============================================================= */
+
+/* 底部「结账 CHECKOUT」要是最显眼的那一颗 */
+.kb-go.primary {
+  background: var(--a-gold); color: #101010; font-weight: 750;
+  border-color: var(--a-gold);
+}
+.kb-go.primary:active { transform: scale(.97); }
+
+/* 连线不稳的小提示（订单看板 / 顾客订单页 / POS 都用这个） */
+.net-pill {
+  margin-left: auto; align-self: center;
+  font-size: 10px; letter-spacing: .3px;
+  color: #E5B769; border: 1px solid rgba(229,183,105,.45);
+  border-radius: 999px; padding: 3px 8px; white-space: nowrap;
+}
+
+/* 「付款方式」与「备注」的快捷按钮：选中的那颗要看得出来 */
+.ps-quick .pq.on {
+  background: var(--a-gold); color: #101010; border-color: var(--a-gold); font-weight: 700;
+}
+
+/* 手动找会员的结果列 */
+.mh-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; margin-top: 8px;
+  border: 1px solid var(--a-line); border-radius: 10px;
+}
+.mh-main { flex: 1 1 auto; min-width: 0; }
+.mh-name { font-size: 14px; font-weight: 650; }
+.mh-row .chip { flex: 0 0 auto; }

@@ -440,7 +440,35 @@ var UI = (function () {
     });
   }
 
+  /* =========================================================
+     连线提示（每页一个 #netPill）
+     ---------------------------------------------------------
+     pageFailed = 这一页自己最后一次载入有没有失败
+     netState   = API.netState()（'ok' / 'slow' / 'offline'）
+     规则：自己失败 or 后端离线 → 显示「连线不稳 · 显示上次资料」
+           只是慢 → 显示「连线慢 · 重试中」
+           都正常 → 收起来
+     重点：别的请求成功（netState 变 ok）不会盖掉「这一页失败」的事实
+     ========================================================= */
+  function netPill(pageFailed, netState) {
+    var pill = document.getElementById('netPill');
+    if (!pill) return;
+    var st = netState;
+    if (!st && typeof API !== 'undefined' && API.netState) st = API.netState();
+    if (!st) st = 'ok';
+    if (!pageFailed && st === 'ok') {
+      pill.style.display = 'none';
+      pill.textContent = '';
+      return;
+    }
+    pill.textContent = (pageFailed || st === 'offline')
+      ? '⚠ 连线不稳 · 显示上次资料'
+      : '⚠ 连线慢 · 重试中';
+    pill.style.display = '';
+  }
+
   return {
+    netPill: netPill,
     money: money,
     moneyPlain: moneyPlain,
     parseMoneyToSen: parseMoneyToSen,

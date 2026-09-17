@@ -219,12 +219,12 @@ function checkEndToEnd() {
 
   /* --- 2.1 POS：点餐台单据（items）→ 队列 --- */
   const ticket = okData(post('createPosTicket', {
-    source: 'FOODCOURT', amount: 4000,
+    source: 'FOODCOURT', amount: 4000, paymentMethod: 'CASH',
     items: [
       { nameEN: 'Mojito', nameZH: '莫吉托', quantity: 2, unitPriceSen: 1800 },
       { nameEN: 'Long Island', nameZH: '长岛冰茶', quantity: 1, unitPriceSen: 2200 }
     ]
-  }, staffToken), 'createPosTicket（带 items）');
+  }, staffToken), 'createPosTicket（带 items + 付款方式）');
 
   check('createPosTicket 把明细回传（items）',
     !!ticket && Array.isArray(ticket.items) && ticket.items.length === 2,
@@ -232,6 +232,11 @@ function checkEndToEnd() {
   check('明细写进 Note（例：莫吉托×2 · 长岛冰茶×1）',
     !!ticket && /莫吉托×2/.test(ticket.ticket.note || ''),
     ticket && ticket.ticket.note);
+
+  check('结账带付款方式 → 回传 paymentMethod',
+    !!ticket && ticket.ticket.paymentMethod === 'CASH', ticket && ticket.ticket.paymentMethod);
+  check('付款方式写进 Note（AUDIT 也有）',
+    !!ticket && /CASH/.test(ticket.ticket.note || ''), ticket && ticket.ticket.note);
 
   const queue = okData(post('getPosQueue', {}, staffToken), 'getPosQueue');
   check('待进单队列看得到这张单',
@@ -255,6 +260,29 @@ function checkEndToEnd() {
   check('同一张单再绑一次是幂等的（不会重复进分）',
     !again.success || again.data.alreadyBound === true,
     again.error ? again.error.code : JSON.stringify(again.data).slice(0, 80));
+
+  /* --- 顾客没有会员码：搜会员 → 确认 → 进分 --- */
+  const ticket2 = okData(post('createPosTicket', {
+    source: 'FOODCOURT', amount: 2000, paymentMethod: 'DUITNOW',
+    items: [{ nameZH: '啤酒', quantity: 1, unitPriceSen: 2000 }]
+  }, staffToken), 'createPosTicket（第二张单）');
+
+  const found = okData(post('searchCustomer', { keyword: '0123456789' }, staffToken),
+    'searchCustomer（手机号找会员）');
+  check('用手机号找得到会员',
+    !!found && (found.customers || []).some((c) => c.customerId === customerId),
+    JSON.stringify(found && found.customers).slice(0, 120));
+
+  const manual = okData(post('posVerifyMember', { customerId: customerId }, staffToken),
+    'posVerifyMember（手动确认会员）');
+  check('手动确认后拿到 verifyToken（没有会员码也能处理单据）',
+    !!manual && !!manual.verifyToken && manual.manual === true);
+
+  const bound2 = okData(post('bindPosTicket', {
+    orderId: ticket2.ticket.orderId, customerId: customerId, verifyToken: manual.verifyToken
+  }, staffToken), 'bindPosTicket（手动验证路径）');
+  check('手动验证也能进分（第二张单 ' + (bound2 && bound2.pointsEarned) + ' 分）',
+    !!bound2 && Number(bound2.pointsEarned) > 0);
 
   /* --- 会员点单 → 员工看板完成 → 发积分 --- */
   const optionId = (opt && opt.option && opt.option.optionId) ||

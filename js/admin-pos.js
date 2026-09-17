@@ -41,14 +41,17 @@ var ADMIN_POS = (function () {
     verifyToken: '',
     verifyLeft: 0,
     result: null,
+    loadFailed: false,
     errorCode: null,
     busy: false,
     pollSeconds: 8,
+    paymentMethod: 'CASH',
+    hits: [],                // 搜到的会员（顾客没有会员码时用）
     signature: ''
   };
 
   var el = {};
-  var pollTimer = null;
+  var poller = null;
   var countdownTimer = null;
 
   /* ---------------------------------------------------------
@@ -93,10 +96,24 @@ var ADMIN_POS = (function () {
       if (input) input.value = node.getAttribute('data-note') || '';
     });
     bindPad();
-    on('refreshBtn', function () { loadQueue(true); });
+    on('refreshBtn', function () { API.cache.drop('getPosQueue', {}); loadQueue(true); });
     on('kioskOpenTicket', openTicketSheet);
     on('kioskTicketBtn', openTicketSheet);
+    on('kioskCheckoutBtn', openTicketSheet);
+    on('sheetAddMoreBtn', closeTicketSheet);
     on('ticketSheetClose', closeTicketSheet);
+
+    /* 付款方式（写进单据备注，AUDIT 也会有纪录） */
+    on('payChips', function (e) {
+      var node = closest(e.target, '[data-pay]');
+      if (!node) return;
+      state.paymentMethod = node.getAttribute('data-pay') || 'CASH';
+      renderPayChips();
+    });
+
+    /* 顾客没有会员码 → 用手机号找会员 */
+    on('memberSearchBtn', function () { searchMember(); });
+    on('memberSearchInput', null, function (e) { if (e.key === 'Enter') searchMember(); });
     on('ticketClearBtn', clearLines);
     on('saveTicketBtn', saveTicket);
     on('manualAmountToggle', toggleManualAmount);
@@ -113,12 +130,28 @@ var ADMIN_POS = (function () {
 
     document.addEventListener('visibilitychange', function () {
       if (document.hidden) { stopPolling(); MEMBER_SCANNER.stop(); }
-      else if (state.tab === 'queue') { loadQueue(false); startPolling(); }
+      else if (state.tab === 'queue') startPolling();
     });
+
+    /* 连线状态：不稳的时候只显示一个小提示，不要把整页变错误 */
+    /* 连线提示 = 这一页自己的载入结果 + 全局网络状态（见 UI.netPill） */
+    API.onNetwork(function (st) { UI.netPill(state.loadFailed, st); });
+
+    var ver = document.getElementById('posVersion');
+    if (ver) ver.textContent = 'v' + ((window.YETIPSY_CONFIG && YETIPSY_CONFIG.APP_VERSION) || '');
 
     show('kiosk');
     loadMenu(false);
     loadQueue(false);
+  }
+
+  function renderPayChips() {
+    var box = document.getElementById('payChips');
+    if (!box) return;
+    Array.prototype.forEach.call(box.querySelectorAll('[data-pay]'), function (node) {
+      var on = node.getAttribute('data-pay') === state.paymentMethod;
+      node.className = 'pq' + (on ? ' on' : '');
+    });
   }
 
   function on(id, fn, keyFn) {
@@ -719,6 +752,7 @@ var ADMIN_POS = (function () {
       amount: amount,
       externalOrderId: txt('ticketNoInput'),
       note: txt('ticketNoteInput'),
+      paymentMethod: state.paymentMethod,
       items: state.lines.map(function (l) {
         var opts = optionsText(l.options);
         return {
@@ -744,8 +778,10 @@ var ADMIN_POS = (function () {
         if (node) node.value = '';
       });
       clearLines();
+      state.paymentMethod = 'CASH';
+      renderPayChips();
       closeTicketSheet();
-      UI.toast('已记录 ' + UI.money(ticket.amount) + ' · 请扫顾客会员码', 'success');
+      UI.toast('已结账 ' + UI.money(ticket.amount) + ' · 请扫顾客会员码', 'success');
 
       /* 直接接着扫码（现场最常见的顺序），队列也会同步更新 */
       loadQueue(false);
@@ -762,11 +798,22 @@ var ADMIN_POS = (function () {
     return API.staff.getPosQueue().then(function (res) {
       if (!res.success) {
         state.errorCode = res.error.code;
+        /* 已经有资料就先留着（轮询失败很常见，不要清空画面） */
+        if (state.tickets.length) {
+          /* 已经有资料就先留着（轮询失败很常见，不要清空画面） */
+          state.loadFailed = true;
+          UI.netPill(true);
+          var status = document.getElementById('queueStatus');
+          if (status) status.textContent = '⚠ 连线不稳 · 显示上次资料（自动重试中）';
+          return res;
+        }
         if (!ADMIN.handleError(res.error) && verbose) UI.toast(res.error.message, 'error');
         renderQueue(true);
         return res;
       }
       state.errorCode = null;
+      state.loadFailed = false;
+      UI.netPill(false, 'ok');
       state.tickets = res.data.pending || [];
       state.today = res.data.today || null;
       state.pollSeconds = Number(res.data.pollSeconds) || 8;
@@ -777,14 +824,14 @@ var ADMIN_POS = (function () {
 
   function startPolling() {
     stopPolling();
-    pollTimer = setInterval(function () {
-      if (document.hidden || state.tab !== 'queue') return;
-      loadQueue(false);
-    }, Math.max(5, state.pollSeconds) * 1000);
+    poller = API.poll(Math.max(5, state.pollSeconds), function () {
+      if (state.tab !== 'queue') return Promise.resolve({ success: true });
+      return loadQueue(false);
+    });
   }
 
   function stopPolling() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (poller) { poller.stop(); poller = null; }
   }
 
   function renderQueue(force) {
@@ -930,6 +977,10 @@ var ADMIN_POS = (function () {
 
     var manual = document.getElementById('manualInput');
     if (manual) manual.value = '';
+    var search = document.getElementById('memberSearchInput');
+    if (search) search.value = '';
+    state.hits = [];
+    renderMemberHits();
 
     show('scan');
 
@@ -1054,6 +1105,76 @@ var ADMIN_POS = (function () {
     loadQueue(false);
   }
 
+  /* ---------------------------------------------------------
+     顾客没有会员码：手机号 / 名字找会员 → 当面核对 → 确认进分
+     （后端写 AUDIT: POS_VERIFY_MANUAL；可用设定关掉）
+     --------------------------------------------------------- */
+
+  function searchMember() {
+    var input = document.getElementById('memberSearchInput');
+    var kw = input ? String(input.value || '').trim() : '';
+    if (kw.length < 3) { UI.toast('请输入手机号或名字（至少 3 个字）', 'error'); return; }
+
+    UI.showLoading('SEARCHING');
+    API.staff.searchCustomer(kw).then(function (res) {
+      UI.hideLoading();
+      if (!res.success) {
+        if (!ADMIN.handleError(res.error)) UI.toast(res.error.message, 'error');
+        return;
+      }
+      state.hits = (res.data.customers || []).slice(0, 8);
+      renderMemberHits();
+      if (!state.hits.length) UI.toast('找不到会员 / No member found', 'error');
+    });
+  }
+
+  function renderMemberHits() {
+    var box = document.getElementById('memberHits');
+    if (!box) return;
+    if (!state.hits.length) { box.innerHTML = ''; return; }
+
+    box.innerHTML = '<div class="a-sub mt-8">确认是这位顾客再按 CONFIRM（会写 AUDIT）：</div>' +
+      state.hits.map(function (c) {
+        return '<div class="mh-row">' +
+          '<div class="mh-main">' +
+            '<div class="mh-name">' + UI.esc(c.name || '(没有名字)') + '</div>' +
+            '<div class="tiny muted-2">' + UI.esc(c.phone || '') + ' · ' +
+              UI.esc(c.membershipTier || 'MEMBER') + ' · ' + UI.points(c.currentPoints) + ' 分</div>' +
+          '</div>' +
+          '<button class="chip" data-pick="' + UI.esc(c.customerId) + '">确认 CONFIRM</button>' +
+        '</div>';
+      }).join('');
+
+    Array.prototype.forEach.call(box.querySelectorAll('[data-pick]'), function (node) {
+      node.addEventListener('click', function () {
+        verifyMemberManually(node.getAttribute('data-pick'));
+      });
+    });
+  }
+
+  function verifyMemberManually(customerId) {
+    if (!state.selected) { UI.toast('请先选一张单据 / Pick a ticket first', 'error'); backToKiosk(); return; }
+    UI.showLoading('VERIFYING');
+
+    API.staff.posVerifyMember(customerId).then(function (res) {
+      UI.hideLoading();
+      if (!res.success) {
+        state.errorCode = res.error.code;
+        if (!ADMIN.handleError(res.error)) UI.toast(res.error.message, 'error');
+        return;
+      }
+      state.errorCode = null;
+      state.customer = res.data.customer;
+      state.membership = res.data.membership;
+      state.verifyToken = res.data.verifyToken;
+      state.verifyLeft = Number(res.data.verifySeconds) || 180;
+      renderConfirm();
+      show('confirm');
+      startCountdown();
+      UI.toast('已确认 ' + (state.customer.name || state.customer.customerId), 'success');
+    });
+  }
+
   function confirm() {
     if (state.busy) return;
     if (!state.selected) { UI.toast('请先选一张单据 / Pick a ticket first', 'error'); backToKiosk(); return; }
@@ -1131,6 +1252,8 @@ var ADMIN_POS = (function () {
       queueCount: state.tickets.length,
       selectedOrderId: state.selected ? state.selected.orderId : null,
       hasVerifyToken: !!state.verifyToken,
+      paymentMethod: state.paymentMethod,
+      memberHits: state.hits.length,
       customerId: state.customer ? state.customer.customerId : null,
       pointsEarned: state.result ? state.result.pointsEarned : null,
       errorCode: state.errorCode,

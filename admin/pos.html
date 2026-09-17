@@ -22,7 +22,9 @@
       待进单 <span class="pt-en">QUEUE</span>
       <span class="pt-badge" id="tabQueueCount">0</span>
     </button>
+    <span class="net-pill" id="netPill" style="display:none">⚠ 连线不稳</span>
   </div>
+  <div class="tiny muted-2" id="posVersion" style="text-align:right;margin:-6px 2px 6px"></div>
 
   <!-- ================= ① 点餐台 ================= -->
   <div id="stepKiosk">
@@ -46,7 +48,8 @@
         <span class="kb-count" id="kbCount">0</span>
         <span class="kb-text">这张单 <span class="kb-total" id="kbTotal">RM 0.00</span></span>
       </button>
-      <button class="kb-go" id="kioskTicketBtn">清单 TICKET</button>
+      <button class="kb-go" id="kioskTicketBtn">明细</button>
+      <button class="kb-go primary" id="kioskCheckoutBtn">结账 CHECKOUT</button>
     </div>
   </div>
 
@@ -106,6 +109,15 @@
       <button class="btn btn-secondary" id="manualBtn" style="width:auto;padding:0 16px">输入</button>
     </div>
 
+    <div class="a-divider"></div>
+    <div class="a-sub">顾客没带手机 / 没会员码？用手机号找会员（会写 AUDIT）</div>
+    <div class="row-between mt-8" style="gap:8px">
+      <input class="a-input" id="memberSearchInput" inputmode="tel"
+             placeholder="0123456789 / +60123456789" style="flex:1 1 auto">
+      <button class="btn btn-secondary" id="memberSearchBtn" style="width:auto;padding:0 16px">找会员</button>
+    </div>
+    <div id="memberHits"></div>
+
     <button class="btn btn-ghost mt-16" id="backToQueueBtn" style="width:100%">← 回待进单 BACK</button>
   </div>
 
@@ -157,7 +169,7 @@
   <div class="pos-sheet-inner">
     <div class="ps-head">
       <div>
-        <div class="ps-title">清单 <span class="tiny muted-2">TICKET</span></div>
+        <div class="ps-title">② 结账 <span class="tiny muted-2">CHECKOUT</span></div>
         <div class="a-sub" id="ticketSub">—</div>
       </div>
       <button class="ps-close" id="ticketSheetClose">✕</button>
@@ -180,6 +192,14 @@
       <button class="pq" data-note="内用">内用 DINE-IN</button>
       <button class="pq" data-note="外带">外带 TAKEAWAY</button>
       <button class="pq" data-note="">清除 CLEAR</button>
+    </div>
+
+    <div class="a-sub" style="margin:10px 2px 4px">付款方式 PAYMENT</div>
+    <div class="ps-quick" id="payChips">
+      <button class="pq on" data-pay="CASH">现金 CASH</button>
+      <button class="pq" data-pay="CARD">刷卡 CARD</button>
+      <button class="pq" data-pay="DUITNOW">DuitNow QR</button>
+      <button class="pq" data-pay="COUNTER">柜台付 COUNTER</button>
     </div>
 
     <label class="ps-check">
@@ -211,10 +231,13 @@
     </div>
 
     <button class="big-action" id="saveTicketBtn">
-      记录单据 SAVE RECEIPT
-      <span class="ba-sub">进「待进单」→ 顾客出示会员码时才进分</span>
+      结账 · 记录单据 CHECKOUT
+      <span class="ba-sub">下一步：扫顾客会员码进分（顾客没带会员码也可以搜手机号）</span>
     </button>
-    <button class="chip ps-clear" id="ticketClearBtn">清空清单 CLEAR TICKET</button>
+    <div class="row-between mt-8" style="gap:8px">
+      <button class="btn btn-ghost" id="sheetAddMoreBtn" style="flex:1 1 auto">＋ 加商品 ADD</button>
+      <button class="chip ps-clear" id="ticketClearBtn">清空 CLEAR</button>
+    </div>
   </div>
 </div>
 

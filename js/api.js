@@ -76,6 +76,85 @@ var API = (function () {
 
   var memCache = {};
 
+  /* ----------------------------------------------------------
+     这些动作本来就会慢（Apps Script 冷启动 + 扫整张表）：
+     给它们更长的 timeout，不要 15 秒就判 NETWORK_ERROR。
+     ---------------------------------------------------------- */
+  var TIMEOUT_MS = {
+    getActiveOrders:      30000,
+    getDashboard:         30000,
+    getPosQueue:          30000,
+    getAdminMenu:         30000,
+    getMenu:              30000,
+    getAppOrder:          30000,
+    getMyOrders:          30000,
+    getOrderHistory:      30000,
+    getPointHistory:      30000,
+    getWalletHistory:     30000,
+    listClaims:           30000,
+    searchCustomer:       30000,
+    getCustomerHistory:   30000,
+    getSalesAnalytics:    40000,
+    getProductAnalytics:  40000,
+    getMemberAnalytics:   40000
+  };
+
+  /* 轮询用：快取比这个还新就不要再问后端（省掉一半以上的请求 → 现场稳很多） */
+  var FRESH_MS = {
+    getActiveOrders: 6000,
+    getPosQueue:     6000,
+    getAppOrder:     4000,
+    getMyOrders:    15000,
+    getDashboard:   10000,
+    listClaims:     10000
+  };
+
+  /* 只读动作：失败可以自动重试（写动作绝不重试，避免重复下单 / 重复进分） */
+  var RETRY_SAFE = {
+    ping: 1, getPublicSettings: 1, getProfile: 1, getMembership: 1, getPoints: 1,
+    getPointHistory: 1, getWallet: 1, getWalletHistory: 1, getPromotions: 1,
+    getOrderHistory: 1, getMenu: 1, getCategories: 1, getProducts: 1, getProduct: 1,
+    getProductOptions: 1, getMyOrders: 1, getAppOrder: 1, getIncomingOrders: 1,
+    getActiveOrders: 1, getDashboard: 1, getClaim: 1, listClaims: 1,
+    getCustomer: 1, getCustomerHistory: 1, searchCustomer: 1, getOrders: 1,
+    getSettings: 1, getPromotionsAdmin: 1, getAuditLogs: 1, listStaff: 1,
+    getSalesAnalytics: 1, getProductAnalytics: 1, getMemberAnalytics: 1,
+    getAdminMenu: 1, getPosQueue: 1, getStaffSession: 1
+  };
+
+  var RETRY_DELAYS = [800, 2200];        // 最多重试 2 次
+
+  /* ----------------------------------------------------------
+     连线状态：页面可以用 API.onNetwork(fn) 显示「连线不稳」提示
+       'ok'      → 刚刚成功
+       'slow'    → 第一次失败，正在重试
+       'offline' → 重试用完了（有快取就继续显示上次资料）
+     ---------------------------------------------------------- */
+  var netState = 'ok';
+  var netSubs = [];
+
+  function netEmit(state) {
+    if (state === netState) return;
+    netState = state;
+    for (var i = 0; i < netSubs.length; i++) {
+      try { netSubs[i](state); } catch (e) {}
+    }
+  }
+
+  function onNetwork(fn) {
+    netSubs.push(fn);
+    try { fn(netState); } catch (e) {}
+    return function () {
+      var i = netSubs.indexOf(fn);
+      if (i >= 0) netSubs.splice(i, 1);
+    };
+  }
+
+  function isNetworkError(res) {
+    return !!res && !res.success && res.error &&
+      (res.error.code === 'NETWORK_ERROR' || res.error.code === 'SERVER_BUSY');
+  }
+
   var SCOPE_KEY = 'yt_cache_scope';
 
   /**
@@ -108,7 +187,7 @@ var API = (function () {
     try { return JSON.parse(JSON.stringify(value)); } catch (e) { return value; }
   }
 
-  function cacheRead(key, ttlMs) {
+  function cacheReadAge(key, ttlMs) {
     var hit = memCache[key];
     if (!hit) {
       try {
@@ -117,9 +196,15 @@ var API = (function () {
       } catch (e) { hit = null; }
     }
     if (!hit || typeof hit.t !== 'number') return null;
-    if (ttlMs && (Date.now() - hit.t) > ttlMs) return null;
+    var age = Date.now() - hit.t;
+    if (ttlMs && age > ttlMs) return null;
     memCache[key] = hit;
-    return clone(hit.v);
+    return { v: clone(hit.v), age: age };
+  }
+
+  function cacheRead(key, ttlMs) {
+    var hit = cacheReadAge(key, ttlMs);
+    return hit ? hit.v : null;
   }
 
   function cacheWrite(key, value) {
@@ -163,7 +248,9 @@ var API = (function () {
    * 页面写 .then(render) 就同时吃到两者。
    */
   function liveCall(action, data, options, key, ttl) {
-    var cached = cacheRead(key, ttl);
+    var hit = cacheReadAge(key, ttl);
+    var cached = hit ? hit.v : null;
+    var freshFor = options.freshMs || FRESH_MS[action] || 0;
     var subs = [];
     var started = false;
 
@@ -177,10 +264,21 @@ var API = (function () {
 
     function refresh() {
       if (started) return;
+      /* 轮询：快取比设定还新就不要打扰后端（现场一半以上的请求可以省掉） */
+      if (!options.force && hit && freshFor > 0 && hit.age < freshFor) return;
       started = true;
       send(action, data, options).then(function (res) {
-        if (res.success) cacheWrite(key, res.data);
-        else if (res.error && res.error.code === 'INVALID_SESSION') cacheDrop(action, data);
+        if (res.success) {
+          cacheWrite(key, res.data);
+          emit(res);
+          return;
+        }
+        if (res.error && res.error.code === 'INVALID_SESSION') cacheDrop(action, data);
+        /* 连线失败但有上次的资料 → 继续用，并标记 stale，不要整页变错误 */
+        if (cached && isNetworkError(res)) {
+          emit({ success: true, data: cached, error: null, cached: true, stale: true });
+          return;
+        }
         emit(res);
       });
     }
@@ -212,6 +310,82 @@ var API = (function () {
     return send(action, data, options);
   }
 
+  /* ----------------------------------------------------------
+     同时最多 2 个请求（Apps Script 一次只能跑一个，硬塞只会互相拖慢），
+     其余排队。再加上「完全相同的请求只送一次」的合并。
+     ---------------------------------------------------------- */
+  var MAX_CONCURRENT = 2;
+  var running = 0;
+  var waiting = [];
+  var inflight = {};
+
+  function pump() {
+    while (running < MAX_CONCURRENT && waiting.length) {
+      waiting.shift()();
+    }
+  }
+
+  function withSlot(task) {
+    return new Promise(function (resolve) {
+      waiting.push(function () {
+        running += 1;
+        task().then(function (v) { running -= 1; pump(); resolve(v); },
+                    function () { running -= 1; pump(); resolve({ success: false, data: null, error: NETWORK_ERROR }); });
+      });
+      pump();
+    });
+  }
+
+  function sleep(ms) {
+    return new Promise(function (r) { setTimeout(r, ms); });
+  }
+
+  /** 送一次（不含重试） */
+  function attempt(payload, timeoutMs) {
+    var action = payload.action;
+    return withSlot(function () {
+      return fetch(YETIPSY_CONFIG.getApiUrl(), {
+        method: 'POST',
+        redirect: 'follow',
+        // 使用 text/plain 避免 CORS 预检（Google Apps Script 需要）
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(payload),
+        signal: (function () {
+          if (!window.AbortController) return undefined;
+          var controller = new AbortController();
+          setTimeout(function () { controller.abort(); }, timeoutMs);
+          return controller.signal;
+        })()
+      })
+        .then(function (res) {
+          if (!res.ok) throw new Error('HTTP ' + res.status);
+          return res.text();
+        })
+        .then(function (text) {
+          var json;
+          try {
+            json = JSON.parse(text);
+          } catch (e) {
+            log('[API] bad json:', text.slice(0, 200));
+            throw new Error('BAD_JSON');
+          }
+          log('[API] response', action, json);
+          return normalize(json);
+        })
+        .catch(function (err) {
+          log('[API] error', action, err);
+          return { success: false, data: null, error: NETWORK_ERROR };
+        });
+    });
+  }
+
+  /**
+   * 主请求函数
+   * @param {string} action
+   * @param {object} data
+   * @param {object} options  { sessionType: 'customer'|'staff'|null, silent: bool,
+   *                            cache: bool, timeoutMs: number, retry: bool }
+   */
   function send(action, data, options) {
     options = options || {};
     var sessionType = options.sessionType || 'auto';
@@ -240,38 +414,40 @@ var API = (function () {
 
     log('[API]', action, payload);
 
-    return fetch(YETIPSY_CONFIG.getApiUrl(), {
-      method: 'POST',
-      redirect: 'follow',
-      // 使用 text/plain 避免 CORS 预检（Google Apps Script 需要）
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(payload),
-      signal: (function () {
-        if (!window.AbortController) return undefined;
-        var controller = new AbortController();
-        setTimeout(function () { controller.abort(); }, YETIPSY_CONFIG.API_TIMEOUT_MS || 15000);
-        return controller.signal;
-      })()
-    })
-      .then(function (res) {
-        if (!res.ok) throw new Error('HTTP ' + res.status);
-        return res.text();
-      })
-      .then(function (text) {
-        var json;
-        try {
-          json = JSON.parse(text);
-        } catch (e) {
-          log('[API] bad json:', text.slice(0, 200));
-          throw new Error('BAD_JSON');
+    var timeoutMs = options.timeoutMs || TIMEOUT_MS[action] ||
+                    YETIPSY_CONFIG.API_TIMEOUT_MS || 20000;
+    var retries = (RETRY_SAFE[action] && options.retry !== false) ? RETRY_DELAYS.length : 0;
+
+    /* 同一个请求（同 action + 同参数）已经在飞 → 共用它的结果，
+       不要重复问后端（页面载入 + 预载 + 轮询常常会撞在一起） */
+    var key = action + '|' + JSON.stringify(data || {});
+    if (retries > 0 && inflight[key]) return inflight[key];
+
+    var run = function (left, attemptNo) {
+      return attempt(payload, timeoutMs).then(function (res) {
+        if (res.success) {
+          netEmit('ok');
+          return res;
         }
-        log('[API] response', action, json);
-        return normalize(json);
-      })
-      .catch(function (err) {
-        log('[API] error', action, err);
-        return { success: false, data: null, error: NETWORK_ERROR };
+        if (isNetworkError(res) && left > 0) {
+          netEmit('slow');
+          var wait = RETRY_DELAYS[Math.min(attemptNo - 1, RETRY_DELAYS.length - 1)];
+          log('[API] retry #' + attemptNo + ' in ' + wait + 'ms:', action);
+          return sleep(wait).then(function () { return run(left - 1, attemptNo + 1); });
+        }
+        if (isNetworkError(res)) netEmit('offline');
+        else netEmit('ok');                    // 业务错误代表连线是好的
+        return res;
       });
+    };
+
+    var promise = run(retries, 1);
+    if (retries > 0) {
+      inflight[key] = promise;
+      promise.then(function () { delete inflight[key]; },
+                   function () { delete inflight[key]; });
+    }
+    return promise;
   }
 
   /** 统一响应结构 */
@@ -558,6 +734,16 @@ var API = (function () {
     },
 
     /**
+     * 顾客没有会员码（手机没电 / 没带）时：员工用手机号搜寻会员 →
+     * 当面核对 → 取得 verifyToken，之后 bindPosTicket 一样能进分。
+     * 后端会写 AUDIT（POS_VERIFY_MANUAL）；可用 Settings
+     * ALLOW_POS_MANUAL_VERIFY=FALSE 关掉。
+     */
+    posVerifyMember: function (customerId) {
+      return call('posVerifyMember', { customerId: customerId }, { sessionType: 'staff' });
+    },
+
+    /**
      * 扫过顾客会员码之后，把单据归给会员并进分。
      * 后端按 POINTS_PER_RM 与 REWARD_TIERS 自动发积分与 Reward（§57 §58），
      * 并按 §56 六小时内只算一次到店。
@@ -782,9 +968,54 @@ var API = (function () {
     prefetchJobs(STAFF_WARM, 'staff', true);
   }
 
+  /* ----------------------------------------------------------
+     轮询：上一次跑完才排下一次（绝不重叠），失败自动退避，
+     页面看不到时等 1 秒再看。页面用：
+       state.poll = API.poll(8, load)   /  state.poll.stop()
+     ---------------------------------------------------------- */
+  function poll(seconds, task) {
+    var stopped = false;
+    var timer = null;
+    var backoff = 1;
+
+    function schedule(ms) {
+      if (stopped) return;
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(run, ms);
+    }
+
+    function run() {
+      if (stopped) return;
+      if (document.hidden) { schedule(1000); return; }
+      var startedAt = Date.now();
+      Promise.resolve()
+        .then(function () { return task(); })
+        .then(function (res) {
+          var ok = !res || res.success !== false;
+          backoff = ok ? 1 : Math.min(backoff * 2, 8);
+          var tookSec = Math.round((Date.now() - startedAt) / 1000);
+          var wait = Math.max(seconds, tookSec + 1) * backoff * 1000;
+          schedule(wait);
+        }, function () {
+          backoff = Math.min(backoff * 2, 8);
+          schedule(seconds * backoff * 1000);
+        });
+    }
+
+    run();
+
+    return {
+      stop: function () { stopped = true; if (timer) clearTimeout(timer); },
+      kick: function () { stopped = false; backoff = 1; schedule(0); }
+    };
+  }
+
   return {
     call: call,
     callWithToast: callWithToast,
+    poll: poll,
+    onNetwork: onNetwork,
+    netState: function () { return netState; },
     cache: {
       peek: cachePeek,
       drop: cacheDrop,

@@ -22,6 +22,7 @@ var ADMIN_ORDERBOARD = (function () {
     pollSeconds: 8,
     muted: false,
     loading: true,
+    loadFailed: false,
     errorCode: null,
     knownIds: null,       // 第一次载入不响铃，否则一开页面就吵
     busy: {},             // appOrderId → true，避免连点
@@ -29,12 +30,14 @@ var ADMIN_ORDERBOARD = (function () {
     laneSig: {}           // 每一栏的内容指纹：没变就不重画（现场反应快很多）
   };
 
-  var pollTimer = null;
+  var poller = null;
   var tickTimer = null;
   var beepCtx = null;
 
   function init() {
     state.muted = localStorage.getItem(MUTE_KEY) === '1';
+    /* 连线提示 = 这一页自己的载入结果 + 全局网络状态（见 UI.netPill） */
+    API.onNetwork(function (st) { UI.netPill(state.loadFailed, st); });
     bindEvents();
     bindBoard();
     renderMuteBtn();
@@ -49,7 +52,10 @@ var ADMIN_ORDERBOARD = (function () {
     if (pause) pause.addEventListener('click', onPauseToggle);
 
     var refresh = document.getElementById('refreshBtn');
-    if (refresh) refresh.addEventListener('click', function () { load(false); });
+    if (refresh) refresh.addEventListener('click', function () {
+      API.cache.drop('getActiveOrders', {});       // 手动刷新：不要吃快取
+      load(false);
+    });
 
     /* §46 页面看不到就不要轮询，也不要响铃 */
     document.addEventListener('visibilitychange', function () {
@@ -67,11 +73,20 @@ var ADMIN_ORDERBOARD = (function () {
       if (!res.success) {
         state.errorCode = res.error.code;
         state.loading = false;
+        /* 已经有资料就继续显示（轮询失败很正常），只标连线不稳 */
+        if (state.lanes && allIds().length) {
+          /* 已经有资料：不清空、也不跳错误页，只显示连线提示 */
+          state.loadFailed = true;
+          UI.netPill(true);
+          return res;
+        }
         render();
         return res;
       }
       state.errorCode = null;
       state.loading = false;
+      state.loadFailed = false;
+      UI.netPill(false, 'ok');
       state.lanes = res.data.lanes;
       state.today = res.data.today;
       state.ordering = res.data.ordering;
@@ -104,13 +119,10 @@ var ADMIN_ORDERBOARD = (function () {
     return out;
   }
 
-  /* §46 轮询 */
+  /* §46 轮询：上一次跑完才排下一次（不重叠）+ 失败自动退避 */
   function startPolling() {
-    if (pollTimer) clearInterval(pollTimer);
-    pollTimer = setInterval(function () {
-      if (document.hidden) return;
-      load(false);
-    }, Math.max(5, state.pollSeconds) * 1000);
+    if (poller) return;
+    poller = API.poll(Math.max(5, state.pollSeconds), function () { return load(false); });
   }
 
   /* §49 等待秒数每秒 +1（基准来自后端的 waitingSeconds） */
@@ -127,7 +139,7 @@ var ADMIN_ORDERBOARD = (function () {
   }
 
   function stopTimers() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (poller) { poller.stop(); poller = null; }
     if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   }
 
@@ -353,7 +365,10 @@ var ADMIN_ORDERBOARD = (function () {
         '<div class="a-sub">错误码 ' + UI.esc(state.errorCode) + '</div>' +
         '<button class="btn btn-secondary mt-16" id="retryBtn">重试 RETRY</button></div>';
       var retry = document.getElementById('retryBtn');
-      if (retry) retry.addEventListener('click', function () { load(false); });
+      if (retry) retry.addEventListener('click', function () {
+        API.cache.drop('getActiveOrders', {});
+        load(true);
+      });
       return;
     }
 
@@ -482,7 +497,7 @@ var ADMIN_ORDERBOARD = (function () {
       salesToday: state.today ? state.today.sales : 0,
       pollSeconds: state.pollSeconds,
       muted: state.muted,
-      polling: !!pollTimer,
+      polling: !!poller,
       paused: !!(state.ordering && state.ordering.paused)
     };
   }
