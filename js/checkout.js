@@ -5,11 +5,12 @@
 
    流程：Cart → createCheckoutQuote() → 显示确认 → PLACE ORDER
 
-   2.1.12 起有两种呈现方式（同一套逻辑）：
+   2.1.12 起有两种呈现方式（同一套逻辑）；2.1.13 起抽屉改成小的：
    · 页面：checkout.html（桌牌 QR 的 ?table= 连结还是走这里）
-   · 大抽屉：cart.html 底部滑上来的结帐抽屉（顾客最常走的路）
-     抽屉不用换页 → 不会重新载入脚本；而且购物车一有变动就先在
-     背景把报价算好（见 prefetch），所以按「结帐」几乎是立刻打开。
+   · 小抽屉：cart.html 底部滑上来的结帐抽屉（顾客最常走的路）
+     抽屉不用换页 → 不会重新载入脚本；购物车一有变动就先在背景把
+     报价算好（见 prefetch），预载结果还会存进 sessionStorage，
+     所以「酒单 → 购物车 → 结帐」一路都不会再等后端。
 
    规则：
    · 页面上每个金额都来自后端 Quote，前端不做任何价格判断（§41/§42）
@@ -37,14 +38,54 @@ var CHECKOUT = (function () {
   var host = { mode: 'page' };
 
   /**
-   * 预先算好的报价（2.1.12）
+   * 预先算好的报价（2.1.12 起；2.1.13 会跨页沿用）
    * ---------------------------------------------------------
    * 购物车一有变动就在背景呼叫 createCheckoutQuote，
    * 报价只存在后端的快取里（不会写 Sheet），所以多算几次没有负担。
    * 顾客按「结帐」时，如果购物车没变、报价还没过期 → 直接用，
    * 打开抽屉就是「已经有金额」的状态，不用等。
    */
-  var memo = { sig: '', quote: null, at: 0 };
+  var memo = { sig: '', quote: null, at: 0, cid: '' };
+  var MEMO_KEY = 'yt_quote_memo_v1';       // 只活在这次浏览（分页 / 关掉就没了）
+  var soonTimer = null;
+
+  function storage() {
+    try { return window.sessionStorage; } catch (e) { return null; }
+  }
+
+  function memoLoad() {
+    var st = storage();
+    if (!st) return;
+    try {
+      var raw = st.getItem(MEMO_KEY);
+      if (!raw) return;
+      var m = JSON.parse(raw);
+      if (m && m.quote && m.sig) memo = m;
+    } catch (e) {}
+  }
+
+  function memoSave() {
+    var st = storage();
+    if (!st) return;
+    try {
+      if (memo.quote && memo.sig) st.setItem(MEMO_KEY, JSON.stringify(memo));
+      else st.removeItem(MEMO_KEY);
+    } catch (e) {}
+  }
+
+  function memoClear() {
+    memo = { sig: '', quote: null, at: 0, cid: '' };
+    memoSave();
+  }
+
+  function currentCustomerId() {
+    try {
+      var p = AUTH.getCustomerProfile();
+      return (p && p.customerId) || '';
+    } catch (e) { return ''; }
+  }
+
+  memoLoad();                              // 上一页（酒单 / 购物车）算好的报价直接接手
 
   function init() {
     if (!AUTH.isCustomerLoggedIn()) { AUTH.requireCustomer(); return; }
@@ -97,18 +138,30 @@ var CHECKOUT = (function () {
   }
 
   /* ---------------------------------------------------------
-     报价预载（2.1.12 让「结帐」不用等）
+     报价预载（让「结帐」不用等；2.1.13 起跨页沿用）
      --------------------------------------------------------- */
+
+  /**
+   * 预载时用的取餐方式：还没选桌号就先当作「柜台自取」
+   * （抽屉打开时默认也是柜台，见 initSheet），这样预载的金额跟
+   * 顾客一打开看到的一定一致。
+   */
+  function warmTarget() {
+    if (state.orderType === 'TABLE' && !state.tableNumber) return { t: 'COUNTER', n: '' };
+    return { t: state.orderType, n: state.tableNumber };
+  }
 
   /** 现在购物车 + 取餐方式 + 钱包选择的指纹：变了就代表报价要重算 */
   function cartSig() {
     try {
+      var t = warmTarget();
       return JSON.stringify({
         items: CART.items().map(function (it) {
           return [it.productId, it.quantity, (it.options || []).map(function (o) { return o.optionId; }), it.note || ''];
         }),
-        t: state.orderType,
-        table: state.tableNumber,
+        cid: currentCustomerId(),
+        t: t.t,
+        table: t.n,
         w: !!state.useWallet
       });
     } catch (e) { return ''; }
@@ -120,28 +173,43 @@ var CHECKOUT = (function () {
    */
   function prefetch() {
     if (!AUTH.isCustomerLoggedIn()) return;
-    if (!CART.items().length) { memo = { sig: '', quote: null, at: 0 }; return; }
-    if (state.orderType === 'TABLE' && !state.tableNumber) return;
+    if (!CART.items().length) { memoClear(); return; }
 
     var sig = cartSig();
     if (memo.sig === sig && memo.quote) return;          // 已经算过了
 
-    API.customer.createCheckoutQuote(quoteRequest()).then(function (res) {
-      if (!res.success) return;                          // 预载失败就算了，打开时再算一次
-      if (cartSig() !== sig) return;                     // 这中间购物车又变了 → 丢掉
-      memo = { sig: sig, quote: res.data, at: Date.now() };
-    });
+    var t = warmTarget();
+    API.customer.createCheckoutQuote(quoteRequest({ orderType: t.t, tableNumber: t.n }))
+      .then(function (res) {
+        if (!res.success) return;                        // 预载失败就算了，打开时再算一次
+        if (cartSig() !== sig) return;                   // 这中间购物车又变了 → 丢掉
+        memo = { sig: sig, quote: res.data, at: Date.now(), cid: currentCustomerId() };
+        memoSave();
+      });
+  }
+
+  /**
+   * 购物车一动就先预约预载（合并 400ms 内连续的操作）。
+   * 酒单页（加购物车）跟购物车页都用这一个，不必各自写计时器。
+   */
+  function prefetchSoon() {
+    if (soonTimer) clearTimeout(soonTimer);
+    soonTimer = setTimeout(function () {
+      soonTimer = null;
+      prefetch();
+    }, 400);
   }
 
   /** 购物车变了：把预载的报价丢掉（马上会再算一次） */
   function invalidate() {
-    memo = { sig: '', quote: null, at: 0 };
+    memoClear();
   }
 
   /** 预载的报价还能用吗？（没过期 + 购物车没变） */
   function memoQuote() {
     if (!memo.quote) return null;
     if (memo.sig !== cartSig()) return null;
+    if ((memo.cid || '') !== currentCustomerId()) return null;   // 换会员登入 → 不沿用别人的报价
     var minutes = Number(memo.quote.expiresInMinutes) || 0;
     if (minutes <= 0) return null;
     var ageMin = (Date.now() - memo.at) / 60000;
@@ -149,7 +217,8 @@ var CHECKOUT = (function () {
     return memo.quote;
   }
 
-  function quoteRequest() {
+  function quoteRequest(override) {
+    var t = override || {};
     return {
       items: CART.items().map(function (it) {
         return {
@@ -159,8 +228,8 @@ var CHECKOUT = (function () {
           note: it.note || ''
         };
       }),
-      orderType: state.orderType,
-      tableNumber: state.tableNumber,
+      orderType: t.orderType || state.orderType,
+      tableNumber: t.tableNumber !== undefined ? t.tableNumber : state.tableNumber,
       useWallet: state.useWallet,
       customerNote: state.note
     };
@@ -211,7 +280,8 @@ var CHECKOUT = (function () {
       }
       state.quote = res.data;
       state.quoteSig = cartSig();
-      memo = { sig: state.quoteSig, quote: res.data, at: Date.now() };
+      memo = { sig: state.quoteSig, quote: res.data, at: Date.now(), cid: currentCustomerId() };
+      memoSave();
       render();
     });
   }
@@ -242,6 +312,7 @@ var CHECKOUT = (function () {
       paymentMethod: 'COUNTER'                        // §14 第一阶段柜台付款
     }).then(function (res) {
       state.placing = false;
+      if (res.success) invalidate();           // 这张报价用掉了 → 别留给下一张单
       if (!res.success) {
         setPlacing(false);
         /* Quote 过期 / 价格变动 → 重新报价，不要静默改金额 */
@@ -638,6 +709,7 @@ var CHECKOUT = (function () {
     closeSheet: closeSheet,
     isSheetOpen: isSheetOpen,
     prefetch: prefetch,
+    prefetchSoon: prefetchSoon,
     invalidate: invalidate,
     loadQuote: loadQuote,
     debugState: debugState

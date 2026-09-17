@@ -12,17 +12,24 @@
 
 var ORDER = (function () {
 
+  /* 2.1.13：中间不再有「已确认」这一步 —— 员工按一下就是制作中。
+     后端如果还停在 CONFIRMED，对顾客来说就是「制作中」。 */
   var STEPS = [
     { key: 'SUBMITTED', zh: '已收到订单', en: 'ORDER RECEIVED' },
-    { key: 'CONFIRMED', zh: '已确认',       en: 'CONFIRMED' },
     { key: 'PREPARING', zh: '制作中',       en: 'PREPARING' },
     { key: 'READY',     zh: '可以取酒',     en: 'READY' },
     { key: 'COMPLETED', zh: '已完成',       en: 'COMPLETED' }
   ];
 
+  /** 后端状态 → 进度条上的那一步（CONFIRMED 并进 PREPARING） */
+  var STEP_OF_STATUS = {
+    SUBMITTED: 'SUBMITTED', CONFIRMED: 'PREPARING', PREPARING: 'PREPARING',
+    READY: 'READY', COMPLETED: 'COMPLETED'
+  };
+
   var STATUS_LABEL = {
     SUBMITTED: { zh: '已提交', en: 'SUBMITTED' },
-    CONFIRMED: { zh: '已确认', en: 'CONFIRMED' },
+    CONFIRMED: { zh: '制作中', en: 'PREPARING' },
     PREPARING: { zh: '制作中', en: 'PREPARING' },
     READY:     { zh: '可以取酒', en: 'READY' },
     COMPLETED: { zh: '已完成', en: 'COMPLETED' },
@@ -206,7 +213,8 @@ var ORDER = (function () {
     /* 进度（§17） */
     var progress = '';
     if (o.orderStatus !== 'CANCELLED') {
-      var reached = STEPS.map(function (s) { return s.key; }).indexOf(o.orderStatus);
+      var reached = STEPS.map(function (s) { return s.key; })
+        .indexOf(STEP_OF_STATUS[o.orderStatus] || o.orderStatus);
       progress = '<div class="card">' + STEPS.map(function (s, i) {
         var done = i < reached;
         var active = i === reached;

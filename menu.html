@@ -9,7 +9,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
 <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
-<link rel="stylesheet" href="css/app.css?v=2.1.12">
+<link rel="stylesheet" href="css/app.css?v=2.1.13">
 </head>
 <body>
 
@@ -94,12 +94,32 @@
 
 </div>
 
-<script src="js/config.js?v=2.1.12"></script>
-<script src="js/api.js?v=2.1.12"></script>
-<script src="js/auth.js?v=2.1.12"></script>
-<script src="js/ui.js?v=2.1.12"></script>
-<script src="js/cart.js?v=2.1.12"></script>
-<script src="js/menu.js?v=2.1.12"></script>
+<!-- ============ 结帐小抽屉（不换页，金额已经预载好） ============ -->
+<div class="sheet" id="checkoutSheet" style="display:none">
+  <div class="sheet-backdrop" id="sheetBackdrop"></div>
+  <div class="sheet-inner" role="dialog" aria-modal="true" aria-label="结帐 CHECKOUT">
+    <div class="sheet-head">
+      <div class="sheet-titles">
+        <div class="bilingual-zh" style="font-size:17px">确认订单</div>
+        <div class="bilingual-en">CONFIRM ORDER</div>
+        <div class="tiny" style="color:var(--gold);margin-top:3px" id="sheetSubtitle"></div>
+      </div>
+      <button class="sheet-close" id="sheetCloseBtn" aria-label="关闭 CLOSE">✕</button>
+    </div>
+    <div class="sheet-body" id="checkoutBody"></div>
+    <div class="sheet-foot" id="sheetCta">
+      <button class="btn btn-primary" id="placeOrderBtn" disabled><span>PLACE ORDER</span></button>
+    </div>
+  </div>
+</div>
+
+<script src="js/config.js?v=2.1.13"></script>
+<script src="js/api.js?v=2.1.13"></script>
+<script src="js/auth.js?v=2.1.13"></script>
+<script src="js/ui.js?v=2.1.13"></script>
+<script src="js/cart.js?v=2.1.13"></script>
+<script src="js/checkout.js?v=2.1.13"></script>
+<script src="js/menu.js?v=2.1.13"></script>
 <script>
   MENU.init();
 </script>

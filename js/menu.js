@@ -54,6 +54,12 @@ var MENU = (function () {
     el.cartBody   = document.getElementById('cartSheetBody');
 
     bindEvents();
+
+    /* 结帐小抽屉：先把取餐方式设好 + 开始预载报价（顾客还在看酒单） */
+    if (window.CHECKOUT && CHECKOUT.initSheet && document.getElementById('checkoutSheet')) {
+      CHECKOUT.initSheet();
+    }
+
     renderCartBar();
 
     /* ★ 先用快取画一次（如果有），画面立刻有东西；后端回来再更新一次 */
@@ -89,6 +95,7 @@ var MENU = (function () {
       UI.confirmDialog('清空购物车？', 'Clear the whole cart?', '清空 CLEAR').then(function (yes) {
         if (!yes) return;
         CART.clear();
+        if (window.CHECKOUT && CHECKOUT.invalidate) CHECKOUT.invalidate();   // 空的购物车没有报价
         renderCart();
         renderCartBar();
         UI.toast('购物车已清空', 'success');
@@ -539,6 +546,17 @@ var MENU = (function () {
     addToCart(p, [], 1, '', Number(p.price) || 0);
   }
 
+  /**
+   * 2.1.13：顾客还在酒单页就把「结帐金额」算好（存在 sessionStorage），
+   * 到购物车页 / 打开结帐抽屉就是现成的，不用再等后端。
+   */
+  function warmQuote() {
+    try {
+      if (!window.CHECKOUT || !CHECKOUT.prefetchSoon) return;
+      CHECKOUT.prefetchSoon();               // 400ms 后再算，连续加购只算最后一次
+    } catch (e) {}
+  }
+
   /** unitPriceSen 由呼叫端算好（含规格加价），这样购物车条显示的金额才会跟结帐一致 */
   function addToCart(p, options, qty, note, unitPriceSen) {
     if (state.ordering && state.ordering.open === false) {
@@ -561,6 +579,7 @@ var MENU = (function () {
     closeSheets();
     renderCartBar();
     renderCart();
+    warmQuote();
     UI.toast('已加入 · ' + (p.nameZH || p.nameEN), 'success');
   }
 
@@ -583,6 +602,7 @@ var MENU = (function () {
   }
 
   function openCart() {
+    warmQuote();
     renderCart();
     openSheets(el.cartSheet);
   }
@@ -655,11 +675,19 @@ var MENU = (function () {
   function refreshCartUi() {
     renderCart();
     renderCartBar();
+    warmQuote();
   }
 
   function goCheckout() {
     if (!CART.count()) { UI.toast('购物车是空的 / Cart is empty', 'error'); return; }
-    UI.go('checkout.html');
+    /* 2.1.13：不换页 —— 关掉购物车抽屉，直接滑出结帐小抽屉。
+       报价在加购的时候就已经算好（warmQuote），所以是立刻就有金额。 */
+    if (window.CHECKOUT && CHECKOUT.openSheet && document.getElementById('checkoutSheet')) {
+      closeSheets();
+      CHECKOUT.openSheet();
+      return;
+    }
+    UI.go('cart.html');
   }
 
   /* ---------------------------------------------------------

@@ -4,7 +4,8 @@
    员工订单看板（§19 §20 §21 §46 §48 §49 §65）
 
    规则：
-   · §19 三栏 NEW / PREPARING / READY，大按钮、一次点击就换状态
+   · §19 看板三栏 NEW / PREPARING / READY，大按钮、一次点击就换状态
+     （2.1.13：不再有「已确认」栏 —— 按一下就是制作中）
    · §46 每 ORDER_POLL_SECONDS（预设 8 秒）刷新，而且只在页面开着时刷新
    · §48 新订单要有声音，但必须可以 MUTE（员工整晚开着这页）
    · §49 等待时间只用后端的 waitingSeconds（CreatedAt 算的）往上加秒
@@ -35,12 +36,26 @@ var ADMIN_ORDERBOARD = (function () {
        expect     = 我们刚把这张单放到哪一栏（后端旧资料不许把它搬回去） */
     mutationAt: 0,
     mutating: 0,
-    expect: {}
+    expect: {},
+    autoPushed: {}        // 2.1.13：残留的 CONFIRMED 只自动推一次
   };
 
   /* 状态高低顺序：数字大的比较新。后端回来的比我们刚才做的旧 → 不采信 */
   var RANK = { SUBMITTED: 0, CONFIRMED: 1, PREPARING: 2, READY: 3, COMPLETED: 4, CANCELLED: 4 };
   var LANE_OF_STATUS = { SUBMITTED: 'NEW', CONFIRMED: 'CONFIRMED', PREPARING: 'PREPARING', READY: 'READY' };
+
+  /**
+   * 2.1.13：看板不再有「已确认」这一栏
+   * ---------------------------------------------------------
+   * 员工的流程是「按确认 → 直接制作中」，中间那个「已确认」状态对现场
+   * 没有意义，还会让卡片停在那里等第二次点击。所以画面上只有
+   * 新订单 → 制作中 → 可取酒；后端万一还停在 CONFIRMED（旧版
+   * Apps Script、或之前留下的单），卡片就并进「制作中」栏，
+   * 并按它真正的状态给「开始制作 START」按钮（不是「做好了」）。
+   */
+  var FOLD_LANE = { CONFIRMED: 'PREPARING' };
+  var LANE_ORDER = ['NEW', 'PREPARING', 'CONFIRMED', 'READY'];   // 折叠时 PREPARING 在前
+  function displayLane(key) { return FOLD_LANE[key] || key; }
   var GUARD_MS = 25000;    // 这么久的「保护期」内不让旧资料把卡片搬回去
 
   var poller = null;
@@ -138,6 +153,7 @@ var ADMIN_ORDERBOARD = (function () {
       }
 
       render();
+      pushConfirmed();          // 有单还停在「已确认」→ 自动帮它进制作中
       startPolling();
       startTick();
       return res;
@@ -389,7 +405,29 @@ var ADMIN_ORDERBOARD = (function () {
     state.ticking = 0;
     state.knownIds = allIds();               // 自己刚处理过的单不算「新订单」
     render();                                // 只有内容真的变的栏位会重画
+    pushConfirmed();
     return true;
+  }
+
+  /**
+   * 2.1.13：后端若有单停在「已确认」（旧版 Apps Script 没跟着推一步），
+   * 看板自己帮它推到「制作中」—— 每张单只推一次，后端不支援就留按钮给员工。
+   */
+  function pushConfirmed() {
+    if (state.mutating) return;
+    (state.lanes.CONFIRMED || []).forEach(function (o) {
+      var id = o.appOrderId;
+      if (!id || state.autoPushed[id]) return;
+      state.autoPushed[id] = true;
+      API.staff.startPreparing(id).then(function (res) {
+        if (!res.success) return;                    // 旧后端没有这个 action → 员工自己按
+        dropOrdersCache();
+        if (applySnapshot(res.data && res.data.snapshot)) return;
+        state.expect[id] = { status: 'PREPARING', at: Date.now() };
+        state.laneSig = {};
+        load(false);
+      });
+    });
   }
 
   function act(appOrderId, action, label) {
@@ -549,10 +587,19 @@ var ADMIN_ORDERBOARD = (function () {
 
   var LANES = [
     { key: 'NEW',       zh: '新订单',   en: 'NEW',       accent: 'var(--a-gold)' },
-    { key: 'CONFIRMED', zh: '已确认',   en: 'CONFIRMED', accent: 'var(--a-line)' },
     { key: 'PREPARING', zh: '制作中',   en: 'PREPARING', accent: 'var(--a-line)' },
     { key: 'READY',     zh: '可取酒',   en: 'READY',     accent: '#7FC8A9' }
   ];
+
+  /** 画面上这一栏要显示的卡片（CONFIRMED 并进 PREPARING） */
+  function laneList(key) {
+    var out = [];
+    LANE_ORDER.forEach(function (k) {
+      if (displayLane(k) !== key) return;
+      (state.lanes[k] || []).forEach(function (o) { out.push(o); });
+    });
+    return out;
+  }
 
   function laneShell(lane) {
     return '<section class="lane" data-lane="' + lane.key + '">' +
@@ -648,7 +695,7 @@ var ADMIN_ORDERBOARD = (function () {
 
     /* 只有真的变动的栏位才重画 —— 每 8 秒整块重画会让现场感觉「卡」 */
     LANES.forEach(function (lane) {
-      var list = state.lanes[lane.key] || [];
+      var list = laneList(lane.key);
       var section = box.querySelector('.lane[data-lane="' + lane.key + '"]');
       if (!section) return;
 
@@ -726,10 +773,13 @@ var ADMIN_ORDERBOARD = (function () {
 
     /* §19 每栏一个主要动作，按钮大、一次点击 */
     var main = '';
-    if (lane === 'NEW') {
+    /* 卡片自己还停在 CONFIRMED（后端没跟上）→ 给「开始制作」，
+       不要因为在「制作中」栏里就给「做好了」。 */
+    var stage = o.orderStatus === 'CONFIRMED' ? 'CONFIRMED' : lane;
+    if (stage === 'NEW') {
       /* 2.1.10 员工要的是「确认后直接进制作」：一次按下去 = 接单 + 制作中 */
       main = '<button class="big-action" data-act="acceptAndStart">接单并制作 ACCEPT &amp; START</button>';
-    } else if (lane === 'CONFIRMED') {
+    } else if (stage === 'CONFIRMED') {
       main = '<button class="big-action" data-act="startPreparing">开始制作 START</button>';
     } else if (lane === 'PREPARING') {
       main = '<button class="big-action" data-act="markReady">做好了 READY</button>';
@@ -777,9 +827,10 @@ var ADMIN_ORDERBOARD = (function () {
       loading: state.loading,
       errorCode: state.errorCode,
       newCount: (state.lanes.NEW || []).length,
-      confirmedCount: (state.lanes.CONFIRMED || []).length,
-      preparingCount: (state.lanes.PREPARING || []).length,
+      confirmedCount: (state.lanes.CONFIRMED || []).length,   // 内部状态还在，只是并进「制作中」显示
+      preparingCount: laneList('PREPARING').length,
       readyCount: (state.lanes.READY || []).length,
+      laneKeys: LANES.map(function (l) { return l.key; }),
       totalToday: state.today ? state.today.orders : 0,
       salesToday: state.today ? state.today.sales : 0,
       pollSeconds: state.pollSeconds,

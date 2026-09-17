@@ -1229,3 +1229,27 @@ body.sheet-open { overflow: hidden; }
 .sheet-foot .btn { width: 100%; }
 /* 抽屉里的品项清单不要额外圆角外框，跟着抽屉走比较省空间 */
 .sheet-body .list { border-radius: 14px; overflow: hidden; }
+
+/* ------------------------------------------------------------
+   2.1.13：结帐用「小抽屉」
+   ------------------------------------------------------------
+   结帐要的是快，不是大 —— 金额通常早就预载好了，所以抽屉只占
+   屏幕下方一小块：滑上来、看到金额、按下去。品项清单放不下就
+   在里面滚动，不会把整页盖住。
+   ============================================================ */
+#checkoutSheet .sheet-inner {
+  max-height: 56vh;
+  padding: 8px 12px calc(10px + env(safe-area-inset-bottom, 0px));
+  border-radius: 18px 18px 0 0;
+}
+#checkoutSheet .sheet-inner::before {          /* 小抽屉的把手 */
+  content: ''; display: block; width: 34px; height: 4px; border-radius: 2px;
+  background: var(--line); margin: 0 auto 8px;
+}
+#checkoutSheet .sheet-head { margin-bottom: 6px; align-items: center; }
+#checkoutSheet .sheet-titles .bilingual-zh { font-size: 15px; }
+#checkoutSheet .sheet-body { padding-bottom: 2px; }
+#checkoutSheet .sheet-body .card { padding: 10px 12px; border-radius: 14px; }
+#checkoutSheet .list-item { padding: 7px 0; }
+#checkoutSheet .sheet-foot { padding-top: 8px; margin-top: 2px; }
+#checkoutSheet .sheet-foot .btn { padding: 13px; }

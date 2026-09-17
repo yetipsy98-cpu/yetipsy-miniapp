@@ -25,12 +25,11 @@ var CARTPAGE = (function () {
    */
   function schedulePrefetch() {
     if (typeof CHECKOUT === 'undefined' || !CHECKOUT.prefetch) return;
-    CHECKOUT.invalidate();
-    if (prefetchTimer) clearTimeout(prefetchTimer);
-    prefetchTimer = setTimeout(function () {
-      prefetchTimer = null;
-      CHECKOUT.prefetch();
-    }, 400);
+    /* 不在这里 invalidate：报价本身带着「购物车指纹」，
+       购物车没变（例如刚从酒单页带过来的预载报价）就该直接沿用。
+       真的变了的话，prefetch() 会自己重算。 */
+    if (CHECKOUT.prefetchSoon) CHECKOUT.prefetchSoon();
+    else CHECKOUT.prefetch();
   }
 
   function bindEvents() {
@@ -42,7 +41,7 @@ var CARTPAGE = (function () {
       UI.toast('已清空 / Cart cleared', 'success');
     });
 
-    /* ★ 按「结帐」开大抽屉，不换页（2.1.12）。
+    /* ★ 按「结帐」开小抽屉，不换页（2.1.13）。
        抽屉不存在时（万一）才退回旧结帐页。 */
     var checkout = document.getElementById('checkoutBtn');
     if (checkout) checkout.addEventListener('click', function () {
