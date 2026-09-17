@@ -202,19 +202,40 @@ npm run demo          # = node demo/server.js
 
 | 账号 | 角色 | 可以做 |
 |---|---|---|
-| `owner` | OWNER | 全部（含员工账号管理） |
-| `manager` | MANAGER | 设置、调整积分/钱包、Audit Log、取消订单 |
-| `staff` | STAFF | 建立 Claim、查找会员、钱包抵扣 |
+| `owner` | OWNER | 全部（含员工账号管理、业绩报表） |
+| `manager` | MANAGER | 设置、调整积分/钱包、Audit Log、取消订单、建立 Foodcourt Claim、改价 / 新增商品 |
+| `staff` | STAFF | 扫会员码进分、查找会员、钱包抵扣、菜单上下架 / 标售罄、订单看板与完成订单 |
 
-**完整 Demo 流程（对应企划书 §70 / §71）：**
+> ★ 权限是后端硬规定，不是画面隐藏。以 plain STAFF 实测：
+> `createClaim` / `updateProduct` / `getSalesAnalytics` 一律回 `UNAUTHORIZED`；
+> `grantOrder` / `redeemWallet` / `scanMemberCode` / `setProductStatus` /
+> `setProductAvailability` / `getIncomingOrders` / `completeOrder` 都放行。
+> 所以「建立 Claim」在 1.6 已经**不是** STAFF 能做的事（`Claims.gs` 里
+> `requireStaff(token, ['MANAGER','OWNER'])`）。
 
-1. 员工端 → `+ CREATE CLAIM` → 来源 `FOODCOURT`、单号 `FC8231`、金额 `86.00`
+**主流程 Demo：员工扫会员码进分（1.6 起的主要操作）**
+
+1. 会员端 → 输入手机号码（例如 `123456789`，会正规化成 `+60123456789`）→ 注册
+2. 会员端 → 底部 `会员码` → 画出一维条码 + QR（60 秒自动更换）
+3. 员工端（任一角色）→ 首页第一个大按钮 `SCAN & GRANT`
+4. **先输账单金额**（例如 `86.00`）→ `NEXT`
+5. 扫会员条码（或手动输入会员编号）→ `CONFIRM` → 出现 `+86 分`，
+   满 RM30 自动发一张 Reward
+
+> 顺序是「先输金额、后扫码」：扫码会同时发出一张 180 秒的验证码，
+> 先扫码再慢慢输金额会把那个窗口耗掉。
+
+**次要流程 Demo：Foodcourt Claim（限 Manager / Owner）**
+
+1. 员工端 → `MORE` → `Create Claim` → 来源 `FOODCOURT`、单号 `FC8231`、金额 `86.00`
 2. 画面出现 QR + Claim Code（例如 `Y7K2`）
-3. 会员端 → 输入任意手机号码（例如 `123456789`）→ 注册
-4. `CLAIM PURCHASE` → 输入 Code 或扫 QR → `CLAIM MY ORDER`
-5. 得到 `+86 POINTS` → `OPEN REWARD` → 奖励进 Wallet
-6. 员工端 → `MEMBERS` → 搜寻会员 → 输入账单 `60.00` → 系统算出可抵扣
+3. 会员端 → 右上角认领入口 → 输入 Code 或扫 QR → `CLAIM MY ORDER`
+4. 得到 `+86 POINTS` → `OPEN REWARD` → 奖励进 Wallet
+5. 员工端 → `SCAN & REDEEM` → 扫会员码 → 输入账单 `60.00` → 系统算出可抵扣
    上限（钱包余额 vs 20%）→ `CONFIRM REDEEM`
+
+> ★ 员工首页已经**没有** `+ CREATE CLAIM` 按钮了（1.6 起移到 `MORE`）。
+> 首页四个大按钮固定是：SCAN & GRANT / ORDER BOARD / MENU STATUS / SCAN & REDEEM。
 
 资料存在 `demo/demo-data.json`，删掉这个文件就会重置。
 
