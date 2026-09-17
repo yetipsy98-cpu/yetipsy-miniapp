@@ -14,10 +14,9 @@
 
 var ADMIN_REDEEM = (function () {
 
-  var detector = null;
-  var stream = null;
-  var rafId = null;
-  var scanning = false;
+  /* 相机 / 条码辨识交给共用模组 MEMBER_SCANNER（js/scanner.js），
+     这里只留业务状态。原本这四个变数与 startScan/stopScan/tick 是
+     js/admin-redeem.js 自己的一份副本，与共用模组逐行相同。 */
   var verifyTimer = null;
 
   var state = {
@@ -59,26 +58,12 @@ var ADMIN_REDEEM = (function () {
   }
 
   function showSupportInfo() {
-    var camera = hasCamera();
-    var hasDetector = typeof window.BarcodeDetector === 'function';
-
-    if (hasDetector) {
-      try {
-        detector = new window.BarcodeDetector({ formats: ['code_128', 'qr_code'] });
-      } catch (e) { detector = null; }
-    }
-
-    if (!camera) {
-      el.support.innerHTML = '⚠️ 这台装置没有相机，请用下面的「手动输入」。<br>' +
-        '<span class="muted-2">No camera on this device — use manual entry.</span>';
+    /* 支援说明与「有没有相机」都问共用模组，不再自己判断一遍 */
+    MEMBER_SCANNER.init();
+    el.support.innerHTML = MEMBER_SCANNER.supportText();
+    if (!MEMBER_SCANNER.hasCamera()) {
       document.getElementById('startScanBtn').style.display = 'none';
-      return;
     }
-
-    el.support.innerHTML = detector
-      ? '✅ 可以扫一维条码（Code128）与 QR。'
-      : 'ℹ️ 这台装置的浏览器不支援一维条码扫描（iOS Safari 就是这样），' +
-        '请顾客出示条码<b>下方的 QR</b> 给你扫。';
   }
 
   /* ---------------- 步骤切换 ---------------- */
@@ -90,83 +75,43 @@ var ADMIN_REDEEM = (function () {
     el.stepResult.style.display = step === 'result' ? '' : 'none';
   }
 
-  /* ---------------- 扫描 ---------------- */
-
-  function hasCamera() {
-    return !!(navigator.mediaDevices && navigator.mediaDevices.getUserMedia);
-  }
+  /* ---------------- 扫描 ----------------
+     相机与条码辨识全部交给 MEMBER_SCANNER（js/scanner.js）。
+     这里只负责画面上的显示切换 —— 与 admin-grant.js 用同一套。
+     ---------------------------------------------------------- */
 
   function startScan() {
-    if (scanning) return;
-
-    /* 没有相机（或页面不是 HTTPS，浏览器不会给 mediaDevices）→
-       不能直接存取 navigator.mediaDevices，否则会 TypeError。
-       这种情况请顾客报出条码内容，用「手动输入」。 */
-    if (!hasCamera()) {
-      el.scanBox.style.display = 'none';
-      document.getElementById('startScanBtn').style.display = 'none';
-      document.getElementById('stopScanBtn').style.display = 'none';
-      el.support.innerHTML = '⚠️ 这台装置开不了相机（没有相机，或页面不是 HTTPS），' +
-        '请用下面的「手动输入」。<br>' +
-        '<span class="muted-2">Camera unavailable — use manual entry below.</span>';
-      return;
-    }
-
-    el.scanBox.style.display = '';
-    document.getElementById('startScanBtn').style.display = 'none';
-    document.getElementById('stopScanBtn').style.display = '';
-    el.hint.textContent = detector ? '把顾客的条码对准框内' : '请扫顾客条码下方的 QR';
-
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } })
-      .then(function (s) {
-        stream = s;
-        el.video.srcObject = s;
-        el.video.setAttribute('playsinline', 'true');
-        return el.video.play();
-      })
-      .then(function () { scanning = true; tick(); })
-      .catch(function () {
-        UI.toast('开不了相机，请用手动输入 / Camera unavailable', 'error');
-        stopScan();
-      });
+    MEMBER_SCANNER.start({
+      video: el.video,
+      onStart: function (hasBarcode) {
+        el.scanBox.style.display = '';
+        document.getElementById('startScanBtn').style.display = 'none';
+        document.getElementById('stopScanBtn').style.display = '';
+        el.hint.textContent = hasBarcode ? '把顾客的条码对准框内'
+                                         : '请扫顾客条码下方的 QR';
+      },
+      onCode: handleCode,
+      onError: function (why) {
+        el.scanBox.style.display = 'none';
+        document.getElementById('startScanBtn').style.display =
+          MEMBER_SCANNER.hasCamera() ? '' : 'none';
+        document.getElementById('stopScanBtn').style.display = 'none';
+        el.support.innerHTML = MEMBER_SCANNER.supportText();
+        if (why === 'CAMERA_DENIED') {
+          UI.toast('开不了相机，请用手动输入 / Camera unavailable', 'error');
+        }
+      },
+      onStop: function () {
+        el.scanBox.style.display = 'none';
+        document.getElementById('startScanBtn').style.display =
+          MEMBER_SCANNER.hasCamera() ? '' : 'none';
+        document.getElementById('stopScanBtn').style.display = 'none';
+      }
+    });
   }
 
   function stopScan() {
-    scanning = false;
-    if (rafId) { cancelAnimationFrame(rafId); rafId = null; }
-    if (stream) {
-      stream.getTracks().forEach(function (t) { t.stop(); });
-      stream = null;
-    }
-    el.video.srcObject = null;
-    el.scanBox.style.display = 'none';
-    document.getElementById('startScanBtn').style.display = '';
-    document.getElementById('stopScanBtn').style.display = 'none';
-  }
-
-  function tick() {
-    if (!scanning) return;
-
-    if (el.video.readyState === el.video.HAVE_ENOUGH_DATA) {
-      var w = 480;
-      var h = Math.round(el.video.videoHeight * (w / el.video.videoWidth)) || 360;
-      var canvas = document.createElement('canvas');
-      canvas.width = w; canvas.height = h;
-      var ctx = canvas.getContext('2d', { willReadFrequently: true });
-      ctx.drawImage(el.video, 0, 0, w, h);
-
-      if (detector) {
-        detector.detect(canvas).then(function (codes) {
-          if (codes && codes.length) handleCode(codes[0].rawValue);
-        }).catch(function () { /* 这一帧读不到就算了 */ });
-      } else {
-        var img = ctx.getImageData(0, 0, w, h);
-        var qr = window.jsQR(img.data, w, h, { inversionAttempts: 'dontInvert' });
-        if (qr && qr.data) handleCode(qr.data);
-      }
-    }
-
-    rafId = requestAnimationFrame(tick);
+    MEMBER_SCANNER.stop();
   }
 
   function manualVerify() {
@@ -178,7 +123,7 @@ var ADMIN_REDEEM = (function () {
   /* ---------------- 验证 ---------------- */
 
   function handleCode(text) {
-    if (!scanning && !text) return;
+    if (!text) return;
     stopScan();
 
     UI.showLoading('VERIFYING');
