@@ -22,11 +22,12 @@ var ADMIN_DASH = (function () {
     document.getElementById('logoutBtn').addEventListener('click', ADMIN.logout);
 
     /*
-     * ★ 2.0：「建立 Claim（生成 QR）」已经不在首页了。
-     * 主流程改成「点单后扫会员码进分」（grant.html，所有员工都能做），
-     * 生成 QR 给顾客自己认领变成备用路径 —— 入口移到 MORE 页，
-     * 后端 createClaim 也收紧到 MANAGER / OWNER。
-     * 所以这里不需要再按角色隐藏首页按钮（按钮本身已经移除）。
+     * ★ 主流程有两条（都不在这个页面）：
+     *   · foodcourt 单 → POS 进单台（pos.html）录入单据 → 扫会员码进分
+     *   · mini app 单 → 订单看板（orderboard.html）完成时自动进分
+     * 「建立 Claim（生成 QR）」是备用路径，入口在 MORE 页，
+     * 后端 createClaim 收紧到 MANAGER / OWNER —— 首页不再有按钮，
+     * 所以这里不需要按角色隐藏任何东西。
      */
 
     renderDate();

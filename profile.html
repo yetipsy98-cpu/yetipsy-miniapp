@@ -98,6 +98,29 @@
     </a>
   </div>
 
+  <!-- WALLET / ACTIVITY（首页只留四个入口，钱包与记录收在这里） -->
+  <div class="section">
+    <div class="section-title">
+      <span class="st-zh">钱包与记录</span><span class="st-en">WALLET &amp; HISTORY</span>
+    </div>
+    <div class="list">
+      <a class="list-item" href="wallet.html">
+        <div class="li-main">
+          <div class="li-title">我的钱包</div>
+          <div class="li-sub">Wallet · 奖励回馈会存进这里</div>
+        </div>
+        <div class="li-right"><div class="li-value gold" id="walletRowValue">RM 0.00</div></div>
+      </a>
+      <a class="list-item" href="activity.html">
+        <div class="li-main">
+          <div class="li-title">消费记录</div>
+          <div class="li-sub">Activity · 积分与钱包每一笔</div>
+        </div>
+        <div class="li-right"><div class="li-meta">›</div></div>
+      </a>
+    </div>
+  </div>
+
   <!-- PASSWORD -->
   <div class="section">
     <div class="section-title">
@@ -165,7 +188,6 @@
 <script src="js/ui.js"></script>
 <script src="js/profile.js"></script>
 <script>
-  UI.renderBottomNav('profile.html');
   PROFILE.init();
 </script>
 

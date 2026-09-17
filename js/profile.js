@@ -46,6 +46,10 @@ var PROFILE = (function () {
     document.getElementById('statSpend').textContent  = UI.money(c.totalSpend);
     document.getElementById('statVisits').textContent = UI.points(c.totalVisits);
 
+    /* 「钱包与记录」那一列的余额（首页只有四个入口，这里也让顾客看得到钱包） */
+    var walletRow = document.getElementById('walletRowValue');
+    if (walletRow) walletRow.textContent = UI.money(c.walletBalance);
+
     document.getElementById('nameInput').value     = c.name || '';
     document.getElementById('birthdayInput').value = c.birthday || '';
     document.getElementById('phoneInput').value    = c.phone || '';

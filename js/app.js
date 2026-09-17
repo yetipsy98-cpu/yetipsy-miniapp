@@ -1,15 +1,34 @@
 /* =============================================================
    YETIPSY — app.js  (Customer Home)
+   -------------------------------------------------------------
+   客户主页只有一个画面：
+     · 顶栏：品牌 · LIVE 状态 · 认领（右上角）
+     · 活动幕布：会员问候 / 待领奖励 / 活动，左右滑动 + 自动轮播
+     · 四个入口：下单 · 会员码 · 会员中心 · 我的订单
+
+   刻意不在下面放任何其他入口：
+     钱包 / 记录都收进「会员中心」，避免首页变成功能清单。
    ============================================================= */
 
 var APP = (function () {
 
+  var ROTATE_MS = 5200;
+
   var state = {
     profile: null,
     membership: null,
-    promotions: [],
-    pendingReward: null
+    pendingReward: null,
+    slides: [],
+    index: 0,
+    promoError: null
   };
+
+  var rotateTimer = null;
+  var paused = false;
+
+  /* ---------------------------------------------------------
+     初始化
+     --------------------------------------------------------- */
 
   function greeting() {
     var hour = Number(new Date().toLocaleString('en-GB', {
@@ -21,7 +40,6 @@ var APP = (function () {
     return { zh: '晚上好', en: 'Good evening' };
   }
 
-  /** 图标渲染：元素不存在就安静跳过（导览界面区块可能被调整过） */
   function setIcon(id, name, size) {
     var node = document.getElementById(id);
     if (node) node.innerHTML = UI.icon(name, size);
@@ -30,39 +48,34 @@ var APP = (function () {
   function init() {
     if (!AUTH.isCustomerLoggedIn()) { AUTH.requireCustomer(); return; }
 
-    if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
-      document.getElementById('demoBanner').innerHTML =
-        '<div class="demo-banner" style="border-color:#E2696B;color:#E2696B">' +
-        'BACKEND NOT CONFIGURED · 未配置后端<br>' +
-        '<span class="tiny">请在 js/config.js 填入 API_URL（Google Apps Script Web App）</span></div>';
-    } else if (YETIPSY_CONFIG.IS_DEMO()) {
-      document.getElementById('demoBanner').innerHTML =
-        '<div class="demo-banner">DEMO MODE · 演示模式 · 数据保存在本地</div>';
-    }
-
-    // icons
-    /* ★ 认领入口已移到右上角，导览界面三张卡 + 下方的「其他」 */
     setIcon('claimIcon',  'scan', 18);
-    setIcon('navMenu',    'menu', 26);
-    setIcon('navCode',    'scan', 26);
-    setIcon('navProfile', 'profile', 26);
-    setIcon('qiOrders',   'orders', 20);
-    setIcon('qiAct',      'activity', 20);
-    setIcon('qiWallet',   'wallet', 20);
-    setIcon('qiProfile',  'profile', 20);
+    setIcon('tileMenu',   'menu', 30);
+    setIcon('tileCode',   'scan', 30);
+    setIcon('tileProfile','profile', 30);
+    setIcon('tileOrders', 'orders', 30);
 
-    var g = greeting();
-    document.getElementById('greeting').innerHTML = g.zh + ' · ' + g.en;
-
+    renderConfigError();
+    bindBanner();
     checkBackend();
     load();
   }
 
-  /** 显示目前连的是线上后端还是连不上（避免「以为在线上版，其实是 demo」） */
+  /** API_URL 没配置 → 明确报错（正式环境不会出现） */
+  function renderConfigError() {
+    var box = document.getElementById('configError');
+    if (!box) return;
+    if (!YETIPSY_CONFIG.IS_MISCONFIGURED()) { box.innerHTML = ''; return; }
+    box.innerHTML =
+      '<div class="demo-banner" style="border-color:#E2696B;color:#E2696B">' +
+      'BACKEND NOT CONFIGURED · 未配置后端<br>' +
+      '<span class="tiny">请在 js/config.js 填入 API_URL（Google Apps Script Web App）</span></div>';
+  }
+
+  /** 显示目前连的是线上后端还是连不上（避免「以为在线上版，其实是没连上」） */
   function checkBackend() {
     var box = document.getElementById('connectionStatus');
     if (!box) return;
-    if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
+    if (YETIPSY_CONFIG.IS_MISCONFIGURED()) {
       box.textContent = '● NO BACKEND';
       box.style.color = '#E2696B';
       return;
@@ -82,6 +95,10 @@ var APP = (function () {
     });
   }
 
+  /* ---------------------------------------------------------
+     载入
+     --------------------------------------------------------- */
+
   function load() {
     return Promise.all([
       API.customer.getProfile(),
@@ -99,121 +116,194 @@ var APP = (function () {
 
       state.profile = profileRes.data.customer;
       state.membership = profileRes.data.membership;
-      renderHero();
 
-      // pending reward
       var rewardRes = results[1];
-      if (rewardRes.success && rewardRes.data && rewardRes.data.reward) {
-        state.pendingReward = rewardRes.data.reward;
-        renderPendingReward();
-      }
+      state.pendingReward = (rewardRes.success && rewardRes.data && rewardRes.data.reward)
+        ? rewardRes.data.reward : null;
 
-      // promotions
       /* ★ 成功但清单是空的 ≠ 请求失败。
-         以前两种情况都画「暂无活动」，结果后端出问题（例如线上还是旧版、
-         没有 getPromotions 这个 action）时，顾客看到的是「没有活动」，
-         根本无从发现故障。现在失败要大声讲出来，并给重试钮。 */
+         以前两种情况都画「暂无活动」，后端出问题（例如线上还是旧版、
+         没有 getPromotions 这个 action）时顾客看到的是「没有活动」，
+         根本无从发现故障。现在失败会变成一张写清楚的错误幕布。 */
       var promoRes = results[2];
       if (promoRes.success) {
-        renderPromotions(promoRes.data.promotions || []);
+        state.promoError = null;
+        state.slides = buildSlides(promoRes.data.promotions || []);
       } else {
-        renderPromotionsError(promoRes.error || {});
+        state.promoError = promoRes.error || {};
+        state.slides = buildSlides([]);
+        if (window.console && console.warn) {
+          console.warn('[YETIPSY] getPromotions 失败：' +
+            (state.promoError.code || '') + ' · ' + (state.promoError.message || ''));
+        }
       }
+
+      renderBanner();
+      startRotate();
     });
   }
 
-  function renderHero() {
-    var c = state.profile;
-    var m = state.membership || {};
+  /* ---------------------------------------------------------
+     活动幕布
+     --------------------------------------------------------- */
 
+  function buildSlides(promotions) {
+    var slides = [];
+
+    /* ① 会员问候（一定在第一张，顾客一眼看到自己的名字与等级） */
     var g = greeting();
-    document.getElementById('greeting').innerHTML =
-      g.zh + '，<b>' + UI.esc(c.name || 'Friend') + '</b>';
-    document.getElementById('tierBadge').innerHTML = UI.tierBadge(c.membershipTier);
-    document.getElementById('pointsValue').textContent = UI.points(c.currentPoints);
+    var c = state.profile || {};
+    slides.push({
+      kind: 'greeting',
+      zh: g.zh + '，' + (c.name || 'Friend'),
+      en: g.en.toUpperCase() + ' · ' + UI.tierName(c.membershipTier),
+      sub: UI.points(c.currentPoints) + ' POINTS · ' + UI.money(c.walletBalance) + ' WALLET',
+      href: 'menu.html',
+      cta: '开始点单 ORDER NOW'
+    });
 
-    document.getElementById('walletValue').textContent = UI.money(c.walletBalance);
-    document.getElementById('spendValue').textContent  = UI.money(c.totalSpend);
-    document.getElementById('visitsSub').textContent   =
-      (c.totalVisits || 0) + ' visits 到店次数';
-
-    // progress
-    var pct = m.progressPercent || 0;
-    document.getElementById('progressBar').style.width = pct + '%';
-    document.getElementById('progressText').textContent =
-      UI.tierName(c.membershipTier) + ' · ' + UI.points(c.currentPoints) + ' PTS';
-    document.getElementById('progressNext').textContent =
-      m.nextTier
-        ? UI.points(m.pointsToNext) + ' PTS TO ' + m.nextTier
-        : 'TOP TIER 最高等级';
-  }
-
-  function renderPendingReward() {
-    var r = state.pendingReward;
-    if (!r) {
-      document.getElementById('pendingRewardBox').innerHTML = '';
-      return;
+    /* ② 待领奖励（有才出现，放最前面才不会被漏掉） */
+    if (state.pendingReward) {
+      slides.splice(1, 0, {
+        kind: 'reward',
+        zh: '你的奖励已准备好',
+        en: 'YOUR REWARD IS READY',
+        sub: '点开领取 · TAP TO OPEN',
+        href: 'reward.html?rewardId=' + encodeURIComponent(state.pendingReward.rewardId),
+        cta: '领取 CLAIM'
+      });
     }
-    document.getElementById('pendingRewardBox').innerHTML =
-      '<div class="section">' +
-        '<a class="card gold" href="reward.html?rewardId=' + encodeURIComponent(r.rewardId) + '" style="display:block">' +
-          '<div class="row-between">' +
-            '<div>' +
-              '<div class="bilingual-zh">你的奖励已准备好</div>' +
-              '<div class="bilingual-en">YOUR REWARD IS READY</div>' +
-              '<div class="small muted" style="margin-top:8px">点击打开 · Tap to open</div>' +
-            '</div>' +
-            '<div style="color:var(--gold);font-size:26px">🎁</div>' +
-          '</div>' +
-        '</a>' +
-      '</div>';
+
+    /* ③ 活动 */
+    promotions.forEach(function (p) {
+      slides.push({
+        kind: 'promo',
+        zh: p.title || '今晚活动',
+        en: p.subtitle || 'TONIGHT',
+        sub: p.description || '',
+        date: (p.startDate || p.endDate)
+          ? (p.startDate || '') + (p.endDate ? ' — ' + p.endDate : '')
+          : '',
+        href: 'menu.html',
+        cta: '看酒单 VIEW MENU'
+      });
+    });
+
+    return slides;
   }
 
-  /** 活动载入失败 —— 要跟「真的没有活动」长得完全不一样 */
-  function renderPromotionsError(error) {
-    var box = document.getElementById('promoList');
-    var code = error.code || 'ERROR';
-    box.innerHTML =
-      '<div class="empty-state" style="border:1px solid #E2696B;border-radius:14px;padding:16px 14px">' +
-        '<div class="empty-zh" style="color:#E2696B">活动载入失败</div>' +
-        '<div class="empty-en">PROMOTIONS FAILED TO LOAD</div>' +
-        '<div class="tiny muted-2" style="margin-top:10px;line-height:1.7">' +
-          UI.esc(code) + '<br>' + UI.esc(error.message || '') +
-        '</div>' +
-        '<button id="promoRetryBtn" class="btn btn-secondary btn-sm" style="margin-top:12px">' +
-          '<span>重试<span class="btn-sub-label">RETRY</span></span>' +
-        '</button>' +
-      '</div>';
+  function renderBanner() {
+    var track = document.getElementById('homeBannerTrack');
+    var dots = document.getElementById('homeBannerDots');
+    if (!track) return;
+
+    var html = state.slides.map(function (s, i) {
+      var inner =
+        '<div class="hb-zh">' + UI.esc(s.zh) + '</div>' +
+        '<div class="hb-en">' + UI.esc(s.en) + '</div>' +
+        (s.sub ? '<div class="hb-sub">' + UI.esc(s.sub) + '</div>' : '') +
+        (s.date ? '<div class="hb-date">' + UI.esc(s.date) + '</div>' : '') +
+        (s.cta ? '<div class="hb-cta">' + UI.esc(s.cta) + ' ›</div>' : '');
+
+      return '<a class="hb-slide hb-' + UI.esc(s.kind) + '" href="' + UI.esc(s.href) +
+        '" data-slide="' + i + '">' + inner + '</a>';
+    }).join('');
+
+    /* 活动载入失败 → 换成一张写清楚的错误幕布（顾客/员工都看得出来） */
+    if (state.promoError) {
+      var e = state.promoError;
+      html += '<div class="hb-slide hb-error">' +
+        '<div class="hb-zh" style="color:#E2696B">活动载入失败</div>' +
+        '<div class="hb-en">PROMOTIONS FAILED TO LOAD</div>' +
+        '<div class="hb-sub">' + UI.esc(e.code || 'ERROR') + '<br>' + UI.esc(e.message || '') + '</div>' +
+        '<button class="btn btn-secondary btn-sm hb-retry" id="promoRetryBtn">' +
+          '<span>重试<span class="btn-sub-label">RETRY</span></span></button>' +
+        '</div>';
+    }
+
+    track.innerHTML = html;
+
+    if (dots) {
+      dots.innerHTML = state.slides.length > 1
+        ? state.slides.map(function (s, i) {
+            return '<span class="hb-dot' + (i === 0 ? ' active' : '') + '" data-dot="' + i + '"></span>';
+          }).join('')
+        : '';
+      Array.prototype.forEach.call(dots.querySelectorAll('[data-dot]'), function (dot) {
+        dot.addEventListener('click', function () {
+          goTo(Number(dot.getAttribute('data-dot')));
+        });
+      });
+    }
 
     var retry = document.getElementById('promoRetryBtn');
     if (retry) retry.addEventListener('click', function () { load(); });
 
-    /* 给开发者/店员看的线索：把错误码留在 console */
-    if (window.console && console.warn) {
-      console.warn('[YETIPSY] getPromotions 失败：' + code + ' · ' + (error.message || ''));
-    }
+    state.index = 0;
+    track.scrollLeft = 0;
   }
 
-  function renderPromotions(list) {
-    var box = document.getElementById('promoList');
-    if (!list.length) {
-      box.innerHTML = UI.emptyState('暂无活动', 'NO PROMOTION RIGHT NOW', 'activity') +
-        '<div class="tiny muted-2 center" style="margin-top:8px">' +
-        '员工端 SETTINGS → Promotions 可以新增活动' +
-        '</div>';
-      return;
-    }
-    box.innerHTML = list.map(function (p) {
-      return '<div class="promo">' +
-        '<div class="promo-title">' + UI.esc(p.title) + '</div>' +
-        (p.subtitle ? '<div class="promo-sub">' + UI.esc(p.subtitle) + '</div>' : '') +
-        (p.description ? '<div class="promo-desc">' + UI.esc(p.description) + '</div>' : '') +
-        ((p.startDate || p.endDate)
-          ? '<div class="promo-date">' + UI.esc(p.startDate || '') +
-            (p.endDate ? ' — ' + UI.esc(p.endDate) : '') + '</div>'
-          : '') +
-        '</div>';
-    }).join('');
+  function slideCount() {
+    var track = document.getElementById('homeBannerTrack');
+    return track ? track.children.length : 0;
+  }
+
+  function goTo(i) {
+    var track = document.getElementById('homeBannerTrack');
+    if (!track) return;
+    var count = slideCount();
+    if (count < 1) return;
+    if (i >= count) i = 0;
+    if (i < 0) i = count - 1;
+    state.index = i;
+    track.scrollTo({ left: track.clientWidth * i, behavior: 'smooth' });
+    syncDots();
+  }
+
+  function syncDots() {
+    var dots = document.getElementById('homeBannerDots');
+    if (!dots) return;
+    Array.prototype.forEach.call(dots.querySelectorAll('.hb-dot'), function (dot, i) {
+      dot.className = 'hb-dot' + (i === state.index ? ' active' : '');
+    });
+  }
+
+  function bindBanner() {
+    var track = document.getElementById('homeBannerTrack');
+    if (!track) return;
+
+    var scrollTimer = null;
+    track.addEventListener('scroll', function () {
+      clearTimeout(scrollTimer);
+      scrollTimer = setTimeout(function () {
+        if (!track.clientWidth) return;
+        var i = Math.round(track.scrollLeft / track.clientWidth);
+        if (i !== state.index) { state.index = i; syncDots(); }
+      }, 90);
+    }, { passive: true });
+
+    /* 顾客在滑的时候不要抢着换页；手放开 6 秒后才恢复自动轮播 */
+    ['pointerdown', 'touchstart'].forEach(function (ev) {
+      track.addEventListener(ev, function () { paused = true; }, { passive: true });
+    });
+    ['pointerup', 'touchend', 'pointercancel', 'touchcancel'].forEach(function (ev) {
+      track.addEventListener(ev, function () {
+        setTimeout(function () { paused = false; }, 6000);
+      }, { passive: true });
+    });
+
+    document.addEventListener('visibilitychange', function () {
+      paused = document.hidden;
+    });
+  }
+
+  function startRotate() {
+    if (rotateTimer) clearInterval(rotateTimer);
+    if (slideCount() < 2) return;
+    rotateTimer = setInterval(function () {
+      if (paused || document.hidden) return;
+      goTo(state.index + 1);
+    }, ROTATE_MS);
   }
 
   return {

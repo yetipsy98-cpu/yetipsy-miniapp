@@ -1,44 +1,29 @@
 /* =============================================================
-   YETIPSY MINI APP 1.3 — FOODCOURT EDITION
-   config.js
+   YETIPSY MINI APP — config.js
    -------------------------------------------------------------
    这是唯一需要你手动修改的前端文件（部署时）。
 
-   ★ 线上版（正式环境）：
+   线上版（正式环境）：
        API_URL       填入 Google Apps Script Web App 的 URL
-       REQUIRE_BACKEND = true   ← 没连上后端就明确报错，绝不偷偷用本机资料
+   没填 / 填错时，API 层会直接报 BACKEND_NOT_CONFIGURED，
+   不会退回任何本机假资料 —— 避免「以为在用线上版，
+   其实资料只存在自己手机」。
 
-   ★ DEMO 模式（本机试用）：
-       用 `npm run demo` 起本机服务器，或打开 preview.html。
-       正式页面（index.html 等）在 REQUIRE_BACKEND = true 时
-       不会退回 DEMO，避免「以为在用线上版，其实资料只存在自己手机」。
+   部署方式见 DEPLOYMENT.md。
    ============================================================= */
 
 var YETIPSY_CONFIG = {
 
   /* ----------------------------------------------------------
-     1) 环境
-     'production' = 正式上线（GitHub Pages + Google Apps Script）
-     'demo'       = 本机演示
-     ---------------------------------------------------------- */
-  ENVIRONMENT: 'production',
-
-  /* ----------------------------------------------------------
-     2) API 地址（Google Apps Script Web App）
+     1) API 地址（Google Apps Script Web App）
      部署之后把 URL 粘贴到这里。
-     在浏览器直接打开这个 URL，应该会看到 {"success":true,"data":{"app":"YETIPSY MINI APP",...}}
+     在浏览器直接打开这个 URL，应该会看到
+     {"success":true,"data":{"app":"YETIPSY MINI APP",...}}
      ---------------------------------------------------------- */
   API_URL: 'https://script.google.com/macros/s/AKfycbw2WXwgeHls1AvyAl_dcNW0q2Fd4KOsurqPXky28MqDo6wxMPuVICAhyfr-xex34qgSuw/exec',
 
   /* ----------------------------------------------------------
-     3) 线上版必须连上后端
-     true  = API_URL 没填 / 连不上时，直接显示错误，不使用本机演示资料
-     false = 允许退回 DEMO（只在本机开发时打开）
-     ---------------------------------------------------------- */
-  REQUIRE_BACKEND: true,
-
-  /* ----------------------------------------------------------
-     4) 品牌
+     2) 品牌
      ---------------------------------------------------------- */
   BAR_NAME: 'YETIPSY',
   TAGLINE: 'Join the night.',
@@ -57,7 +42,7 @@ var YETIPSY_CONFIG = {
   TIMEZONE: 'Asia/Kuala_Lumpur',
 
   /* ----------------------------------------------------------
-     5) 主题（会员端）
+     3) 主题（会员端）
      ---------------------------------------------------------- */
   TIER_COLORS: {
     MEMBER: '#A7A7A7',
@@ -66,7 +51,7 @@ var YETIPSY_CONFIG = {
   },
 
   /* ----------------------------------------------------------
-     6) Session 存储 key
+     4) Session 存储 key
      ---------------------------------------------------------- */
   STORAGE: {
     CUSTOMER_TOKEN:   'yt_customer_token',
@@ -74,43 +59,36 @@ var YETIPSY_CONFIG = {
     STAFF_TOKEN:      'yt_staff_token',
     STAFF_PROFILE:    'yt_staff_profile',
     LANGUAGE:         'yt_lang',
-    /* 2.0 点单：购物车（只存显示用的数字，价格一律由后端重算 §41/§42） */
+    /* 点单：购物车（只存显示用的数字，价格一律由后端重算） */
     cart:             'yt_cart_v2'
   },
 
   /* ----------------------------------------------------------
-     7) Session 有效期（小时，仅前端提示用，后端才是权威）
+     5) Session 有效期（小时，仅前端提示用，后端才是权威）
      ---------------------------------------------------------- */
   CUSTOMER_SESSION_HOURS: 720,   // 30 天
   STAFF_SESSION_HOURS:     12,   // 当班
 
   /* ----------------------------------------------------------
-     8) 二维码内容（扫描后打开的页面）
+     6) 二维码内容（扫描后打开的页面）
      一般不需要修改。GitHub Pages 子目录部署时才需要改。
      ---------------------------------------------------------- */
   CLAIM_PAGE: 'claim.html',
 
   /* ----------------------------------------------------------
-     9) 调试
+     7) 调试
      ---------------------------------------------------------- */
   DEBUG: false
 };
 
-/* 是否运行在 DEMO 模式（没有填 GAS URL） */
-YETIPSY_CONFIG.IS_DEMO = function () {
+/* API_URL 没填 / 格式不对 —— 这是设定错误，要大声报错 */
+YETIPSY_CONFIG.IS_MISCONFIGURED = function () {
   return !YETIPSY_CONFIG.API_URL || YETIPSY_CONFIG.API_URL.indexOf('http') !== 0;
 };
 
-/* 线上版但没填 API URL —— 这是设定错误，要大声报错 */
-YETIPSY_CONFIG.IS_MISCONFIGURED = function () {
-  return YETIPSY_CONFIG.IS_DEMO() && YETIPSY_CONFIG.REQUIRE_BACKEND !== false;
-};
-
-/* 实际请求地址
-   DEMO 模式一定要用根目录的 '/api'：员工端页面在 /admin/ 底下，
-   写成相对的 'api' 会被解析成 /admin/api，整个员工端就连不到后端。 */
+/* 实际请求地址（页面在 /admin/ 底下时也是打同一个 Web App URL） */
 YETIPSY_CONFIG.getApiUrl = function () {
-  return YETIPSY_CONFIG.IS_DEMO() ? '/api' : YETIPSY_CONFIG.API_URL;
+  return YETIPSY_CONFIG.API_URL;
 };
 
 /* 生成 Claim QR 内容（完整 URL）

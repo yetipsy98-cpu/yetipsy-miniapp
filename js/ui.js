@@ -1,7 +1,7 @@
 /* =============================================================
    YETIPSY — ui.js
    -------------------------------------------------------------
-   共用 UI 工具：金额格式化（sen）、Toast、底部导航、
+   共用 UI 工具：金额格式化（sen）、Toast、页面顶部栏、
    中英双语标签、QR 生成、QR 扫描、载入状态
    ============================================================= */
 
@@ -179,21 +179,10 @@ var UI = (function () {
   }
 
   /* =========================================================
-     6. 底部导航（会员端）
+     6. 图标（线性 SVG，跟着 currentColor）
      ========================================================= */
 
-  /* 2.0 会员端导览：HOME（导览界面）· MENU · 会员码 · 会员中心
-     钱包 / 我的订单 / 活动记录改从首页下方与会员中心进入，
-     页面本身都还在（§68 不能断掉 1.x 的网址）。 */
-  var NAV = [
-    { page: 'index.html',    zh: '首页',     en: 'HOME',        icon: 'home' },
-    { page: 'menu.html',     zh: '酒单',     en: 'MENU',        icon: 'menu' },
-    { page: 'code.html',     zh: '会员码',   en: 'MEMBER CODE', icon: 'scan' },
-    { page: 'profile.html',  zh: '会员中心', en: 'MEMBER',      icon: 'profile' }
-  ];
-
   var ICONS = {
-    home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/>',
     activity: '<path d="M4 12h3l2.5-6 3 12L15 12h5"/>',
     orders: '<path d="M6 3.5h9l3.5 3.5v13.5H6Z"/><path d="M9 10h6M9 13.5h6M9 17h4"/>',
     wallet: '<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18a1 1 0 0 1 1 1v2"/><path d="M3 7.5V18a1 1 0 0 0 1 1h15a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6"/><circle cx="17" cy="14" r="1.2"/>',
@@ -206,22 +195,6 @@ var UI = (function () {
     return '<svg class="icon" width="' + (size || 22) + '" height="' + (size || 22) +
       '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
       'stroke-linecap="round" stroke-linejoin="round">' + (ICONS[name] || '') + '</svg>';
-  }
-
-  function renderBottomNav(active) {
-    var current = active || location.pathname.split('/').pop() || 'index.html';
-    var html = '<nav class="bottom-nav">';
-    NAV.forEach(function (item) {
-      var isActive = item.page === current;
-      html += '<a href="' + item.page + '" class="nav-item' + (isActive ? ' active' : '') + '">' +
-        icon(item.icon) +
-        '<span class="nav-zh">' + item.zh + '</span>' +
-        '<span class="nav-en">' + item.en + '</span>' +
-        '</a>';
-    });
-    html += '</nav>';
-    document.body.insertAdjacentHTML('beforeend', html);
-    document.body.classList.add('has-bottom-nav');
   }
 
   /* =========================================================
@@ -487,7 +460,6 @@ var UI = (function () {
     hideLoading: hideLoading,
     setLoading: setLoading,
     icon: icon,
-    renderBottomNav: renderBottomNav,
     renderHeader: renderHeader,
     renderQR: renderQR,
     qrDataUrl: qrDataUrl,

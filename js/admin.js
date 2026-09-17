@@ -11,7 +11,7 @@ var ADMIN = (function () {
 
   var NAV = [
     { page: 'index.html',     zh: '首页',   en: 'HOME' },
-    { page: 'claim.html',     zh: '开单',   en: 'CLAIM' },
+    { page: 'pos.html',       zh: 'POS',    en: 'POS' },
     { page: 'customers.html', zh: '顾客',   en: 'MEMBERS' },
     { page: 'more.html',      zh: '更多',   en: 'MORE' }
   ];

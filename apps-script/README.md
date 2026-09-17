@@ -97,23 +97,23 @@ bootstrapOwner('owner', '你的密码');    // 建立第一个老板账号（只
 设定好之后：
 
 - `git push` 到 `main`，只要 `apps-script/` 有改动
-- `.github/workflows/deploy-apps-script.yml` 会先跑测试，再 `clasp push` + `clasp deploy`
+- `.github/workflows/deploy-apps-script.yml` 会直接 `clasp push` + `clasp deploy`
 - **Web App URL 不会变**，前端不用改
 - 没有设定 Secrets 时该 workflow 会跳过，不会让 CI 变红
 
 ---
 
-## 4. 本机测试（不需要 Google 账号）
+## 4. 手动部署用文件
 
 ```bash
-node demo/test-apps-script.js   # 直接执行这些 .gs（在 Node 里模拟 Google 服务）
-node demo/tests.js              # 完整 API 测试（25 组 / 196 项）
-node demo/server.js             # 本机 demo 服务器 http://localhost:3000/
+npm run build:copypaste   # 从 apps-script/*.gs 产生 APPS-SCRIPT-COPY-PASTE.md
 ```
 
-`demo/google-shim.js` 用记忆体实作 `SpreadsheetApp` / `LockService` /
-`PropertiesService` / `CacheService` / `Utilities.computeDigest` / `UrlFetchApp`，
-所以测试跑的是**这里的真实程式码**，不是另一份复制品。
+不想用 `clasp` 的话，打开 <https://script.google.com>，照着
+`APPS-SCRIPT-COPY-PASTE.md` 把 20 个档案贴进去即可。
+
+> 2.1 起本机 demo 服务器与自动化测试套件已移除（线上版不需要它们），
+> `tools/google-shim.js` 仍保留给产生复制贴上文件用。
 
 ---
 

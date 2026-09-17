@@ -131,8 +131,14 @@ function getHandlers() {
     /* ★ 任何员工都能上下架商品（状态类操作，§32） */
     setProductStatus: setProductStatus,
 
-    /* ★ 2.0 员工端主流程：扫会员码 → 输金额 → 自动发积分与 Reward */
-    grantOrder: grantOrder
+    /* ★ 员工端主流程：扫会员码 → 输金额 → 自动发积分与 Reward（保留，备用） */
+    grantOrder: grantOrder,
+
+    /* ★ 2.1 员工端 POS 进单：foodcourt 单据 → 待进单队列 → 扫会员码进分 */
+    createPosTicket: createPosTicket,
+    getPosQueue: getPosQueue,
+    bindPosTicket: bindPosTicket,
+    cancelPosTicket: cancelPosTicket
   };
 }
 

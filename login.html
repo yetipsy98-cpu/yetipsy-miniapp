@@ -203,30 +203,11 @@
 
   /* ---------------- 环境提示 ---------------- */
 
-  if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
+  if (YETIPSY_CONFIG.IS_MISCONFIGURED()) {
     document.getElementById('demoBanner').innerHTML =
       '<div class="demo-banner" style="border-color:#E2696B;color:#E2696B">' +
       'BACKEND NOT CONFIGURED · 未配置后端<br>' +
       '<span class="tiny">请在 js/config.js 填入 API_URL（Google Apps Script Web App URL）。</span></div>';
-  } else if (YETIPSY_CONFIG.IS_DEMO()) {
-    document.getElementById('demoBanner').innerHTML =
-      '<div class="demo-banner">DEMO MODE · 演示模式 · 资料只存在这台手机<br>' +
-      '<a href="#" id="resetDemoBtn" style="color:inherit;text-decoration:underline">重置演示资料 / RESET DEMO DATA</a></div>';
-    var resetBtn = document.getElementById('resetDemoBtn');
-    if (resetBtn) {
-      resetBtn.addEventListener('click', function (e) {
-        e.preventDefault();
-        try {
-          localStorage.removeItem('yetipsy_mock_db_v1');
-          localStorage.removeItem('yt_customer_token');
-          localStorage.removeItem('yt_customer_profile');
-          localStorage.removeItem('yt_staff_token');
-          localStorage.removeItem('yt_staff_profile');
-        } catch (err) {}
-        UI.toast('演示资料已重置 / Demo data reset', 'success');
-        setTimeout(function () { location.reload(); }, 700);
-      });
-    }
   }
 
   /* 已登录直接回首页 */

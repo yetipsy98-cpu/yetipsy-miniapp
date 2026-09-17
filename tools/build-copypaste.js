@@ -1,13 +1,12 @@
 /* =============================================================
-   demo/build-copypaste.js
+   tools/build-copypaste.js
    -------------------------------------------------------------
    把 apps-script/*.gs 整合成 APPS-SCRIPT-COPY-PASTE.md
    （手动部署用：打开 Apps Script → 建 15 个档案 → 复制贴上）。
 
-   执行： node demo/build-copypaste.js     （或 npm run build:copypaste）
+   执行： node tools/build-copypaste.js     （或 npm run build:copypaste）
 
-   改完任何 .gs 之后都要重跑一次；demo/test-copypaste.js 会检查
-   这份文件跟 .gs 是否同步，不同步 CI 会红。
+   改完任何 .gs 之后都要重跑一次，这份文件才会跟 .gs 同步。
    ============================================================= */
 
 'use strict';
@@ -69,8 +68,8 @@ function build() {
   const head = '# YETIPSY · Google Apps Script 全部档案（复制贴上用）\n\n' +
     '**' + FILE_ORDER.length + ' 个档案 · 版本 ' + pkg.version +
     ' · 会员登录 = 手机号码 + 密码（不用 WhatsApp OTP）**\n\n' +
-    '> 这份文件由 `node demo/build-copypaste.js` 从 `apps-script/*.gs` 产生。\n' +
-    '> 改了后端记得重跑，`npm test` 会检查两者是否同步。\n\n---\n\n' +
+    '> 这份文件由 `node tools/build-copypaste.js` 从 `apps-script/*.gs` 产生。\n' +
+    '> 改了后端记得重跑一次（`npm run build:copypaste`），这份文件才会跟 `apps-script/*.gs` 同步。\n\n---\n\n' +
     '## 怎么用这个档案\n\n' +
     '1. 打开 <https://script.google.com>，建立（或打开）你的 Apps Script 专案。\n' +
     '2. 预设会有一个 `Code.gs` → 点它右边三个点 → **删除**（下面第 ' +

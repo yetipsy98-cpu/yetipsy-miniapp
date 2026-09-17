@@ -368,15 +368,35 @@ var API = (function () {
         { productId: productId, status: status }, { sessionType: 'staff' });
     },
 
-    /* ============ 2.0 员工端主流程：扫会员码 → 输金额 → 自动进分 ============ */
+    /* ============ 员工端 POS 进单：foodcourt 单据 → 扫会员码进分 ============ */
+
     /**
-     * @param {object} data { customerId, billAmount(sen), verifyToken,
-     *                        externalOrderId?, source?, note? }
+     * 录入一张 foodcourt 单据（这时还不知道是谁）。
+     * @param {object} data { amount(sen), externalOrderId?, source?, note? }
+     */
+    createPosTicket: function (data) {
+      return call('createPosTicket', data || {}, { sessionType: 'staff' });
+    },
+
+    /** POS 台画面：待进单队列 + 今日已进单统计 */
+    getPosQueue: function (data) {
+      return call('getPosQueue', data || {}, { sessionType: 'staff' });
+    },
+
+    /**
+     * 扫过顾客会员码之后，把单据归给会员并进分。
      * 后端按 POINTS_PER_RM 与 REWARD_TIERS 自动发积分与 Reward（§57 §58），
      * 并按 §56 六小时内只算一次到店。
+     * @param {object} data { orderId, customerId, verifyToken }
      */
-    grantOrder: function (data) {
-      return call('grantOrder', data || {}, { sessionType: 'staff' });
+    bindPosTicket: function (data) {
+      return call('bindPosTicket', data || {}, { sessionType: 'staff' });
+    },
+
+    /** 录错单号 / 金额时取消（还没进分才可以） */
+    cancelPosTicket: function (orderId, reason) {
+      return call('cancelPosTicket',
+        { orderId: orderId, reason: reason || '' }, { sessionType: 'staff' });
     },
 
     /* ===== 2.0 点单：菜单管理（§62，MANAGER / OWNER 限定）===== */

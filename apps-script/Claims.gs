@@ -509,3 +509,273 @@ function grantOrder(data, token) {
     reward: reward ? { rewardId: reward.rewardId, status: reward.status, amount: reward.amount } : null
   });
 }
+
+/* =============================================================
+   ★ 2.1 POS 进单：foodcourt 单据 → 扫会员码进分
+   -------------------------------------------------------------
+   与 1.x Claim 的差别：
+     · Claim：员工建立单据 → 生成 QR → 顾客自己扫 → 认领进分
+     · POS  ：员工录入 foodcourt 单据 → 进「待进单」队列 →
+              当场扫顾客会员码 → 归属会员 + 发积分 / Reward
+
+   付款一律在 foodcourt 完成，这条通路不动钱包：
+     · walletUsed 恒为 0、finalAmount = billAmount
+     · 要抵扣钱包仍然走 1.x 的 redeemWallet（扫码抵扣）
+
+   权限：任何员工都能操作（现场主流程不该卡权限）。
+   必须是 MANAGER / OWNER 才能用的，是 1.x 的 createClaim（生成 QR）。
+
+   防重复：
+     · createPosTicket 同一个 externalOrderId 只收一次
+     · bindPosTicket 幂等 —— 已经归属过的单据一律回 TICKET_ALREADY_BOUND，
+       不会重复发积分 / Reward / 到店次数（§55 的同一套原则）
+   ============================================================= */
+
+/** POS 单据的画面形状（员工端用；不含任何敏感资料） */
+function posTicketView(o) {
+  var cust = o.customerId ? dbById('customers', o.customerId) : null;
+  var status = 'OPEN';
+  if (o.orderStatus === 'CANCELLED' || o.orderStatus === 'VOID') status = 'CANCELLED';
+  else if (o.claimStatus === 'CLAIMED' && o.customerId) status = 'BOUND';
+
+  return {
+    orderId:        o.orderId,
+    orderNumber:    o.externalOrderId || o.orderId,
+    externalOrderId: o.externalOrderId || '',
+    source:         o.orderSource,
+    amount:         Number(o.billAmount) || 0,
+    note:           o.note || '',
+    createdAt:      o.createdAt,
+    status:         status,
+    customerId:     o.customerId || '',
+    customerName:   cust ? (cust.name || cust.phone || '') : '',
+    customerTier:   cust ? (cust.membershipTier || 'MEMBER') : '',
+    pointsEarned:   Number(o.pointsEarned) || 0,
+    rewardAmount:   Number(o.rewardAmount) || 0,
+    boundAt:        o.claimedAt || o.completedAt || ''
+  };
+}
+
+/** 待进单队列 = 还没归属会员、24 小时内、没被取消的单据 */
+function openPosTickets(limit) {
+  var days = Math.max(1, numSetting('CLAIM_EXPIRY_HOURS', 24)) / 24;
+  var cutoff = Date.now() - days * 86400000;
+
+  return dbRecent('orders', 300).filter(function (o) {
+    if (o.orderStatus === 'CANCELLED' || o.orderStatus === 'VOID') return false;
+    if (o.claimStatus === 'CLAIMED' && o.customerId) return false;
+    var at = new Date(o.createdAt).getTime();
+    if (isFinite(at) && at < cutoff) return false;
+    return true;
+  }).slice(0, limit || 40);
+}
+
+/**
+ * createPosTicket —— 员工录入一张 foodcourt 单据（这时还不知道是谁）。
+ * @param {object} data { amount(sen), externalOrderId?, source?, note? }
+ */
+function createPosTicket(data, token) {
+  var ctx = requireStaff(token);
+  if (ctx.error) return ctx.error;
+
+  var source = String((data && data.source) || 'FOODCOURT').toUpperCase();
+  if (ORDER_SOURCES.indexOf(source) === -1) {
+    return err('INVALID_INPUT', 'Invalid order source. / 来源无效。');
+  }
+
+  var externalOrderId = String((data && data.externalOrderId) || '').trim().toUpperCase().slice(0, 30);
+  var amount = Math.round(Number(data && data.amount));
+
+  if (!isFinite(amount) || amount <= 0) return err('INVALID_AMOUNT');
+  if (amount > 100000000) return err('INVALID_AMOUNT', 'Amount too large. / 金额过大。');
+  if (externalOrderId && findOrderByExternal(source, externalOrderId)) {
+    return err('DUPLICATE_EXTERNAL_ORDER');
+  }
+
+  var order = createMemberTransaction({
+    source:          source,
+    externalOrderId: externalOrderId,
+    amount:          amount,
+    createdBy:       ctx.staff.staffId,
+    actorType:       'STAFF',
+    note:            String((data && data.note) || '').slice(0, 200)
+  });
+
+  audit(ctx.staff.staffId, 'STAFF', 'POS_TICKET', 'ORDER', order.orderId, '', amount);
+  return ok({ ticket: posTicketView(order) });
+}
+
+/**
+ * getPosQueue —— POS 台画面：待进单 + 今日已进单统计。
+ */
+function getPosQueue(data, token) {
+  var ctx = requireStaff(token);
+  if (ctx.error) return ctx.error;
+
+  var today = todayKey();
+  var limit = Math.min(80, Math.max(1, Number(data && data.limit) || 40));
+
+  var pending = openPosTickets(limit);
+
+  var boundToday = dbRecent('orders', 300).filter(function (o) {
+    if (!o.customerId) return false;
+    if (o.orderStatus === 'CANCELLED' || o.orderStatus === 'VOID') return false;
+    return isoDateKey(o.claimedAt || o.completedAt || o.createdAt) === today;
+  });
+
+  var pointsToday = boundToday.reduce(function (s, o) { return s + (Number(o.pointsEarned) || 0); }, 0);
+  var amountToday = boundToday.reduce(function (s, o) { return s + (Number(o.billAmount) || 0); }, 0);
+
+  return ok({
+    pending: pending.map(posTicketView),
+    today: {
+      date: today,
+      bound: boundToday.length,
+      points: pointsToday,
+      amount: amountToday,
+      recent: boundToday.slice(0, 12).map(posTicketView)
+    },
+    pollSeconds: numSetting('ORDER_POLL_SECONDS', 8)
+  });
+}
+
+/**
+ * bindPosTicket —— 扫过顾客会员码之后，把单据归给会员并进分。
+ * @param {object} data { orderId, customerId, verifyToken }
+ *
+ * 幂等：同一张单第二次呼叫回 TICKET_ALREADY_BOUND，
+ *       不会第二次发积分 / Reward，也不会多算一次到店。
+ */
+function bindPosTicket(data, token) {
+  var ctx = requireStaff(token);
+  if (ctx.error) return ctx.error;
+
+  var order = dbById('orders', String((data && data.orderId) || ''));
+  if (!order) return err('ORDER_NOT_FOUND');
+  if (order.orderStatus === 'CANCELLED' || order.orderStatus === 'VOID') {
+    return err('ORDER_CANCELLED', 'This ticket was cancelled. / 这张单已被取消。');
+  }
+
+  var c = dbById('customers', String((data && data.customerId) || ''));
+  if (!c) return err('CUSTOMER_NOT_FOUND');
+  if (String(c.status || 'ACTIVE').toUpperCase() === 'BLOCKED') {
+    return err('CUSTOMER_BLOCKED');
+  }
+
+  if (order.claimStatus === 'CLAIMED' && order.customerId) {
+    var already = dbById('customers', order.customerId);
+    if (order.customerId === c.customerId) {
+      /* 同一位会员 → 当成重复点击，安全回同一份结果 */
+      return ok({
+        orderId: order.orderId,
+        billAmount: Number(order.billAmount) || 0,
+        pointsEarned: Number(order.pointsEarned) || 0,
+        alreadyBound: true,
+        visitCounted: false,
+        customer: publicCustomer(c),
+        membership: membershipInfo(c),
+        reward: null
+      });
+    }
+    return err('TICKET_ALREADY_BOUND',
+      'This ticket is already credited to ' +
+      ((already && (already.name || already.phone)) || order.customerId) +
+      '. / 这张单已经进给别的会员了。');
+  }
+
+  /* ★ 必须扫过这位顾客的会员条码（与 grantOrder 同一套验证） */
+  var verifyError = peekMemberVerify(data.verifyToken, c.customerId, ctx.staff.staffId);
+  if (verifyError) return verifyError;
+
+  var bill = Number(order.billAmount) || 0;
+  if (bill <= 0) return err('INVALID_AMOUNT');
+
+  order.customerId  = c.customerId;
+  order.claimStatus = 'CLAIMED';
+  order.claimedAt   = nowISO();
+  order.completedAt = nowISO();
+  order.walletUsed  = 0;              // 付款在 foodcourt，这里不动钱包
+  order.finalAmount = bill;
+
+  c.totalSpend = (Number(c.totalSpend) || 0) + bill;
+
+  /* §56 六小时内只算一次到店（与 App 点单、1.x 认领共用同一个判断） */
+  var visitCounted = shouldCountVisit(c, null, order.orderId);
+  if (visitCounted) {
+    c.totalVisits = (Number(c.totalVisits) || 0) + 1;
+    c.lastVisitAt = nowISO();
+  }
+
+  var points = pointsForAmount(bill, 0);
+  order.pointsEarned = points;
+  issuePoints(c, order, points,
+              'Foodcourt ticket ' + (order.externalOrderId || order.orderId),
+              ctx.staff.staffId, 'STAFF', 'EARN');
+
+  var reward = generateReward(c, order, bill);
+  if (reward) {
+    order.rewardAmount = Number(reward.amount) || 0;
+    order.rewardId = reward.rewardId;
+    /* totalRewards = 已发出数，与 claimOrder / completeOrder / grantOrder 一致 */
+    c.totalRewards = (Number(c.totalRewards) || 0) + 1;
+  }
+
+  /* 这张单若有 AVAILABLE 的 1.x Claim（顾客还没自己扫），一并结掉，
+     否则顾客之后扫那张 QR 会看到一张已进分单据 */
+  dbFilter('claims', function (cl) {
+    return cl.orderId === order.orderId && cl.status === 'AVAILABLE';
+  }).forEach(function (cl) {
+    cl.status = 'CLAIMED';
+    cl.customerId = c.customerId;
+    cl.claimedAt = nowISO();
+  });
+
+  consumeMemberVerify(data.verifyToken);   // 交易成立，这次验证用掉了
+
+  audit(ctx.staff.staffId, 'STAFF', 'POS_BIND', 'ORDER', order.orderId,
+        'AVAILABLE', 'CLAIMED | ' + c.customerId + ' | points ' + points);
+
+  return ok({
+    orderId:      order.orderId,
+    billAmount:   bill,
+    pointsEarned: points,
+    visitCounted: visitCounted,
+    alreadyBound: false,
+    customer:     publicCustomer(c),
+    membership:   membershipInfo(c),
+    reward:       reward ? { rewardId: reward.rewardId, amount: reward.amount, status: reward.status } : null
+  });
+}
+
+/**
+ * cancelPosTicket —— 录错单号 / 金额时把单据取消（还没进分才可以）。
+ */
+function cancelPosTicket(data, token) {
+  var ctx = requireStaff(token);
+  if (ctx.error) return ctx.error;
+
+  var order = dbById('orders', String((data && data.orderId) || ''));
+  if (!order) return err('ORDER_NOT_FOUND');
+
+  if (order.claimStatus === 'CLAIMED' && order.customerId) {
+    return err('TICKET_ALREADY_BOUND',
+      'This ticket already has points issued. / 这张单已经进分了，不能在这里取消。');
+  }
+  if (order.orderStatus === 'CANCELLED') {
+    return ok({ ticket: posTicketView(order), alreadyCancelled: true });
+  }
+
+  var reason = String((data && data.reason) || 'Cancelled at POS').slice(0, 200);
+  order.orderStatus = 'CANCELLED';
+  order.cancelledAt = nowISO();
+  order.cancelledBy = ctx.staff.staffId;
+  order.cancelReason = reason;
+
+  dbFilter('claims', function (cl) {
+    return cl.orderId === order.orderId && cl.status === 'AVAILABLE';
+  }).forEach(function (cl) { cl.status = 'CANCELLED'; });
+
+  audit(ctx.staff.staffId, 'STAFF', 'CANCEL_POS_TICKET', 'ORDER', order.orderId, 'ACTIVE', 'CANCELLED | ' + reason);
+
+  return ok({ ticket: posTicketView(order), alreadyCancelled: false });
+}

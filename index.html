@@ -13,15 +13,13 @@
 </head>
 <body>
 
-<div class="page">
+<div class="page home-page">
 
+  <!-- 顶栏：品牌 · 连线状态 · 认领（右上角保留） -->
   <div class="row-between" style="padding: 6px 2px 14px;">
-    <div>
-      <div class="brand-mark" style="font-size:19px;letter-spacing:6px;text-indent:6px;">YETIPSY</div>
-    </div>
+    <div class="brand-mark" style="font-size:19px;letter-spacing:6px;text-indent:6px;">YETIPSY</div>
     <div class="row-between" style="gap:10px;align-items:center">
       <div id="connectionStatus" class="tiny muted-2" style="letter-spacing:1.4px"></div>
-      <!-- ★ 认领消费入口移到右上角（主流程已改成员工扫会员码进分） -->
       <a href="claim.html" class="top-claim" id="topClaimLink">
         <span id="claimIcon"></span>
         <span class="tc-zh">认领</span><span class="tc-en">CLAIM</span>
@@ -29,103 +27,40 @@
     </div>
   </div>
 
-  <!-- ★ 导览界面：顾客登入后从这里开始 -->
-  <div class="nav-grid">
-    <a class="nav-card" href="menu.html">
-      <span class="nc-icon" id="navMenu"></span>
-      <span class="nc-zh">酒单</span><span class="nc-en">MENU</span>
-      <span class="nc-sub">点单 · 桌号 / 自取</span>
-    </a>
-    <a class="nav-card" href="code.html">
-      <span class="nc-icon" id="navCode"></span>
-      <span class="nc-zh">会员码</span><span class="nc-en">MEMBER CODE</span>
-      <span class="nc-sub">给员工扫码进分</span>
-    </a>
-    <a class="nav-card" href="profile.html">
-      <span class="nc-icon" id="navProfile"></span>
-      <span class="nc-zh">会员中心</span><span class="nc-en">MEMBER</span>
-      <span class="nc-sub">积分 · 等级 · 设置</span>
-    </a>
-  </div>
-
-  <!-- 只有 DEMO 模式（API_URL 没填）才会出现；正式环境不会显示 -->
-  <div id="demoBanner"></div>
-
-  <!-- HERO / MEMBERSHIP -->
-  <div class="hero-card" id="heroCard">
-    <div class="hero-top">
-      <div class="hero-greet" id="greeting">—</div>
-      <div id="tierBadge"></div>
-    </div>
-    <div class="hero-points">
-      <div class="hero-points-value" id="pointsValue">0</div>
-      <div class="hero-points-unit">POINTS<br>积分</div>
-    </div>
-    <div class="progress-wrap">
-      <div class="progress-meta">
-        <span id="progressText">—</span>
-        <span id="progressNext">—</span>
+  <!-- 活动幕布：活动 / 待领奖励轮流播放，可左右滑动 -->
+  <div class="home-banner" id="homeBanner">
+    <div class="hb-track" id="homeBannerTrack">
+      <div class="hb-slide hb-default">
+        <div class="hb-zh">YETIPSY</div>
+        <div class="hb-en">JOIN THE NIGHT</div>
       </div>
-      <div class="progress-track"><div class="progress-bar" id="progressBar" style="width:0%"></div></div>
     </div>
+    <div class="hb-dots" id="homeBannerDots"></div>
   </div>
 
-  <!-- STATS -->
-  <div class="stat-grid">
-    <div class="stat">
-      <div class="stat-label">My Wallet 我的钱包</div>
-      <div class="stat-value gold" id="walletValue">RM 0.00</div>
-      <div class="stat-sub" id="walletSub">可在下次消费抵扣</div>
-    </div>
-    <div class="stat">
-      <div class="stat-label">Total Spend 累计消费</div>
-      <div class="stat-value" id="spendValue">RM 0.00</div>
-      <div class="stat-sub" id="visitsSub">0 visits 到店</div>
-    </div>
+  <!-- 只有 API_URL 没配置时才会出现（正式环境不会显示） -->
+  <div id="configError"></div>
+
+  <!-- 四个入口：下面没有别的选项 -->
+  <div class="home-grid">
+    <a class="home-tile" href="menu.html">
+      <span class="ht-icon" id="tileMenu"></span>
+      <span class="ht-zh">下单</span><span class="ht-en">ORDER</span>
+    </a>
+    <a class="home-tile" href="code.html">
+      <span class="ht-icon" id="tileCode"></span>
+      <span class="ht-zh">会员码</span><span class="ht-en">MEMBER CODE</span>
+    </a>
+    <a class="home-tile" href="profile.html">
+      <span class="ht-icon" id="tileProfile"></span>
+      <span class="ht-zh">会员中心</span><span class="ht-en">MEMBER</span>
+    </a>
+    <a class="home-tile" href="orders.html">
+      <span class="ht-icon" id="tileOrders"></span>
+      <span class="ht-zh">我的订单</span><span class="ht-en">MY ORDERS</span>
+    </a>
   </div>
 
-  <!-- PENDING REWARD -->
-  <div id="pendingRewardBox"></div>
-
-  <!-- 其他功能（原本的主要功能保留在这里） -->
-  <div class="section">
-    <div class="section-title">
-      <span class="st-zh">其他</span><span class="st-en">MORE</span>
-    </div>
-    <div class="quick-grid">
-      <a class="quick-item" href="orders.html">
-        <span class="qi-icon" id="qiOrders"></span>
-        <span class="qi-zh">我的订单</span><span class="qi-en">ORDERS</span>
-      </a>
-      <a class="quick-item" href="activity.html">
-        <span class="qi-icon" id="qiAct"></span>
-        <span class="qi-zh">记录</span><span class="qi-en">ACTIVITY</span>
-      </a>
-      <a class="quick-item" href="wallet.html">
-        <span class="qi-icon" id="qiWallet"></span>
-        <span class="qi-zh">钱包</span><span class="qi-en">WALLET</span>
-      </a>
-      <a class="quick-item" href="profile.html">
-        <span class="qi-icon" id="qiProfile"></span>
-        <span class="qi-zh">会员</span><span class="qi-en">MEMBER</span>
-      </a>
-    </div>
-  </div>
-
-  <!-- TONIGHT / PROMOTIONS -->
-  <div class="section">
-    <div class="section-title">
-      <span class="st-zh">今晚活动</span><span class="st-en">TONIGHT</span>
-    </div>
-    <div id="promoList">
-      <div class="skeleton" style="height:80px"></div>
-    </div>
-  </div>
-
-  <div class="footnote">YETIPSY MINI APP 1.6 · ORDERING EDITION</div>
-  <div class="footnote mt-8">
-    <a href="admin/login.html" class="tiny muted-2" style="letter-spacing:1.4px">STAFF LOGIN 员工登录</a>
-  </div>
 </div>
 
 <script src="js/config.js"></script>
@@ -134,7 +69,6 @@
 <script src="js/ui.js"></script>
 <script src="js/app.js"></script>
 <script>
-  UI.renderBottomNav('index.html');
   APP.init();
 </script>
 

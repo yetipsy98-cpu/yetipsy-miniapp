@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B0B0B">
+<title>YETIPSY STAFF — POS 进单</title>
+<link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/admin.css">
+</head>
+<body class="admin">
+
+<div class="a-page">
+
+  <!-- ① 待进单队列 -->
+  <div id="stepQueue">
+
+    <div class="pos-bar">
+      <span class="a-sub" id="queueStatus">载入中…</span>
+      <button class="chip" id="refreshBtn" style="margin-left:auto">刷新 REFRESH</button>
+    </div>
+
+    <div class="pos-stats">
+      <div class="dash-card">
+        <div class="dc-label">待进单 OPEN</div>
+        <div class="dc-value" id="statOpen">0</div>
+      </div>
+      <div class="dash-card">
+        <div class="dc-label">今日进单 BOUND</div>
+        <div class="dc-value" id="statBound">0</div>
+      </div>
+      <div class="dash-card">
+        <div class="dc-label">今日积分 POINTS</div>
+        <div class="dc-value gold" id="statPoints">0</div>
+      </div>
+    </div>
+
+    <div id="queueBody"></div>
+
+    <!-- 录入 foodcourt 单据 -->
+    <button class="big-action" id="newTicketBtn" style="margin-top:12px">
+      ＋ 录入 FOODCOURT 单据
+      <span class="ba-sub">输入单号与金额 · 之后扫顾客会员码进分</span>
+    </button>
+
+    <div id="ticketForm" class="panel" style="display:none;border:1px solid var(--a-line);border-radius:14px;padding:14px;margin-top:12px">
+      <div class="a-section-title" style="margin-top:0">新单据 NEW TICKET</div>
+
+      <div class="a-field">
+        <label class="a-label">单据号码 FOODCOURT ORDER NO.</label>
+        <input class="a-input" id="ticketNoInput" placeholder="FC8231" maxlength="30" autocomplete="off">
+        <div class="a-sub mt-8">选填 · 填了就不会重复登记同一个单号</div>
+      </div>
+
+      <div class="a-field">
+        <label class="a-label">金额（RM） AMOUNT</label>
+        <input class="a-input" id="ticketAmountInput" type="number" step="0.01" min="0"
+          inputmode="decimal" placeholder="86.00" style="font-size:22px">
+      </div>
+
+      <div class="a-field">
+        <label class="a-label">备注 NOTE</label>
+        <input class="a-input" id="ticketNoteInput" placeholder="4 号桌" maxlength="60">
+      </div>
+
+      <div class="tk-actions">
+        <button class="big-action" id="saveTicketBtn" style="flex:1">加入待进单 ADD</button>
+        <button class="chip" id="cancelTicketBtn">取消 CANCEL</button>
+      </div>
+      <div class="a-sub mt-8">付款在 foodcourt 完成，这里只记录单据、不收款。</div>
+    </div>
+
+    <div class="a-section-title">今日已进单 TODAY</div>
+    <div id="todayBody"></div>
+  </div>
+
+  <!-- ② 扫会员码 -->
+  <div id="stepScan" style="display:none">
+    <div class="a-section-title" style="margin-top:0">① 扫会员码 SCAN MEMBER CODE</div>
+
+    <div class="ticket picked" id="scanTicketBox"></div>
+
+    <div class="a-sub mt-12">请顾客出示会员码（条码或下方的 QR）</div>
+
+    <div class="pos-scan" id="scanBox" style="display:none">
+      <video id="scanVideo" muted playsinline></video>
+      <div class="scan-frame"></div>
+    </div>
+
+    <div class="a-sub mt-12" id="scanHint"></div>
+    <div class="a-sub mt-8" id="scanSupport"></div>
+
+    <button class="btn btn-primary mt-16" id="startScanBtn" style="width:100%">开启相机 START CAMERA</button>
+    <button class="btn btn-ghost mt-8" id="stopScanBtn" style="width:100%;display:none">停止 STOP</button>
+
+    <div class="a-divider"></div>
+    <div class="a-sub">没有相机？请顾客报出条码内容</div>
+    <div class="row-between mt-8" style="gap:8px">
+      <input class="a-input" id="manualInput" placeholder="YT1|YT000001|…" style="flex:1 1 auto">
+      <button class="btn btn-secondary" id="manualBtn" style="width:auto;padding:0 16px">输入</button>
+    </div>
+
+    <button class="btn btn-ghost mt-16" id="backToQueueBtn" style="width:100%">← 回待进单 BACK</button>
+  </div>
+
+  <!-- ③ 确认会员 -->
+  <div id="stepConfirm" style="display:none">
+    <div class="a-section-title" style="margin-top:0">② 确认进单 CONFIRM</div>
+
+    <div class="cust-card" id="confirmCustomer"></div>
+
+    <div class="panel" style="border:1px solid var(--a-line);border-radius:14px;padding:12px;margin-top:12px"
+         id="confirmTicket"></div>
+
+    <div class="a-sub mt-8" id="verifyLeft">—</div>
+
+    <button class="btn btn-primary mt-16 big-action" id="confirmBtn" style="width:100%">确认进分 CONFIRM</button>
+    <button class="btn btn-ghost mt-8" id="rescanBtn" style="width:100%">重新扫码 RESCAN</button>
+  </div>
+
+  <!-- ④ 结果 -->
+  <div id="stepResult" style="display:none">
+    <div class="a-section-title" style="margin-top:0">✓ 已进单 DONE</div>
+
+    <div class="cust-card" style="text-align:center">
+      <div class="a-title" id="rName">—</div>
+      <div class="pos-big mt-8" id="rPoints">+0 分</div>
+      <div class="a-sub" id="rReward"></div>
+    </div>
+
+    <div class="panel" style="border:1px solid var(--a-line);border-radius:14px;padding:12px;margin-top:16px">
+      <div class="pos-row"><span class="pos-k">单据 TICKET</span><span class="pos-v" id="rTicket">—</span></div>
+      <div class="pos-row"><span class="pos-k">消费 BILL</span><span class="pos-v" id="rBill">—</span></div>
+      <div class="pos-row"><span class="pos-k">到店 VISIT</span><span class="pos-v" id="rVisit">—</span></div>
+      <div class="pos-row"><span class="pos-k">积分总计 TOTAL</span><span class="pos-v" id="rTotal">—</span></div>
+    </div>
+
+    <div class="a-sub mt-12">
+      积分按 POINTS_PER_RM 自动计算；达门槛自动发 Reward 到顾客的会员端。<br>
+      六小时内的重复消费不会重复计到店次数。
+    </div>
+
+    <button class="btn btn-primary mt-16" id="nextTicketBtn" style="width:100%">下一张 NEXT TICKET</button>
+  </div>
+
+</div>
+
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/admin.js"></script>
+<script src="../js/scanner.js"></script>
+<script src="../js/vendor/jsQR.js"></script>
+<script src="../js/admin-pos.js"></script>
+<script>
+  if (ADMIN.requireAuth()) {
+    ADMIN.renderShell({ title: 'POS 进单' });
+    ADMIN_POS.init();
+  }
+</script>
+</body>
+</html>

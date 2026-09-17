@@ -239,6 +239,11 @@ var ERR = {
   ORDER_NOT_PAID:          ['ORDER_NOT_PAID', 'Confirm payment before completing. / 请先确认收款再完成订单。'],
   ORDER_ALREADY_FINAL:     ['ORDER_ALREADY_FINAL', 'This order is already closed. / 这张订单已经结案。'],
   CANCEL_NOT_ALLOWED:      ['CANCEL_NOT_ALLOWED', 'This order can no longer be cancelled. / 这张订单已无法取消。'],
+
+  /* 2.1 POS 进单（foodcourt 单据 → 扫会员码进分） */
+  TICKET_ALREADY_BOUND:    ['TICKET_ALREADY_BOUND', 'This ticket already has a member. / 这张单已经进过会员了。'],
+  ORDER_CANCELLED:         ['ORDER_CANCELLED', 'This ticket was cancelled. / 这张单已被取消。'],
+
   UNKNOWN_ACTION:          ['UNKNOWN_ACTION', 'Unknown action. / 未知的 API 动作。']
 };
 

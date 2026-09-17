@@ -176,3 +176,50 @@ body.admin.has-admin-nav { padding-bottom: calc(66px + env(safe-area-inset-botto
   font-size: 8.5px; letter-spacing: 1.2px; padding: 3px 7px; border-radius: 6px;
   background: rgba(229,183,105,.12); color: var(--a-gold); border: 1px solid rgba(229,183,105,.3);
 }
+
+/* =============================================================
+   POS 进单台（admin/pos.html）
+   -------------------------------------------------------------
+   员工动线：录入 foodcourt 单据 → 待进单队列 → 扫会员码 → 进分
+   金额一律取自单据，员工不需要再输第二次。
+   ============================================================= */
+
+.pos-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.pos-bar .a-sub.warn { color: var(--a-gold); }
+
+.pos-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 6px; }
+.pos-stats .dash-card { padding: 11px 10px; }
+.pos-stats .dc-value { font-size: 17px; }
+
+/* 待进单卡片 */
+.ticket {
+  border: 1px solid var(--a-line); border-radius: 14px;
+  background: rgba(255,255,255,.02); padding: 12px; margin-bottom: 10px;
+}
+.ticket.picked { border-color: rgba(229,183,105,.55); background: rgba(229,183,105,.06); }
+.tk-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tk-num { font-size: 16px; font-weight: 750; letter-spacing: 1.2px; }
+.tk-amt { font-size: 17px; font-weight: 750; color: var(--a-gold); }
+.tk-meta { font-size: 10.5px; letter-spacing: .8px; color: var(--a-muted); margin-top: 4px; }
+.tk-note { font-size: 11px; color: var(--a-gold); margin-top: 6px;
+  border-left: 2px solid var(--a-gold); padding-left: 8px; }
+.tk-actions { display: flex; gap: 8px; margin-top: 10px; }
+.tk-actions .big-action { margin-top: 0; }
+.tk-actions .chip { flex: 0 0 auto; }
+
+/* 扫码框（与旧 SCAN & GRANT 一致，员工不用重新学） */
+.pos-scan { position: relative; border: 1px solid var(--a-line); border-radius: 14px;
+  overflow: hidden; background: #000; margin-top: 12px; }
+.pos-scan video { width: 100%; display: block; }
+.pos-scan .scan-frame {
+  position: absolute; left: 12%; right: 12%; top: 22%; bottom: 22%;
+  border: 2px solid var(--a-gold); border-radius: 12px; pointer-events: none;
+}
+
+/* 确认 / 结果 */
+.pos-row { display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.06); font-size: 13px; }
+.pos-row:last-child { border-bottom: 0; }
+.pos-k { color: var(--a-muted); letter-spacing: .8px; font-size: 11px; }
+.pos-v { font-weight: 700; }
+.pos-big { font-size: 30px; font-weight: 800; color: var(--a-gold); letter-spacing: 1px; }

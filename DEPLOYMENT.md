@@ -208,10 +208,10 @@ function runUpgrade() {
 
 ### 升级后要做的两件事
 
-1. **员工端**：`admin/index.html` 顶部多了 **ORDER BOARD**（点单看板），
+1. **员工端**：`admin/index.html` 多了 **POS 进单** 与 **ORDER BOARD**，
    `admin/more.html` 多了菜单管理与业绩报表
-2. **顾客端**：底部导航第三格从「记录」变成「订单」（§4）；
-   「记录」改从首页快捷区进入
+2. **顾客端**：首页只剩四个入口（下单 / 会员码 / 会员中心 / 我的订单）；
+   「钱包」与「记录」收进 **会员中心**（§68 旧网址全部照常运作）
 
 ## B4. 确认资料库建立成功
 
@@ -339,8 +339,8 @@ activity.html  profile.html  manifest.json  service-worker.js
 css/  js/  admin/  assets/
 ```
 
-> ⚠️ **不要**上传 `demo/` 和 `apps-script/`（那是后端与测试用的）
-> 上传了也不会坏，但没必要。
+> ⚠️ **不要**上传 `apps-script/`（那是后端，要放在 Google Apps Script）
+> 与 `tools/`（产生复制贴上文件用的工具）。上传了也不会坏，但没必要。
 
 3. 拉到最下面 → **Commit changes**
 
@@ -405,20 +405,33 @@ https://你的账号.github.io/yetipsy-miniapp/
 
 - [ ] 打开 `/admin/login.html`，用 owner 账号登录
 - [ ] Dashboard 显示 Tonight 的资料（一开始都是 0）
-- [ ] ★ `SCAN & GRANT` 是**第一个**大按钮
+- [ ] ★ `POS 进单` 是**第一个**大按钮
 
-### G1-a. 主流程：扫码进分（★ 1.6）
+### G1-a. 主流程：POS 进单（★ 2.1）
 
 - [ ] 先用你自己的手机在会员端注册、登入，打开「会员码」页
-- [ ] 员工端按 `SCAN & GRANT`
-- [ ] ① 输入 `50.00` → 下一步
-- [ ] ② 按「开启相机」，扫手机上的会员码
-      （相机开不了就用「手动输入」，把条码下面那串字打进去）
-- [ ] ③ 画面显示你的名字与编号 → 按「确认进分」
-- [ ] 出现 `+50 分`；手机上的积分也变成 50
+- [ ] 员工端按 `POS 进单`
+- [ ] 按 `＋ 录入 FOODCOURT 单据` → 单号 `FC8231`、金额 `50.00` → `ADD`
+      → 队列出现这张单（`待进单 OPEN` 变成 1）
+- [ ] **再录一次同样的 `FC8231`** → 应该出现「此订单号已存在」（重复保护正常）
+- [ ] 队列里点这张单的 `扫会员码进单 SCAN MEMBER`
+- [ ] 按「开启相机」，扫手机上的会员码
+      （相机开不了就用手动输入，把条码下面那串字打进去）
+- [ ] 确认画面显示你的名字、编号与金额 → 按「确认进分 CONFIRM」
+- [ ] 出现 `+50 分`；手机上的积分也变成 50，「今日已进单」多了这笔
 - [ ] **没扫码就想送出** → 应该被挡下（`MEMBER_VERIFY_REQUIRED`）
 - [ ] **同一个码扫两次进分** → 第二次应该失败（`MEMBER_VERIFY_EXPIRED`，
       因为验证码是一次性的）
+- [ ] **同一张单再扫一次别的会员** → 应该出现「这张单已经进过会员了」
+- [ ] 录一张新单后按队列里的 `取消 ✕` → 单据从队列消失（还没进分才能取消）
+
+### G1-a2. Mini app 的单：订单看板（★ 2.0）
+
+- [ ] 顾客端 `下单` → 加两杯 → 结帐 → 下单
+- [ ] 员工端 `ORDER BOARD` → NEW 栏出现这张单（可开声音）
+- [ ] `接单 → 开始制作 → 做好了 → 收款并标记 PAID → 完成订单`
+- [ ] 完成时自动发积分 / Reward；顾客端 `我的订单` 看得到进度
+- [ ] **重复按完成** → 不会第二次发积分（幂等）
 
 ### G1-b. 次要流程：Foodcourt Claim（限 Manager / Owner）
 
@@ -427,8 +440,10 @@ https://你的账号.github.io/yetipsy-miniapp/
 - [ ] **再建立一次同样的 TEST001** → 应该出现「此订单号已存在」（重复保护正常）
 - [ ] 按 `CANCEL` 取消这笔测试 Claim
 - [ ] ★ **任何角色**（含 owner）登入，首页都**没有** `CREATE CLAIM` 按钮；
-      首页四个大按钮应为 SCAN & GRANT / ORDER BOARD / MENU STATUS / SCAN & REDEEM
-- [ ] ★ `MORE → FOODCOURT CLAIM` 仍可进入（§85 不能断掉 1.x）
+      首页四个大按钮应为 POS 进单 / ORDER BOARD / MENU STATUS / SCAN & REDEEM
+- [ ] ★ `MORE → Create Claim` 仍可进入（§85 不能断掉 1.x）
+- [ ] 建一张 `TEST001` / RM50 的 Claim 后，POS 队列**看不到**它 ——
+      它是给顾客自己扫 QR 的，不该混进「待进单」
 
 ### G1-c. 商品上下架（★ 1.6 所有员工都可以）
 
@@ -441,9 +456,13 @@ https://你的账号.github.io/yetipsy-miniapp/
 
 - [ ] 打开会员端网址
 - [ ] 输入你的手机号码 → 注册
-- [ ] 首页显示 0 积分、RM0.00 钱包
-- [ ] 员工端再建立一笔 Claim（例如 `TEST002`，RM86）
-- [ ] 顾客端 → `CLAIM PURCHASE` → 输入 Code
+- [ ] 首页只有「活动幕布 + 四个入口」（下单 / 会员码 / 会员中心 / 我的订单），
+      下面没有任何其他选项；右上角是「认领」
+- [ ] 进 `会员中心` → 看得到刚注册的 0 积分、RM0.00 钱包（§84 之前是显示在首页）
+- [ ] 员工端 → `POS 进单` → 录入 `TEST002` / RM86 → 扫你的会员码 → 确认进分
+- [ ] 顾客端 `我的订单` / `会员中心` 看到积分与消费记录更新
+- [ ] 旧路径仍然可用：员工端 `MORE → Create Claim`（例如 `TEST003`，RM86）
+- [ ] 顾客端右上角 `认领` → 输入 Code
 - [ ] 显示 RM86.00 → 按 `CLAIM MY ORDER`
 - [ ] 出现 `+86 POINTS`
 - [ ] 按 `OPEN REWARD` → 动画 → 显示奖励金额
@@ -485,34 +504,47 @@ https://你的账号.github.io/yetipsy-miniapp/
 2. 确认 Dashboard 显示今天的资料
 3. 检查奖励预算：`budget RM50.00 · left RMxx.xx`
 
-## 每一笔交易（★ 1.6 主流程）
+## 每一笔交易（★ 2.1 主流程）
 
 ```
-顾客在 Foodcourt 点 Yetipsy 的酒，付了 RM86
+顾客在 Foodcourt 点 Yetipsy 的酒，在 foodcourt 付了 RM86
         ↓
-员工：SCAN & GRANT（员工首页第一个按钮）
+员工：POS 进单（员工首页第一个按钮 / 底部 POS）
         ↓
-① 输入消费金额 86.00 → 下一步
+① 录入单据：单号 FC8231 · 金额 86.00 → 进「待进单」队列
         ↓
-② 扫顾客的会员码（会员端「会员码」页给他看）
+② 顾客出示会员码 → 点该张单的「扫会员码进单」→ 扫码
         ↓
 ③ 确认是本人 → 确认进分
         ↓
 系统自动：+86 积分 · 算一次到店 · 达门槛自动发 Reward
 ```
 
-> **员工只输金额**，积分按 `POINTS_PER_RM` 自动算，Reward 达
-> `REWARD_MIN_SPEND` 自动发出 —— 不需要员工自己算，也不能自己填。
+> **金额以 foodcourt 单据为准**，员工录一次就好，扫码时不用再输第二次。
+> 积分按 `POINTS_PER_RM` 自动算，Reward 达 `REWARD_MIN_SPEND` 自动发出。
+>
+> **付款在 foodcourt 完成**，POS 不动钱包；顾客要用钱包余额抵扣，
+> 走 `SCAN & REDEEM`。
 >
 > **六小时内同一位顾客不会重复计到店次数**（`VISIT_SESSION_HOURS`），
 > 但积分照算。这是后端负责的，员工不用记。
 >
 > 顾客还没有会员码？请他先在会员端注册登入，「会员码」页就会显示。
 
-### 顾客没在场 / 事后补登（次要流程，限 Manager / Owner）
+### Mini app 的单（顾客自己下单）
 
 ```
-员工：MORE → FOODCOURT CLAIM
+顾客：下单 → 酒单 → 购物车 → 结帐 → 下单
+        ↓
+员工：ORDER BOARD → 接单 → 制作 → 好了 → 收款 → 完成
+        ↓
+系统自动：+积分 · Reward · 算一次到店（不需要再扫会员码）
+```
+
+### 顾客没在场 / 事后补登（备用流程，限 Manager / Owner）
+
+```
+员工：MORE → Create Claim
       来源 FOODCOURT · 单号 FC8231 · 金额 86.00
         ↓
 系统产生 QR + Code → 员工把 Code 给顾客
@@ -678,7 +710,7 @@ Android：设定 → 清除浏览器快取，或重新加入主画面。
 
 > 分页数的由来：1.x 是 12 张，2.0 新增 `Categories` / `Products` /
 > `ProductOptions` / `AppOrders` / `OrderItems` 共 5 张 = **17 张**。
-> 这个 17 跟 `Config.gs` 的 `SCHEMA` 键数一致，`demo/test-copypaste.js`
+> 这个 17 跟 `Config.gs` 的 `SCHEMA` 键数一致，`tools/build-copypaste.js`
 > 会挡住两者脱节。
 
 ```
@@ -711,7 +743,7 @@ Mobile ordering + retention. 价格一律由后端决定。
 - `Customers.gs → customerLogin()` 先查后建，整段在 `LockService` 交易锁内执行；
   另有 `customerRegister()`：号码已存在直接回 `PHONE_ALREADY_REGISTERED`。
 - 历史脏资料用 `dedupeCustomers()` 合并（见 PART I）。
-- 测试覆盖：`node demo/tests.js`（第 02–06 组）、`node demo/test-apps-script.js`（第 01、05 组）。
+- （2.1 起自动化测试套件已移除，这一节保留为人工验证步骤。）
 
 ### 2. 会员登录 = 手机号码 + 密码（不用 WhatsApp OTP）
 
