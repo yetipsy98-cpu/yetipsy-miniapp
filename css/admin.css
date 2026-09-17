@@ -534,3 +534,39 @@ body.admin.has-admin-nav .kiosk-bar {
 }
 /* 结账列浮起来之后，点餐台最后一行商品要留出空间，别被挡住 */
 body.admin.has-admin-nav .pos-page { padding-bottom: 132px; }
+
+/* =============================================================
+   2.1.9 · 菜单管理：商品编辑
+   -------------------------------------------------------------
+   1) 表单打开时员工一定看得到（配合 js scrollIntoView）
+   2) 编辑中的那一列highlight，知道自己在改哪一个
+   3) 规格（SIZE / ICE）可以在表单里直接改价、下架、新增
+   ============================================================= */
+#productForm { box-shadow: 0 12px 30px rgba(0,0,0,.45); }
+.a-list.editing {
+  background: rgba(229,183,105,.07);
+  border-left: 2px solid var(--a-gold);
+  border-radius: 10px;
+  padding-left: 10px;
+}
+.oi-row {
+  display: grid; gap: 6px;
+  grid-template-columns: 1fr;              /* 手机：一行一栏，好按 */
+  padding: 10px; margin-top: 8px;
+  border: 1px solid var(--a-line); border-radius: 12px;
+  background: rgba(255,255,255,.02);
+}
+.oi-row.is-off { opacity: .55; }
+.oi-row.is-new { border-color: rgba(229,183,105,.45); }
+.oi-group { font-size: 10px; letter-spacing: 1.2px; color: var(--a-gold); text-transform: uppercase; }
+.oi-row .a-input { width: 100%; }
+.oi-adj { display: flex; align-items: center; gap: 6px; }
+.oi-adj .oi-num { flex: 1 1 auto; }
+.oi-btns { display: flex; gap: 8px; }
+.oi-btns .chip { flex: 1 1 auto; text-align: center; }
+@media (min-width: 520px) {
+  .oi-row { grid-template-columns: 90px 1fr 1fr 110px auto; align-items: center; }
+  .oi-row.is-new { grid-template-columns: 1fr 1fr 1fr 110px auto; }
+  .oi-btns { flex: 0 0 auto; }
+  .oi-btns .chip { flex: 0 0 auto; }
+}

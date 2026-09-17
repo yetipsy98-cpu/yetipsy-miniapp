@@ -144,7 +144,7 @@ npm run check:backend     # 确认 GitHub 上那一个档案是最新版（见�
    扫会员码进分 → 会员点单（含规格加价）→ 看板收款完成发积分
 
 贴完 Apps Script 之后，用员工账号进 **MORE 页**最下面看版本：
-`✓ 后端 v2.1.8 · 已是最新版` 就对了。
+`✓ 后端 v2.1.9 · 已是最新版` 就对了。
 
 > 2.1 起本机 demo 服务器与自动化测试套件已移除（线上版不需要它们），
 > `tools/google-shim.js` 与 `tools/load-backend.js` 保留给

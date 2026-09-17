@@ -76,12 +76,22 @@ var ADMIN = (function () {
     warmUp();
   }
 
+  var warmBound = false;
   function warmUp() {
     try {
       var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 300); };
       idle(function () {
         if (API.cache && API.cache.prefetchStaff) API.cache.prefetchStaff();
       });
+      /* 从別的 App / 锁屏回到前景时再温一次（快取过期的资料顺手补新，
+         员工把平板拿起来就能直接用；20 秒内不会重复打后端） */
+      if (!warmBound) {
+        warmBound = true;
+        document.addEventListener('visibilitychange', function () {
+          if (document.hidden) return;
+          if (API.cache && API.cache.prefetchStaff) API.cache.prefetchStaff();
+        });
+      }
     } catch (e) {}
   }
 

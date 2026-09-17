@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#0B0B0B">
 <title>YETIPSY STAFF — More</title>
 <link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
-<link rel="stylesheet" href="../css/app.css?v=2.1.8">
-<link rel="stylesheet" href="../css/admin.css?v=2.1.8">
+<link rel="stylesheet" href="../css/app.css?v=2.1.9">
+<link rel="stylesheet" href="../css/admin.css?v=2.1.9">
 </head>
 <body class="admin">
 
@@ -87,17 +87,18 @@
   <!-- 后端版本：贴完 Apps Script 之后看这里，就知道是不是最新版 -->
   <div class="center mt-16">
     <span id="backendVersion" class="tiny muted-2">后端版本检查中…</span>
+    <button class="chip" id="recheckVersionBtn" style="margin-left:8px">重新检查 RECHECK</button>
   </div>
 
-  <div class="footnote">YETIPSY MINI APP 2.1.8 · FOODCOURT POS EDITION</div>
+  <div class="footnote">YETIPSY MINI APP 2.1.9 · FOODCOURT POS EDITION</div>
 
 </div>
 
-<script src="../js/config.js?v=2.1.8"></script>
-<script src="../js/api.js?v=2.1.8"></script>
-<script src="../js/auth.js?v=2.1.8"></script>
-<script src="../js/ui.js?v=2.1.8"></script>
-<script src="../js/admin.js?v=2.1.8"></script>
+<script src="../js/config.js?v=2.1.9"></script>
+<script src="../js/api.js?v=2.1.9"></script>
+<script src="../js/auth.js?v=2.1.9"></script>
+<script src="../js/ui.js?v=2.1.9"></script>
+<script src="../js/admin.js?v=2.1.9"></script>
 <script>
 (function () {
   if (!ADMIN.requireAuth()) return;
@@ -116,21 +117,38 @@
   var want = YETIPSY_CONFIG.APP_VERSION || '';
   var badge = document.getElementById('backendVersion');
 
-  API.system.ping().then(function (res) {
-    var got = (res && res.success && res.data && res.data.version) ? String(res.data.version) : '';
-    if (!got) {
-      badge.textContent = '⚠ 连不上后端 · 请检查 js/config.js 的 API_URL';
-      return;
-    }
-    if (got === want) {
-      badge.textContent = '✓ 后端 v' + got + ' · 已是最新版';
-      badge.style.color = '#5DD39E';
-    } else {
-      badge.textContent = '⚠ 后端 v' + got + ' ≠ 前端 v' + want +
-        ' · 请重新贴 Apps Script（' + got + ' 是旧版）';
+  function checkVersion() {
+    badge.textContent = '后端版本检查中…';
+    badge.style.color = '';
+    /* 一定要问后端本人，所以指定 cache:false（不要拿快取） */
+    API.system.ping().then(function (res) {
+      var got = (res && res.success && res.data && res.data.version) ? String(res.data.version) : '';
+      if (!got) {
+        badge.textContent = '⚠ 连不上后端 · 请检查 js/config.js 的 API_URL';
+        badge.style.color = '#E2696B';
+        return;
+      }
+      if (got === want) {
+        badge.textContent = '✓ 后端 v' + got + ' · 已是最新版';
+        badge.style.color = '#5DD39E';
+        return;
+      }
+      /* 分两种：后端旧（要贴 Apps Script）／前端旧（这页要重新载入清快取） */
+      var cmp = 0;
+      try { cmp = got.localeCompare(want, undefined, { numeric: true }); } catch (e) { cmp = got < want ? -1 : 1; }
+      if (cmp < 0) {
+        badge.textContent = '⚠ 后端 v' + got + ' ≠ 前端 v' + want + ' · 后端是旧版，请重新贴 Apps Script';
+      } else {
+        badge.textContent = '⚠ 后端 v' + got + ' 比前端 v' + want +
+          ' 新 · 这页还是旧版，请重新载入（或清快取）';
+      }
       badge.style.color = '#E2696B';
-    }
-  });
+    });
+  }
+
+  checkVersion();
+  var recheck = document.getElementById('recheckVersionBtn');
+  if (recheck) recheck.addEventListener('click', checkVersion);
 })();
 </script>
 </body>

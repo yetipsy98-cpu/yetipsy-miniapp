@@ -142,7 +142,8 @@ var ADMIN_MENU = (function () {
     /* getAdminMenu 才回传 status（顾客端的 getMenu 只有 ACTIVE 的商品） */
     var archived = String(p.status || 'ACTIVE').toUpperCase() !== 'ACTIVE';
     var opts = state.optionsByProduct[p.productId] || [];
-    return '<div class="a-list" data-row="' + UI.esc(p.productId) + '">' +
+    var editing = state.editing && state.editing.productId === p.productId;
+    return '<div class="a-list' + (editing ? ' editing' : '') + '" data-row="' + UI.esc(p.productId) + '">' +
       '<div class="a-main">' +
         '<div class="a-title">' + UI.esc(p.nameEN) +
           (p.nameZH ? ' <span class="a-sub">' + UI.esc(p.nameZH) + '</span>' : '') +
@@ -240,9 +241,12 @@ var ADMIN_MENU = (function () {
         UI.esc(c.nameZH || c.nameEN) + '</option>';
     }).join('');
 
+    var title = isEdit
+      ? '编辑商品 EDIT PRODUCT · ' + (product.nameZH || product.nameEN || '')
+      : '新增商品 ADD PRODUCT';
+
     panel.innerHTML =
-      '<div class="a-section-title" id="formTitle">' +
-        (isEdit ? '编辑商品 EDIT PRODUCT' : '新增商品 ADD PRODUCT') + '</div>' +
+      '<div class="a-section-title" id="formTitle">' + title + '</div>' +
 
       field('商品名称（英） NAME (EN)', 'fNameEN', product ? product.nameEN : '', 'Mojito') +
       field('商品名称（中） NAME (ZH)', 'fNameZH', product ? product.nameZH : '', '经典莫希托') +
@@ -259,9 +263,8 @@ var ADMIN_MENU = (function () {
       field('排序 SORT ORDER', 'fSort', product ? (product.sortOrder || 0) : '0', '0', 'number') +
 
       '<div class="a-divider"></div>' +
-      '<div class="a-sub">促销（§40）—— 后端自己判断时间窗，前端不能指定「现在的价格」</div>' +
-      field('原价（RM） ORIGINAL', 'fOriginal',
-        product && product.originalPrice ? (product.originalPrice / 100).toFixed(2) : '', '25.00', 'number') +
+      '<div class="a-sub">促销（§40）—— 后端自己判断时间窗，前端不能指定「现在的价格」。' +
+        '原价 = 上面填的价格，这里只填促销价和日期。</div>' +
       field('促销价（RM） PROMO', 'fPromo',
         product && product.promoPrice ? (product.promoPrice / 100).toFixed(2) : '', '18.00', 'number') +
       field('开始日期 START', 'fPromoStart', product ? (product.promoStart || '') : '',
@@ -289,6 +292,8 @@ var ADMIN_MENU = (function () {
       field('图片 URL（§33 放 GitHub /assets/menu/*.webp）', 'fImage',
         product ? product.imageURL : '', '/assets/menu/mojito.webp') +
 
+      (isEdit ? optionsHtml(product) : '') +
+
       '<button class="btn btn-primary mt-16" id="saveProductBtn" style="width:100%">' +
         (isEdit ? '保存变更 SAVE' : '建立商品 CREATE') + '</button>' +
       '<button class="btn btn-ghost mt-8" id="cancelFormBtn" style="width:100%">取消 CANCEL</button>' +
@@ -301,6 +306,179 @@ var ADMIN_MENU = (function () {
     if (cancel) cancel.addEventListener('click', closeForm);
     var archive = document.getElementById('archiveBtn');
     if (archive) archive.addEventListener('click', onArchive);
+
+    bindFormDelegates();
+
+    /* ★ 表单在页面最上面。员工在下面一点的商品按「编辑」时，
+       表单如果只是展开、没有滚动过去，看起来就像「按了没反应」。
+       所以每次打开都滚动到表单。 */
+    try { panel.scrollIntoView({ block: 'start', behavior: 'smooth' }); }
+    catch (e) { try { panel.scrollIntoView(); } catch (e2) {} }
+  }
+
+  /* ---------------------------------------------------------
+     规格（Options）：SIZE / ICE …
+     点餐台遇到有规格的商品会先开规格表，所以这里要能维护。
+     --------------------------------------------------------- */
+
+  /** 已经用过的规格群组（新规格的输入建议用） */
+  function knownGroups() {
+    var groups = [];
+    Object.keys(state.optionsByProduct || {}).forEach(function (pid) {
+      (state.optionsByProduct[pid] || []).forEach(function (o) {
+        if (o.optionGroup && groups.indexOf(o.optionGroup) === -1) groups.push(o.optionGroup);
+      });
+    });
+    ['SIZE', 'ICE', 'STRENGTH'].forEach(function (g) {
+      if (groups.indexOf(g) === -1) groups.push(g);
+    });
+    return groups;
+  }
+
+  function groupLabel(o) {
+    var zh = o.optionGroupNameZH || '';
+    return o.optionGroup + (zh ? ' · ' + zh : '');
+  }
+
+  function optionsHtml(product) {
+    var pid = product.productId;
+    var list = (state.optionsByProduct[pid] || []).slice().sort(function (a, b) {
+      if (a.optionGroup !== b.optionGroup) return a.optionGroup < b.optionGroup ? -1 : 1;
+      return (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
+    });
+
+    var rows = list.map(function (o) {
+      var off = String(o.status || 'ACTIVE').toUpperCase() !== 'ACTIVE';
+      return '<div class="oi-row' + (off ? ' is-off' : '') + '" data-opt="' + UI.esc(o.optionId) + '">' +
+        '<div class="oi-group">' + UI.esc(groupLabel(o)) +
+          (off ? ' <span class="chip chip-warn">已下架</span>' : '') + '</div>' +
+        '<input class="a-input oi-in" data-ozh value="' + UI.esc(o.nameZH || '') + '" placeholder="中文名 例 大杯">' +
+        '<input class="a-input oi-in" data-oen value="' + UI.esc(o.nameEN || '') + '" placeholder="English, e.g. Large">' +
+        '<div class="oi-adj"><span class="tiny muted-2">+RM</span>' +
+          '<input class="a-input oi-num" type="number" min="0" step="0.50" data-oadj value="' +
+            ((Number(o.priceAdjustment) || 0) / 100).toFixed(2) + '"></div>' +
+        '<div class="oi-btns">' +
+          '<button class="chip" data-osave="' + UI.esc(o.optionId) + '">保存</button>' +
+          '<button class="chip' + (off ? ' chip-on' : ' chip-warn') + '" data-ostatus="' + UI.esc(o.optionId) +
+            '" data-next="' + (off ? 'ACTIVE' : 'INACTIVE') + '">' + (off ? '上架' : '下架') + '</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    if (!rows) {
+      rows = '<div class="a-sub" style="padding:4px 0">这个商品还没有规格 —— 点餐台点一下就加入，不会问规格。</div>';
+    }
+
+    var dl = '<datalist id="optGroupList">' + knownGroups().map(function (g) {
+      return '<option value="' + UI.esc(g) + '"></option>';
+    }).join('') + '</datalist>';
+
+    return '<div class="a-divider"></div>' +
+      '<div class="a-section-title" style="margin-top:0">规格 OPTIONS（例：尺寸 / 冰）</div>' +
+      '<div id="optRows">' + rows + '</div>' +
+      '<div class="a-sub mt-8">＋ 新增规格（群组同名 = 同一组规格，点餐台会一组一组问）</div>' +
+      '<div class="oi-row is-new">' +
+        '<input class="a-input oi-in" id="optNewGroup" list="optGroupList" placeholder="群组 例 SIZE">' + dl +
+        '<input class="a-input oi-in" id="optNewZH" placeholder="中文名 例 大杯">' +
+        '<input class="a-input oi-in" id="optNewEN" placeholder="English, e.g. Large">' +
+        '<div class="oi-adj"><span class="tiny muted-2">+RM</span>' +
+          '<input class="a-input oi-num" id="optNewAdj" type="number" min="0" step="0.50" value="0"></div>' +
+        '<button class="chip chip-on" id="optAddBtn">＋ 新增 ADD</button>' +
+      '</div>';
+  }
+
+  /** 从 e.target 往上找带某属性的节点（区间只到表单为止） */
+  function marked(node, attr) {
+    while (node && node.nodeType === 1) {
+      if (node.getAttribute && node.getAttribute(attr)) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  function bindFormDelegates() {
+    var panel = document.getElementById('productForm');
+    if (!panel || panel.getAttribute('data-form-bound') === '1') return;
+    panel.setAttribute('data-form-bound', '1');
+    panel.addEventListener('click', function (e) {
+      var add = document.getElementById('optAddBtn');
+      if (add && (e.target === add || (e.target.parentNode === add))) { addOption(); return; }
+
+      var save = marked(e.target, 'data-osave');
+      if (save) { saveOption(save.getAttribute('data-osave')); return; }
+
+      var st = marked(e.target, 'data-ostatus');
+      if (st) { toggleOptionStatus(st.getAttribute('data-ostatus'), st.getAttribute('data-next')); return; }
+    });
+  }
+
+  /** RM 文字 → 分 */
+  function senOf(value) {
+    var n = Math.round(Number(String(value == null ? '' : value).trim() || '0') * 100);
+    return isFinite(n) && n >= 0 ? n : 0;
+  }
+
+  function saveOption(optionId) {
+    var row = document.querySelector('[data-opt="' + optionId + '"]');
+    if (!row) return;
+    var body = {
+      optionId: optionId,
+      nameZH: String(row.querySelector('[data-ozh]').value || '').trim(),
+      nameEN: String(row.querySelector('[data-oen]').value || '').trim(),
+      priceAdjustment: senOf(row.querySelector('[data-oadj]').value)
+    };
+    if (!body.nameZH && !body.nameEN) { UI.toast('请输入规格名称', 'error'); return; }
+    var btn = row.querySelector('[data-osave]');
+    if (btn) btn.disabled = true;
+    API.staff.updateProductOption(body).then(function (res) {
+      if (btn) btn.disabled = false;
+      if (!res.success) { UI.toast(res.error.message, 'error', 3500); return; }
+      UI.toast('规格已更新', 'success', 1600);
+      refreshForm();
+    });
+  }
+
+  function toggleOptionStatus(optionId, next) {
+    API.staff.updateProductOption({ optionId: optionId, status: next }).then(function (res) {
+      if (!res.success) { UI.toast(res.error.message, 'error', 3500); return; }
+      UI.toast(next === 'ACTIVE' ? '规格已上架' : '规格已下架（点餐台不再显示）', 'success', 1800);
+      refreshForm();
+    });
+  }
+
+  function addOption() {
+    var product = state.editing;
+    if (!product) return;
+    var group = String(txt('optNewGroup') || '').trim().toUpperCase();
+    var zh = txt('optNewZH');
+    var en = txt('optNewEN');
+    if (!group) { UI.toast('请填规格群组（例 SIZE / ICE）', 'error'); return; }
+    if (!zh && !en) { UI.toast('请输入规格名称', 'error'); return; }
+
+    var btn = document.getElementById('optAddBtn');
+    if (btn) btn.disabled = true;
+    API.staff.createProductOption({
+      productId: product.productId,
+      optionGroup: group,
+      nameZH: zh,
+      nameEN: en,
+      priceAdjustment: senOf(document.getElementById('optNewAdj').value)
+    }).then(function (res) {
+      if (btn) btn.disabled = false;
+      if (!res.success) { UI.toast(res.error.message, 'error', 3500); return; }
+      UI.toast('规格已新增', 'success', 1600);
+      refreshForm();
+    });
+  }
+
+  /** 改完规格：重抓资料，然后把同一个商品的表单再打开（员工不用重新找） */
+  function refreshForm() {
+    var pid = state.editing && state.editing.productId;
+    return fetchAll().then(function () {
+      if (!pid) return;
+      var p = state.products.filter(function (x) { return x.productId === pid; })[0];
+      if (p) openForm(p);
+    });
   }
 
   function field(label, id, value, placeholder, type) {
@@ -366,8 +544,14 @@ var ADMIN_MENU = (function () {
       if (btn) { btn.disabled = false; UI.setLoading(btn, false); }
       if (!res.success) { UI.toast(res.error.message, 'error', 3500); return; }
       UI.toast(isEdit ? '已保存 SAVED' : '已建立 CREATED', 'success');
+      var backId = isEdit ? state.editing.productId : '';
       closeForm();
-      fetchAll();
+      fetchAll().then(function () {
+        if (!backId) return;
+        var rowNode = document.querySelector('[data-row="' + backId + '"]');
+        try { if (rowNode) rowNode.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+        catch (e) { try { if (rowNode) rowNode.scrollIntoView(); } catch (e2) {} }
+      });
     });
   }
 
@@ -434,6 +618,7 @@ var ADMIN_MENU = (function () {
   return {
     init: function () { init(); fetchAll(); },
     reload: fetchAll,
+    refreshForm: refreshForm,
     openForm: openForm,
     addCategory: addCategory,
     closeForm: closeForm,

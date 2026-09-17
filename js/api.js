@@ -71,7 +71,17 @@ var API = (function () {
     getDashboard:       30 * 1000,
     getPosQueue:        30 * 1000,
     getActiveOrders:    20 * 1000,
-    listClaims:         30 * 1000
+    listClaims:         30 * 1000,
+
+    /* 員工端其他页面：先给上次的资料，后端回来再补（打开就有东西看） */
+    getOrders:          30 * 1000,
+    getAuditLogs:       30 * 1000,
+    getSettings:         5 * 60 * 1000,
+    getPromotionsAdmin:  5 * 60 * 1000,
+    listStaff:           5 * 60 * 1000,
+    getSalesAnalytics:   90 * 1000,
+    getProductAnalytics: 90 * 1000,
+    getMemberAnalytics:  90 * 1000
   };
 
   var memCache = {};
@@ -906,8 +916,13 @@ var API = (function () {
      PUBLIC
      ======================================================== */
   var system = {
-    ping: function () {
-      return call('ping', {}, { sessionType: null });
+    /** ping：永远问后端本人（不拿快取），版本徽章要用 */
+    ping: function (options) {
+      var opts = { sessionType: null, cache: false };
+      if (options && typeof options === 'object') {
+        for (var k in options) if (options.hasOwnProperty(k)) opts[k] = options[k];
+      }
+      return call('ping', {}, opts);
     },
     getPublicSettings: function () {
       return call('getPublicSettings', {}, { sessionType: null });
@@ -932,10 +947,18 @@ var API = (function () {
 
   /* 员工端：点餐台酒单 / 待进单 / 今日看板 / 订单看板 */
   var STAFF_WARM = [
+    /* 现场最常用的四页：点餐台 / 待进单 / 首页看板 / 订单看板 */
     ['getAdminMenu',    function () { return {}; }],
     ['getPosQueue',     function () { return {}; }],
     ['getDashboard',    function () { return { date: '' }; }],
-    ['getActiveOrders', function () { return {}; }]
+    ['getActiveOrders', function () { return {}; }],
+    /* 其他员工页（参数要跟页面一致，不然快取对不上） */
+    ['getOrders',          function () { return { limit: 60 }; }],
+    ['listClaims',         function () { return { limit: 12 }; }],
+    ['getAuditLogs',       function () { return { limit: 150 }; }],
+    ['listStaff',          function () { return {}; }],
+    ['getPromotionsAdmin', function () { return {}; }],
+    ['getSettings',        function () { return {}; }]
   ];
 
   /**
@@ -963,9 +986,17 @@ var API = (function () {
     prefetchJobs(CUSTOMER_WARM, 'customer', true);
   }
 
-  function prefetchStaff() {
+  var lastWarm = 0;
+  /**
+   * 员工端预载。20 秒内重复叫就直接跳过（换页 / 回到前景都会叫一次）。
+   * 已经有的资料不会重抓（skipFresh），所以再叫一次很便宜。
+   */
+  function prefetchStaff(force) {
     if (!AUTH.isStaffLoggedIn || !AUTH.isStaffLoggedIn()) return;
-    prefetchJobs(STAFF_WARM, 'staff', true);
+    var now = Date.now();
+    if (!force && now - lastWarm < 20000) return;
+    lastWarm = now;
+    prefetchJobs(STAFF_WARM, 'staff', !force);
   }
 
   /* ----------------------------------------------------------
