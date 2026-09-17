@@ -1,4 +1,4 @@
-# YETIPSY MINI APP 2.1.5 — 部署教学（零基础版）
+# YETIPSY MINI APP 2.1.6 — 部署教学（零基础版）
 
 > 这份文件假设你 **完全不会写程式**。
 > 只要照着做，每一步都做了什么都会说明。
@@ -58,46 +58,37 @@ YETIPSY MINI APP DATABASE
 
 ## B2. 把后端程式码放进 Apps Script
 
-后端程式码全部在这个 GitHub repo 的 **`apps-script/`** 资料夹（20 个 `.gs` 档案）。
+后端程式码全部都在这个 GitHub repo 的 **`apps-script/Code.gs`** ——
+**只有这一个档案**（2.1.6 起 20 个模组合并成同一份，贴一次就好）。
 
-> **已经在跑 1.x 的老板**：新增的 5 个档案（`Menu` `Checkout` `AppOrders`
-> `OrderBoard` `Analytics`）是 2.0 点单用的，**照贴就好，不要动旧档案的内容**；
+> **已经在跑 1.x 的老板**：程式码换成这一个档案，但资料库不要动 ——
 > 贴完之后请跳到 **PART B-2（升级到 2.0）**，**不要**再跑 `setupDatabase()`。
+
 有两种方式，选一种就好：
 
 ### 方式一（推荐）：GitHub Actions 自动推送
 
 程式码留在 GitHub，push 之后自动推到 Google Apps Script，不需要手动贴。
+（⚠️ `clasp push` 不会删掉远端多出来的旧档案，所以**第一次**还是要先手动
+把 20 个旧档案删到只剩 `Code` 一次；之后 CI 推送就会保持干净。）
 设定方法见 **[`apps-script/README.md`](apps-script/README.md)**，
 设定完成后每次改后端只要 `git push`，1–2 分钟后线上就更新了。
 
 ### 方式二：手动贴（第一次部署、或不想设定 GitHub Secrets）
 
-1. 先把预设的 `Code.gs` **删掉**（点 `Code.gs` 右边的三个点 → 删除）
-2. 依照下表新增档案：点 **+ → 指令码（Script）**，输入名称（**不要**输入 `.gs`）
+1. 打开 Apps Script 专案（Google Sheet → **扩充功能 → Apps Script**）
+2. 把 **Code 以外的旧档案全部删掉**（点档案右侧 ⋮ → 删除），
+   只留一个 `Code` 档案 —— 以前是 20 个档案，现在只需要一个
+3. 打开 GitHub repo 的 `apps-script/Code.gs` → 右上角 **Copy raw contents**
+   （或按 Ctrl+A 全选 → Ctrl+C）
+4. 回到 Apps Script，打开 `Code` 档案 → **Ctrl+A 全选 → 贴上**（覆盖原内容）
+5. 💾 储存（Ctrl+S）
 
-| 顺序 | 档案名称 | 顺序 | 档案名称 |
-|---|---|---|---|
-| 1 | `Config` | 11 | `Menu` ★2.0 |
-| 2 | `Utils` | 12 | `Checkout` ★2.0 |
-| 3 | `Database` | 13 | `AppOrders` ★2.0 |
-| 4 | `Security` | 14 | `OrderBoard` ★2.0 |
-| 5 | `Audit` | 15 | `Analytics` ★2.0 |
-| 6 | `Points` | 16 | `Claims` |
-| 7 | `Rewards` | 17 | `Promotions` |
-| 8 | `Wallet` | 18 | `Admin` |
-| 9 | `Customers` | 19 | `Auth` |
-| 10 | `Orders` | 20 | `Code` |
+> ⚠️ 重点是**不要**同时留着旧的 20 个档案 —— 两份定义会打架。
+> 一个档案里已经包含 Config / Database / Menu / Claims …全部 20 个段落
+> （每个段落开头写着 `/* ===== [n/20] Xxx.gs ===== */`，Ctrl+F 搜 `===== [` 可跳段）。
 
-3. 打开专案里的 `apps-script/` 资料夹，每个 `.gs` 档案：
-   - 用记事本打开 → 全选复制（Ctrl+A → Ctrl+C）
-   - 贴到 Apps Script 对应名称的档案里（覆盖原内容）
-4. 每贴完一个档案按 **💾 储存**（Ctrl+S）
-
-> ⚠️ 20 个档案全部贴完再继续，少一个系统会出错。
->
-> 不想一个一个贴：repo 里的 **`APPS-SCRIPT-COPY-PASTE.md`** 已经把 20 个档案
-> 依顺序整理成一份，每个档案一节，照着一节一节贴就好。
+贴完之后检查：档案最上面写着 `YETIPSY MINI APP 2.1.6` 就对了。
 
 ## B3. 建立资料库
 
@@ -125,7 +116,7 @@ setupDatabase() done. created sheets: Settings, Sequences, Customers, ...
 ## PART B-2 — 升级到 2.0（★ 已经在跑 1.x 的老板看这里）
 
 如果你**已经有会员资料**（Customers / Wallet / Points 里已经有东西），
-20 个档案贴完之后：
+程式码贴完之后：
 
 ### ⚠️ 不要再跑 `setupDatabase()`
 
@@ -625,10 +616,10 @@ https://你的账号.github.io/yetipsy-miniapp/
 （不要在 Apps Script 编辑器里直接改，不然线上和 GitHub 会不一样）。
 
 1. 在 GitHub 上改 `apps-script/*.gs`
-2. 跑 `npm run build:copypaste` → 更新 `APPS-SCRIPT-COPY-PASTE.md`
+2. （不用产生任何文件 —— `apps-script/Code.gs` 本身就是贴上去的那一份）
 3. 跑 `npm run check:backend` → 确认版本号码、前端 action、复制贴上文件、端到端都正常
 4. commit + push
-5. 再照 `APPS-SCRIPT-COPY-PASTE.md` 重新贴到 Apps Script
+5. 再把 `apps-script/Code.gs` 的全部内容贴到 Apps Script（只有一个档案）
 
 - 有设定 GitHub Actions（推荐）：`git push` 之后自动 `clasp push` + `clasp deploy`，
   1–2 分钟完成，**API URL 不会变**。
@@ -639,8 +630,8 @@ https://你的账号.github.io/yetipsy-miniapp/
 **贴完怎么知道是不是最新版？**
 用员工账号进 **MORE（更多）页** → 最下面会写后端版本：
 
-- `✓ 后端 v2.1.5 · 已是最新版`
-- `⚠ 后端 vX ≠ 前端 v2.1.5 · 请重新贴 Apps Script`（X 是还在跑的旧版）
+- `✓ 后端 v2.1.6 · 已是最新版`
+- `⚠ 后端 vX ≠ 前端 v2.1.6 · 请重新贴 Apps Script`（X 是还在跑的旧版）
 
 > ⚠️ 只有在 Apps Script 里直接改程式码，GitHub 上的版本就会跟线上不同步。
 > 建议一律「改 GitHub → push」，让 GitHub 永远是唯一来源。
@@ -723,7 +714,7 @@ Android：设定 → 清除浏览器快取，或重新加入主画面。
 
 **全新部署（第一次装）**
 
-- [ ] 20 个 `.gs` 档案都到位（或用 GitHub Actions 推送）
+- [ ] `apps-script/Code.gs`（唯一一个档案）已贴上（或用 GitHub Actions 推送）
 - [ ] `setupDatabase()` 执行成功 → Google Sheet 出现 **17 个分页**
 - [ ] `bootstrapOwner()` 建立老板账号，程式码已删除
 - [ ] 员工账号已在 STAFF ACCOUNTS 建立
@@ -740,15 +731,15 @@ Android：设定 → 清除浏览器快取，或重新加入主画面。
 - [ ] `reportUpgradeStatus()` → `ready: true`、`missingSheets: []`
 - [ ] Google Sheet 从 12 个分页变成 **17 个**（多出 5 张 2.0 表）
 - [ ] 既有会员的积分 / 钱包 / Claim 一笔都没掉
-- [ ] 20 个 `.gs` 档案都到位，Web App 已重新部署
+- [ ] `apps-script/Code.gs` 已贴上，Web App 已重新部署
 
 > 分页数的由来：1.x 是 12 张，2.0 新增 `Categories` / `Products` /
 > `ProductOptions` / `AppOrders` / `OrderItems` 共 5 张 = **17 张**。
-> 这个 17 跟 `Config.gs` 的 `SCHEMA` 键数一致，`tools/build-copypaste.js`
-> 会挡住两者脱节。
+> 这个 17 跟 `Code.gs` 里 Config 段落的 `SCHEMA` 键数一致，
+> `npm run check:backend` 会顾着两者不要脱节。
 
 ```
-YETIPSY MINI APP 2.1.5 · FOODCOURT POS EDITION
+YETIPSY MINI APP 2.1.6 · FOODCOURT POS EDITION
 Mobile ordering + retention. 价格一律由后端决定。
 ```
 

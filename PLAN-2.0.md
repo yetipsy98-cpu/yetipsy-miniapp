@@ -16,8 +16,8 @@
 | 员工端主流程（foodcourt） | 输入账单金额 → 扫会员码（`admin/grant.html`） | **POS 进单台 `admin/pos.html`**：先录入 foodcourt 单据（单号 + 金额）进「待进单」队列 → 顾客来了才扫会员码进分。付款在 foodcourt，App 不动钱包 |
 | 员工端主流程（mini app） | 订单看板完成时进分 | 不变（`admin/orderboard.html`，完成时自动进分，不用再扫码） |
 | claimOrder / createClaim | 主流程之一 | 保留为**备用路径**（顾客不在场 / 事后补登），入口在 MORE，MANAGER / OWNER |
-| 后端新增 | — | `createPosTicket` / `getPosQueue` / `bindPosTicket` / `cancelPosTicket`（`Claims.gs`）；`grantOrder` 保留但不再从首页进入 |
-| 本机开发工具 | `demo/` 测试与 demo 服务器 | 移除（线上版不需要）；只留 `tools/build-copypaste.js` 产生复制贴上文件 |
+| 后端新增 | — | `createPosTicket` / `getPosQueue` / `bindPosTicket` / `cancelPosTicket`（`Claims` 段落）；`grantOrder` 保留但不再从首页进入 |
+| 本机开发工具 | `demo/` 测试与 demo 服务器 | 移除（线上版不需要）；只留 `tools/check-backend.js` 跑检查（2.1.6 起后端合并成单一 `apps-script/Code.gs`） |
 
 ---
 

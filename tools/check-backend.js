@@ -1,19 +1,23 @@
 /* =============================================================
    tools/check-backend.js
    -------------------------------------------------------------
-   「GitHub 上的 .gs 是不是最新版、跟前端合不合」的自动检查。
+   检查「GitHub 上那一个后端档案是不是最新版、跟前端合不合」。
+
+   2.1.6 起后端只有唯一一个档案：apps-script/Code.gs
+   （就是你 Ctrl+A 贴进 Google Apps Script 的那一份）——
+   所以这里跑的内容 = 线上跑的内容。
 
    执行： node tools/check-backend.js      （或 npm run check:backend）
 
-   它检查 6 件事：
-     1. apps-script/ 里每个 .gs 都有被载入 / 被复制贴上文件收录（没有漏档）
-     2. Code.gs 的 action 表里每个函数真的存在（少贴档案会在这里爆）
-     3. 前端 js/*.js 呼叫的每个 action，后端都有实作
-     4. 版本号码一致：Config.gs APP_VERSION = package.json =
-        js/config.js = service-worker 快取名 = 每个 .gs 的档头
-     5. APPS-SCRIPT-COPY-PASTE.md 跟 apps-script/*.gs 一模一样（没过期）
-     6. 跑一次「真正的后端」端到端：老板登录 → 建菜单 → POS 进单 →
-        扫会员码进分 → 会员点单 → 员工看板完成（用的是 apps-script/*.gs 本身）
+   检查 6 件事：
+     1. apps-script/ 里只有一个 .gs（Code.gs），没有多余的旧档案
+     2. 那个档案里 20 个段落（Config…Code）都还在，没有被误删
+     3. Code.gs 的 action 表里每个函数真的存在
+     4. 前端 js/*.js 呼叫的每个 action，后端都有实作
+     5. 版本号码一致：Code.gs 的 APP_VERSION = 档头版本 =
+        package.json = js/config.js = service-worker 快取名
+     6. 用这个档案跑一次端到端：老板登录 → 建菜单 → POS 进单 →
+        扫会员码进分 → 会员点单 → 看板收款完成
 
    任何一项失败都会 exit 1，并印出要修什么。
    ============================================================= */
@@ -22,8 +26,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { loadBackend, FILE_ORDER, BACKEND_DIR } = require('./load-backend');
-const { render, OUT } = require('./build-copypaste');
+const { loadBackend, gsFiles, BACKEND_DIR } = require('./load-backend');
 
 const ROOT = path.join(__dirname, '..');
 
@@ -52,27 +55,33 @@ const read = (p) => fs.readFileSync(path.join(ROOT, p), 'utf8');
    1. 档案齐全
    ------------------------------------------------------------- */
 function checkFiles() {
-  section('① 后端档案（apps-script/*.gs）');
+  section('① 后端档案（apps-script/）');
 
-  const onDisk = fs.readdirSync(BACKEND_DIR).filter((f) => f.endsWith('.gs')).sort();
-  const loaded = FILE_ORDER.slice().sort();
+  const onDisk = gsFiles();
+  check('只有一个 .gs 档案（Code.gs）', onDisk.length === 1 && onDisk[0] === 'Code.gs',
+    onDisk.join(', ') || '没有任何 .gs');
+  check('appsscript.json 存在（部署设定）',
+    fs.existsSync(path.join(BACKEND_DIR, 'appsscript.json')));
 
-  const notLoaded = onDisk.filter((f) => loaded.indexOf(f) === -1);
-  const missing = loaded.filter((f) => onDisk.indexOf(f) === -1);
+  section('② 唯一档案里的 20 个段落');
 
-  check('apps-script/ 的 ' + onDisk.length + ' 个 .gs 全部被载入', notLoaded.length === 0,
-    notLoaded.join(', '));
-  check('载入清单里的档案都存在', missing.length === 0, missing.join(', '));
-  check('appsscript.json 存在（部署设定）', fs.existsSync(path.join(BACKEND_DIR, 'appsscript.json')));
+  const src = fs.readFileSync(path.join(BACKEND_DIR, 'Code.gs'), 'utf8');
+  const MODULES = ['Config', 'Utils', 'Database', 'Security', 'Audit', 'Points', 'Rewards',
+    'Wallet', 'Customers', 'Orders', 'Menu', 'Checkout', 'AppOrders', 'OrderBoard',
+    'Analytics', 'Claims', 'Promotions', 'Admin', 'Auth', 'Code'];
+  const missing = MODULES.filter((m) => src.indexOf('===== [') === -1 ||
+    !new RegExp('\\[\\d+/20\\] ' + m + '\\.gs').test(src));
+  check('20 个段落都在（' + MODULES.length + ' 个）', missing.length === 0,
+    '缺：' + missing.join(', '));
 
-  return onDisk;
+  return { files: onDisk, source: src };
 }
 
 /* -------------------------------------------------------------
    2 + 3. action 表 / 前端呼叫
    ------------------------------------------------------------- */
 function checkActions(bundle) {
-  section('② Code.gs action 表');
+  section('③ action 表（Code.gs 段落 [20/20]）');
 
   const handlers = bundle.api.handlers();
   const names = Object.keys(handlers);
@@ -81,7 +90,7 @@ function checkActions(bundle) {
   check(names.length + ' 个 action 都指向真的函数', notFunction.length === 0,
     notFunction.length ? '少了这些函数：' + notFunction.join(', ') : '');
 
-  section('③ 前端呼叫的 action');
+  section('④ 前端呼叫的 action');
 
   const jsDir = path.join(ROOT, 'js');
   const files = fs.readdirSync(jsDir)
@@ -117,12 +126,13 @@ function checkActions(bundle) {
 /* -------------------------------------------------------------
    4. 版本号码一致
    ------------------------------------------------------------- */
-function checkVersions(gsFiles) {
-  section('④ 版本号码');
+function checkVersions(files) {
+  section('⑤ 版本号码');
 
   const pkgVersion = JSON.parse(read('package.json')).version;
+  const src = files.source;
 
-  const cfg = read('apps-script/Config.gs').match(/var APP_VERSION = '([^']+)'/);
+  const cfg = src.match(/var APP_VERSION = '([^']+)'/);
   const appVersion = cfg ? cfg[1] : '(找不到)';
 
   const fe = read('js/config.js').match(/APP_VERSION:\s*'([^']+)'/);
@@ -131,42 +141,17 @@ function checkVersions(gsFiles) {
   const sw = read('service-worker.js').match(/CACHE_NAME = 'yetipsy-v([^']+)'/);
   const swVersion = sw ? sw[1] : '(找不到)';
 
-  check('Config.gs APP_VERSION = ' + appVersion, appVersion === pkgVersion,
+  check('Code.gs APP_VERSION = ' + appVersion, appVersion === pkgVersion,
     'package.json 是 ' + pkgVersion);
   check('js/config.js APP_VERSION = ' + feVersion, feVersion === pkgVersion,
     'package.json 是 ' + pkgVersion);
   check('service-worker 快取名 = yetipsy-v' + swVersion, swVersion === pkgVersion,
     'package.json 是 ' + pkgVersion);
-
-  const noStamp = gsFiles.filter((f) => {
-    const head = read('apps-script/' + f).split('\n').slice(0, 4).join('\n');
-    return head.indexOf('YETIPSY MINI APP ' + appVersion) === -1;
-  });
-  check('每个 .gs 档头都写着 ' + appVersion, noStamp.length === 0, noStamp.join(', '));
-
-  const docHead = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8').slice(0, 400) : '';
-  check('复制贴上文件的版本 = ' + appVersion,
-    docHead.indexOf('版本 ' + appVersion) >= 0);
+  check('档案开头写着版本 ' + appVersion,
+    src.slice(0, 1200).indexOf('版本 ' + appVersion) >= 0 &&
+    src.slice(0, 1200).indexOf('MINI APP ' + appVersion) >= 0);
 
   return appVersion;
-}
-
-/* -------------------------------------------------------------
-   5. 复制贴上文件没有过期
-   ------------------------------------------------------------- */
-function checkCopyPaste() {
-  section('⑤ APPS-SCRIPT-COPY-PASTE.md 是否最新');
-
-  const fresh = render();
-  const current = fs.existsSync(OUT) ? fs.readFileSync(OUT, 'utf8') : '';
-  const same = current === fresh.doc;
-
-  check('文件内容 = 现在 apps-script/*.gs 重新产生的内容', same,
-    same ? '' : '过期了 → 请执行 npm run build:copypaste 并 commit');
-  if (same) {
-    console.log('    （' + fresh.files + ' 个档案 · ' + fresh.lines + ' 行 · ' +
-      (fresh.bytes / 1024).toFixed(1) + ' KB）');
-  }
 }
 
 /* -------------------------------------------------------------
@@ -318,19 +303,19 @@ function checkEndToEnd() {
 /* -------------------------------------------------------------
    主流程
    ------------------------------------------------------------- */
-console.log('YETIPSY · 后端（apps-script/*.gs）检查');
+console.log('YETIPSY · 后端检查（apps-script/Code.gs · 唯一档案）');
 console.log('=======================================');
 
-const gsFiles = checkFiles();
+const files = checkFiles();
 const bundle = loadBackend();
 checkActions(bundle);
-checkVersions(gsFiles);
-checkCopyPaste();
+checkVersions(files);
 checkEndToEnd();
 
 console.log('\n=======================================');
 if (fail === 0) {
-  console.log('✅ 全部通过：' + pass + ' 项 —— GitHub 上的 .gs 是最新版，复制贴上文件也同步。');
+  console.log('✅ 全部通过：' + pass + ' 项 —— GitHub 上的 apps-script/Code.gs 是最新版，' +
+    '原封不动贴到 Apps Script 就是线上版本。');
   process.exit(0);
 }
 console.log('❌ ' + fail + ' 项没过（' + pass + ' 项通过）：');

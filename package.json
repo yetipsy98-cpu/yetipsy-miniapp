@@ -1,10 +1,9 @@
 {
   "name": "yetipsy-miniapp",
-  "version": "2.1.5",
+  "version": "2.1.6",
   "description": "YETIPSY MINI APP 2.1 — FOODCOURT POS EDITION. 会员端（下单 / 会员码 / 会员中心 / 我的订单）+ 员工端 POS 进单台。前端在 GitHub Pages，后端程式码在 repo 的 apps-script/，资料在 Google Sheets。",
   "private": true,
   "scripts": {
-    "build:copypaste": "node tools/build-copypaste.js",
     "check:backend": "node tools/check-backend.js",
     "deploy:backend": "cd apps-script && clasp push --force && clasp deploy"
   },

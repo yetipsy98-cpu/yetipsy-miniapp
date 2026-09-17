@@ -7,7 +7,7 @@
      · Wallet / Customer / Staff 任何敏感数据
    ============================================================= */
 
-var CACHE_NAME = 'yetipsy-v2.1.5';   // 改版就 +1，让旧快取自动清掉
+var CACHE_NAME = 'yetipsy-v2.1.6';   // 改版就 +1，让旧快取自动清掉
 
 var SHELL = [
   './',

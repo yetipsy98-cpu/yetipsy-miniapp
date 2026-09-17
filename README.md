@@ -13,7 +13,7 @@ Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积�
 | 你要的东西 | 放在哪里 | 费用 |
 |---|---|---|
 | 前端（会员端 / 员工端 HTML+JS） | 这个 repo → GitHub Pages | RM0 |
-| 后端（业务逻辑，20 个 `.gs`） | 这个 repo 的 `apps-script/` → 部署到 Google Apps Script | RM0 |
+| 后端（业务逻辑，**唯一一个 `.gs`**） | 这个 repo 的 `apps-script/Code.gs` → 部署到 Google Apps Script | RM0 |
 | 资料库（17 张表 · 39 个设置） | Google Sheets | RM0 |
 | 自动部署 | GitHub Actions + `clasp`（push 就上线） | RM0 |
 
@@ -67,16 +67,19 @@ Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积�
 > · **登出不等后端**：按下去立刻清 session、立刻跳登录页（后端只是顺带通知），
 >   员工端每一页的顶栏都有登出
 
-> **2.1.5 起，版本号码对齐 + 自动检查后端是否最新：**
-> · `Config.gs` 的 `APP_VERSION`、`package.json`、`js/config.js`、
->   `service-worker.js` 快取名、20 个 `.gs` 档头现在都是同一个版本号
-> · 新增 `npm run check:backend`：检查「`apps-script/` 有没有漏档 /
->   Code.gs 的 action 有没有指向不存在的函数 / 前端用到的 90 个 action
->   后端是否都有 / 版本号码是否一致 / `APPS-SCRIPT-COPY-PASTE.md`
->   有没有过期 / 用**真正的 .gs** 跑一次 POS 进单 + 会员点单端到端」
+> **2.1.6 起，后端只剩唯一一个档案 `apps-script/Code.gs`：**
+> · GitHub 上那一个档案 = 你贴进 Apps Script 的那一份，**复制贴上只要一次**
+>   （以前要贴 20 个档案、还要对着 md 一节一节贴 —— 那个 md 已经删掉）
+> · 20 个模组变成同一个档案里的 20 个段落（段落开头都写着
+>   `/* ===== [3/20] Database.gs — … ===== */`，Ctrl+F 搜 `===== [` 就能跳段）
+> · 版本号码只有一组：档案内 `APP_VERSION`、档头、`package.json`、
+>   `js/config.js`、`service-worker.js` 快取名全部 = **2.1.6**
+> · `npm run check:backend` 会检查「只有一个 .gs / 20 个段落都在 /
+>   action 有没有指向不存在的函数 / 前端用到的 90 个 action 后端是否都有 /
+>   版本号码是否一致 / 用**这个档案**跑一次 POS 进单 + 会员点单端到端」
 > · 员工端 **MORE 页最下方**会显示后端版本：
->   `✓ 后端 v2.1.5 · 已是最新版`，若还贴着旧版会红字提示重新贴 Apps Script
-> · 规则：**任何 `.gs` 的改动都先更新到 GitHub**，再从 GitHub 贴到 Apps Script
+>   `✓ 后端 v2.1.6 · 已是最新版`，若还贴着旧版会红字提示重新贴 Apps Script
+> · 规则：**任何改动都先更新 GitHub 上这个档案**，再从 GitHub 贴到 Apps Script
 
 Foodcourt Claim（1.x 原流程，保留但已移出员工首页、入口在 MORE，仅 MANAGER / OWNER）：
 
@@ -160,30 +163,23 @@ yetipsy-miniapp/
 │   ├── admin*.js        员工端各页面逻辑
 │   └── vendor/          qrcode.js（MIT）· jsQR.js（Apache-2.0）
 │
-├── apps-script/         ★ 生产后端（Google Apps Script，20 个 .gs · 84 个 action）
-│   ├── Code.gs          Web App 入口（doPost / doGet · action 分派 · 交易锁）
-│   ├── Config.gs        17 张 Sheet 的栏位定义 · 39 个设置 · 错误讯息
-│   ├── Utils.gs         时间 · 金额(SEN) · SHA-256 · ★ 电话 E.164 规范化
-│   ├── Database.gs      Sheets 存取层 · setupDatabase() · upgradeToV2() · dedupeCustomers()
-│   ├── Security.gs      Session（只存 hash）· 角色 · Rate limit
-│   ├── Auth.gs          ping · 员工登录（失败 6 次锁 5 分钟）
-│   ├── Customers.gs     ★ 查号码/注册/密码登录（同一个号码只有一笔）
-│   ├── Orders.gs Claims.gs Points.gs Rewards.gs Wallet.gs
-│   ├── Promotions.gs Admin.gs Audit.gs
-│   │  ↓ 2.0 点单（新增 6 个）
-│   ├── Menu.gs          酒单：分类 / 商品 / 规格 · 促销价 · 售罄 · 快取
-│   ├── Checkout.gs      结帐报价：后端重算价格 · Quote 5 分钟 · 幂等识别码
-│   ├── AppOrders.gs     订单：placeOrder（幂等）· 查询 · 取消 · 再点一次 · 快照
-│   ├── OrderBoard.gs    员工看板：接单 / 制作 / 完成（幂等）· 收款才扣钱包
-│   └── Analytics.gs     业绩分析：今日统计 · 通路业绩 · 热销 · 会员
+├── apps-script/         ★ 生产后端（Google Apps Script）
+│   ├── Code.gs          ★ 唯一档案：20 个段落（Config → … → Code 入口）都在里面
+│   │                      [1/20] Config  [2/20] Utils  [3/20] Database  [4/20] Security
+│   │                      [5/20] Audit  [6/20] Points  [7/20] Rewards  [8/20] Wallet
+│   │                      [9/20] Customers  [10/20] Orders  [11/20] Menu  [12/20] Checkout
+│   │                      [13/20] AppOrders  [14/20] OrderBoard  [15/20] Analytics
+│   │                      [16/20] Claims  [17/20] Promotions  [18/20] Admin  [19/20] Auth
+│   │                      [20/20] Code（doPost / doGet · action 分派 · 交易锁）
+│   │                      Ctrl+F 搜 `===== [` 可以跳段
 │   ├── appsscript.json  Apps Script manifest（V8 · 时区 · 权限）
 │   ├── .clasp.json.example  部署设定范本
 │   └── README.md        部署 / 自动推送 / 维护工具
 │
-├── tools/                部署辅助（不参与线上流程）
-│   ├── build-copypaste.js  把 apps-script/*.gs 整合成 APPS-SCRIPT-COPY-PASTE.md
-│   ├── load-backend.js     把 apps-script/*.gs 载入 Node（工具用）
-│   └── google-shim.js      在 Node 里模拟 Sheets / Lock / Properties
+├── tools/                Node 检查工具（不参与线上流程）
+│   ├── load-backend.js     把 Code.gs 载入 Node 沙箱（跑的就是线上那一份）
+│   ├── google-shim.js      模拟 Sheets / Lock / Properties / Cache / SHA-256
+│   └── check-backend.js    npm run check:backend：6 类检查 + 端到端
 │
 ├── .github/workflows/
 │   └── deploy-apps-script.yml push apps-script/ 之后用 clasp 自动部署后端
@@ -266,44 +262,44 @@ yetipsy-miniapp/
 
 ## 4. 维护
 
-### ★ 改后端（apps-script/*.gs）的固定流程
+### ★ 改后端（apps-script/Code.gs）的固定流程
 
-**任何 .gs 的改动都只从 GitHub 走** —— 不要在 Apps Script 编辑器里直接改，
-否则线上和 GitHub 会变成两个版本。
+**后端只有唯一一个档案：`apps-script/Code.gs`**（约 6600 行，里面是 20 个段落）。
+它就是你贴到 Google Apps Script 的那一份 —— 所以「GitHub 上是最新版」
+等于「贴上去就是最新版」，中间不需要再产生任何文件。
+
+**规则：任何改动都先改 GitHub 上这一个档案，再从 GitHub 贴到 Apps Script。**
+不要在 Apps Script 编辑器里直接改，否则两边会变成不同版本。
 
 ```bash
-# 1) 改 apps-script/*.gs
-# 2) 重新产生复制贴上文件（少了这步 GitHub 上就是旧版）
-npm run build:copypaste
-# 3) 检查：版本号码一致 / 前端用到的 action 后端都有 / 复制贴上文件没过期 /
-#    用「真正的 .gs」跑一次 POS 进单 + 会员点单端到端
+# 1) 改 apps-script/Code.gs
+# 2) 检查：只有一个 .gs / 20 个段落都在 / action 有没有指向不存在的函数 /
+#    前端用到的 90 个 action 后端都有 / 版本号码一致 /
+#    用这个档案跑一次 POS 进单 + 会员点单端到端
 npm run check:backend
-# 4) commit + push
+# 3) commit + push
 ```
 
-`npm run check:backend` 全部通过时，GitHub 上的 `apps-script/*.gs`
-就是最新版；它也会检查每个 `.gs` 档头写的版本号码（现在是 `2.1.5`）
-跟 `package.json`、`js/config.js`、`service-worker.js` 一致。
+**怎么把后端更新到线上（只有一次复制贴上）：**
 
-**贴完怎么确认贴的是最新版？**
-用员工账号进 **MORE 页**，最下面会显示：
+1. 打开 <https://script.google.com> 你的专案
+2. 把 **Code 以外的旧档案全部删掉**（点档案右侧 ⋮ → 删除）
+   —— 以前要贴 20 个档案，现在只要一个；留着旧的会跟这份打架
+3. 打开 `Code` → Ctrl+A 全选 → 贴上 GitHub 上 `apps-script/Code.gs` 的全部内容
+4. 💾 储存（Ctrl+S）→ 部署 → 管理部署 → 编辑（✏️）→ 版本：建立新版本 → 部署
+   （API URL 不会变，前端不用改）
 
-- `✓ 后端 v2.1.5 · 已是最新版` → 贴对了
-- `⚠ 后端 vX ≠ 前端 v2.1.5 · 请重新贴 Apps Script` → 还是旧版
+**贴完怎么确认是最新版？** 用员工账号进 **MORE 页**，最下面会显示：
 
-（后端版本来自 `ping` 回的 `APP_VERSION`，也就是 `Config.gs` 那一行。）
+- `✓ 后端 v2.1.6 · 已是最新版` → 贴对了
+- `⚠ 后端 vX ≠ 前端 v2.1.6 · 请重新贴 Apps Script` → 还是旧版
 
-部署后端有两条路（择一）：
+（这个版本号来自 `ping` 回的 `APP_VERSION`，也就是档案里第 52 行那一行。）
 
-1. **手动**：打开 Apps Script 编辑器，照 `APPS-SCRIPT-COPY-PASTE.md` 贴上 20 个档案
-2. **自动**：把 `apps-script/` push 上 GitHub，`.github/workflows/deploy-apps-script.yml`
-   会用 `clasp` 自动推送并建立新版本（需要 `CLASP_SCRIPT_ID` / `CLASPRC_JSON` 两个 secrets）
-   —— 这个 workflow 只在 `main` 分支生效，所以在分支上开发时要手动贴
-
-> 本机 demo 服务器与自动化测试套件已在 2.1 移除（线上版不需要它们）。
-> 旧版仍在 git 历史里：`git log -- demo/`。
-
----
+> 也可以让 GitHub Actions 自动推：`.github/workflows/deploy-apps-script.yml`
+> 会在 `main` 分支的 `apps-script/` 有改动时用 `clasp push` + `clasp deploy`
+> （需要 `CLASP_SCRIPT_ID` / `CLASPRC_JSON` 两个 secrets）；
+> 在开发分支上工作时还是要手动贴。
 
 ## 5. 核心规则（实作摘要）
 
