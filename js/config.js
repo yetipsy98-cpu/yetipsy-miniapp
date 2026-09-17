@@ -15,6 +15,14 @@
 var YETIPSY_CONFIG = {
 
   /* ----------------------------------------------------------
+     0) 版本号码
+     要和 package.json / service-worker.js / apps-script/Config.gs 的
+     APP_VERSION 一致；员工端「MORE」页会拿它跟后端比，不一样就提示
+     要重新贴 Apps Script。检查：npm run check:backend
+     ---------------------------------------------------------- */
+  APP_VERSION: '2.1.5',
+
+  /* ----------------------------------------------------------
      1) API 地址（Google Apps Script Web App）
      部署之后把 URL 粘贴到这里。
      在浏览器直接打开这个 URL，应该会看到

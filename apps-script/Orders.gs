@@ -1,5 +1,5 @@
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Orders.gs
+   YETIPSY MINI APP 2.1.5 — Orders.gs
    -------------------------------------------------------------
    「已验证会员消费记录」= 积分的唯一来源。
    未来接 Foodcourt API / Webhook / CSV 汇入，也走 createMemberTransaction()。

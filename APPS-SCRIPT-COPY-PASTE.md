@@ -1,6 +1,6 @@
 # YETIPSY · Google Apps Script 全部档案（复制贴上用）
 
-**20 个档案 · 版本 2.1.0 · 会员登录 = 手机号码 + 密码（不用 WhatsApp OTP）**
+**20 个档案 · 版本 2.1.5 · 会员登录 = 手机号码 + 密码（不用 WhatsApp OTP）**
 
 > 这份文件由 `node tools/build-copypaste.js` 从 `apps-script/*.gs` 产生。
 > 改了后端记得重跑一次（`npm run build:copypaste`），这份文件才会跟 `apps-script/*.gs` 同步。
@@ -55,11 +55,11 @@
 ## 1. Config.gs
 
 > Apps Script 里的档案名称：**`Config`**（不要打 .gs）
-> 所有设定与 17 张表的栏位定义（要改规则就改这里） · 460 行 · SHA-256 `cce022e816fdd4f6`
+> 所有设定与 17 张表的栏位定义（要改规则就改这里） · 460 行 · SHA-256 `3aed46efdd6a88f9`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Config.gs
+   YETIPSY MINI APP 2.1.5 — Config.gs
    -------------------------------------------------------------
    所有「会变的东西」都放这里：Sheet 名称、栏位、默认设置。
    业务逻辑不应该 hardcode 任何栏位名称。
@@ -69,7 +69,7 @@
    ============================================================= */
 
 /** 版本（ping 会回传，方便确认线上跑的是哪一版） */
-var APP_VERSION = '1.6.1';
+var APP_VERSION = '2.1.5';
 
 /**
  * 资料表定义。
@@ -525,11 +525,11 @@ var ORDER_SOURCES = ['FOODCOURT', 'DIRECT', 'YETIPSY_APP', 'MANUAL', 'FOODCOURT_
 ## 2. Utils.gs
 
 > Apps Script 里的档案名称：**`Utils`**（不要打 .gs）
-> 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 · 253 行 · SHA-256 `53f424819aea6acc`
+> 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 · 253 行 · SHA-256 `a285b751a3bdfbbf`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Utils.gs
+   YETIPSY MINI APP 2.1.5 — Utils.gs
    -------------------------------------------------------------
    时间 · 金额(SEN) · Hash · ID · 电话号码规范化 · 错误讯息
    ============================================================= */
@@ -788,11 +788,11 @@ function err(key, customMessage) {
 ## 3. Database.gs
 
 > Apps Script 里的档案名称：**`Database`**（不要打 .gs）
-> setupDatabase()、upgradeToV2()、补栏位、防重复注册工具、dedupeCustomers() · 770 行 · SHA-256 `b58a934e52c52959`
+> setupDatabase()、upgradeToV2()、补栏位、防重复注册工具、dedupeCustomers() · 770 行 · SHA-256 `11e8f2a27f2caae5`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Database.gs
+   YETIPSY MINI APP 2.1.5 — Database.gs
    -------------------------------------------------------------
    Google Sheets 存取层。
 
@@ -1568,11 +1568,11 @@ function reportUpgradeStatus() {
 ## 4. Security.gs
 
 > Apps Script 里的档案名称：**`Security`**（不要打 .gs）
-> Session Token、权限（STAFF/MANAGER/OWNER）、Rate Limit、登入锁定 · 108 行 · SHA-256 `3e43f9f65e3fac45`
+> Session Token、权限（STAFF/MANAGER/OWNER）、Rate Limit、登入锁定 · 108 行 · SHA-256 `5469c311b65f348a`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Security.gs
+   YETIPSY MINI APP 2.1.5 — Security.gs
    -------------------------------------------------------------
    Session · 角色权限 · Rate limit
    （Token 一律只存 SHA-256 hash，资料库里没有明文 token）
@@ -1686,11 +1686,11 @@ function rateLimitLocked(key) {
 ## 5. Audit.gs
 
 > Apps Script 里的档案名称：**`Audit`**（不要打 .gs）
-> Audit Log 写入与查询（最多保留 5000 条） · 18 行 · SHA-256 `597494d0bfe7915e`
+> Audit Log 写入与查询（最多保留 5000 条） · 18 行 · SHA-256 `c22668cd5e9a9983`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Audit.gs
+   YETIPSY MINI APP 2.1.5 — Audit.gs
    所有重要动作都写一条记录（AuditLogs Sheet，最多保留 5000 条）
    ============================================================= */
 
@@ -1714,11 +1714,11 @@ function audit(userId, userType, action, targetType, targetId, oldValue, newValu
 ## 6. Points.gs
 
 > Apps Script 里的档案名称：**`Points`**（不要打 .gs）
-> 积分累计 / 等级门槛计算 · 83 行 · SHA-256 `87b01ea7e9deedb2`
+> 积分累计 / 等级门槛计算 · 83 行 · SHA-256 `295124dc737a7f5d`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Points.gs
+   YETIPSY MINI APP 2.1.5 — Points.gs
    积分 / 等级（Threshold 全部读 Settings，不 hardcode）
    ============================================================= */
 
@@ -1807,11 +1807,11 @@ function pointsForAmount(billAmount, walletUsed) {
 ## 7. Rewards.gs
 
 > Apps Script 里的档案名称：**`Rewards`**（不要打 .gs）
-> 奖励产生与状态流转 · 70 行 · SHA-256 `6002b37eed17c0e4`
+> 奖励产生与状态流转 · 70 行 · SHA-256 `0ff2a2f6e7eec091`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Rewards.gs
+   YETIPSY MINI APP 2.1.5 — Rewards.gs
    奖励只能由后端产生（前端不允许 Math.random）
    每日预算用完 → 停止发放；接近上限 → LOW_REWARD_MODE
    ============================================================= */
@@ -1887,11 +1887,11 @@ function generateReward(customer, order, amountSen) {
 ## 8. Wallet.gs
 
 > Apps Script 里的档案名称：**`Wallet`**（不要打 .gs）
-> 钱包储值 / 抵扣 / 上限（金额一律 sen） · 191 行 · SHA-256 `83362e4d96f0b811`
+> 钱包储值 / 抵扣 / 上限（金额一律 sen） · 191 行 · SHA-256 `9aea00afe2494aad`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Wallet.gs
+   YETIPSY MINI APP 2.1.5 — Wallet.gs
    钱包余额只由后端改动，每一笔都留 WalletTx 明细。
    ============================================================= */
 
@@ -2088,11 +2088,11 @@ function manualWalletAdjustment(data, token) {
 ## 9. Customers.gs
 
 > Apps Script 里的档案名称：**`Customers`**（不要打 .gs）
-> ★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料 · 595 行 · SHA-256 `5cb51d3fef07f4bd`
+> ★ 查号码 / 注册 / 密码登录 / 改密码 / 会员资料 · 595 行 · SHA-256 `3c2ee414c6664955`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Customers.gs
+   YETIPSY MINI APP 2.1.5 — Customers.gs
    -------------------------------------------------------------
    会员注册 / 登录 / 资料
 
@@ -2693,11 +2693,11 @@ function consumeMemberVerify(verifyToken) {
 ## 10. Orders.gs
 
 > Apps Script 里的档案名称：**`Orders`**（不要打 .gs）
-> 消费纪录与统计 · 140 行 · SHA-256 `942b313920d89a2f`
+> 消费纪录与统计 · 140 行 · SHA-256 `367ae1d87b7116d2`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Orders.gs
+   YETIPSY MINI APP 2.1.5 — Orders.gs
    -------------------------------------------------------------
    「已验证会员消费记录」= 积分的唯一来源。
    未来接 Foodcourt API / Webhook / CSV 汇入，也走 createMemberTransaction()。
@@ -2843,11 +2843,11 @@ function cancelOrder(data, token) {
 ## 11. Menu.gs
 
 > Apps Script 里的档案名称：**`Menu`**（不要打 .gs）
-> ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） · 831 行 · SHA-256 `fecb5bf514c7cb21`
+> ★ 2.0 酒单：分类 / 商品 / 规格、促销价、售罄、菜单缓存（upgradeToV2() 后才用得到） · 831 行 · SHA-256 `2aeb7477b3081450`
 
 ```javascript
 /* =============================================================
-   YETIPSY — Menu.gs（2.0 Phase 3）
+   YETIPSY MINI APP 2.1.5 — Menu.gs（2.0 Phase 3）
    -------------------------------------------------------------
    酒单：分类 / 商品 / 规格（§5–§8）
 
@@ -3684,11 +3684,11 @@ function setProductStatus(data, token) {
 ## 12. Checkout.gs
 
 > Apps Script 里的档案名称：**`Checkout`**（不要打 .gs）
-> ★ 2.0 结帐报价：后端重算价格、钱包上限、Quote 5 分钟有效期、防重复下单的识别码 · 332 行 · SHA-256 `f70c500d9a20f08f`
+> ★ 2.0 结帐报价：后端重算价格、钱包上限、Quote 5 分钟有效期、防重复下单的识别码 · 332 行 · SHA-256 `ed248b07c747e738`
 
 ```javascript
 /* =============================================================
-   YETIPSY — Checkout.gs（2.0 Phase 5）
+   YETIPSY MINI APP 2.1.5 — Checkout.gs（2.0 Phase 5）
    -------------------------------------------------------------
    结帐报价（§42 / §43 / §44）
 
@@ -4026,11 +4026,11 @@ function getCheckoutQuote(data, token) {
 ## 13. AppOrders.gs
 
 > Apps Script 里的档案名称：**`AppOrders`**（不要打 .gs）
-> ★ 2.0 订单：placeOrder（幂等）、订单查询、取消、再点一次、名称与单价快照 · 370 行 · SHA-256 `b01ff1543b7363eb`
+> ★ 2.0 订单：placeOrder（幂等）、订单查询、取消、再点一次、名称与单价快照 · 370 行 · SHA-256 `5ab9a275d70c549a`
 
 ```javascript
 /* =============================================================
-   YETIPSY — AppOrders.gs（2.0 Phase 6）
+   YETIPSY MINI APP 2.1.5 — AppOrders.gs（2.0 Phase 6）
    -------------------------------------------------------------
    建立订单 / 查询订单 / 取消请求（§60 / §75）
 
@@ -4406,11 +4406,11 @@ function reorder(data, token) {
 ## 14. OrderBoard.gs
 
 > Apps Script 里的档案名称：**`OrderBoard`**（不要打 .gs）
-> ★ 2.0 员工看板：接单 / 制作 / 完成（幂等）、收款才扣钱包、取消退回、6 小时内只算一次到店 · 463 行 · SHA-256 `cd993f481a68317c`
+> ★ 2.0 员工看板：接单 / 制作 / 完成（幂等）、收款才扣钱包、取消退回、6 小时内只算一次到店 · 463 行 · SHA-256 `186c5b4b48a03103`
 
 ```javascript
 /* =============================================================
-   YETIPSY — OrderBoard.gs（2.0 Phase 7）
+   YETIPSY MINI APP 2.1.5 — OrderBoard.gs（2.0 Phase 7）
    -------------------------------------------------------------
    员工端订单看板（§16 §19 §20 §21 §22 §46 §48 §49 §54 §55 §56 §61）
 
@@ -4879,11 +4879,11 @@ function setOrderingPaused(data, token) {
 ## 15. Analytics.gs
 
 > Apps Script 里的档案名称：**`Analytics`**（不要打 .gs）
-> ★ 2.0 业绩分析：今日统计、通路业绩（App / Foodcourt 分得开且不重复计算）、热销商品、会员分析 · 308 行 · SHA-256 `f67639b30bfa37d0`
+> ★ 2.0 业绩分析：今日统计、通路业绩（App / Foodcourt 分得开且不重复计算）、热销商品、会员分析 · 308 行 · SHA-256 `3494852d2a1afdae`
 
 ```javascript
 /* =============================================================
-   YETIPSY — Analytics.gs（2.0 Phase 11）
+   YETIPSY MINI APP 2.1.5 — Analytics.gs（2.0 Phase 11）
    -------------------------------------------------------------
    业绩分析（§50 §51 §52 §62）
 
@@ -5197,11 +5197,11 @@ function getMemberAnalytics(data, token) {
 ## 16. Claims.gs
 
 > Apps Script 里的档案名称：**`Claims`**（不要打 .gs）
-> QR / 4 位 Code 认领（只存 token 的 hash） · 817 行 · SHA-256 `de98dc5b7973433b`
+> QR / 4 位 Code 认领（只存 token 的 hash） · 817 行 · SHA-256 `02981287e7eed38e`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Claims.gs
+   YETIPSY MINI APP 2.1.5 — Claims.gs
    -------------------------------------------------------------
    一笔消费 → 一个 Claim（QR + 4 位 Code）→ 顾客认领 → 积分 + 奖励
 
@@ -6024,11 +6024,11 @@ function cancelPosTicket(data, token) {
 ## 17. Promotions.gs
 
 > Apps Script 里的档案名称：**`Promotions`**（不要打 .gs）
-> 优惠规则 · 154 行 · SHA-256 `097df3e93b5828af`
+> 优惠规则 · 154 行 · SHA-256 `046652fd0f1bad05`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Promotions.gs
+   YETIPSY MINI APP 2.1.5 — Promotions.gs
    ============================================================= */
 
 /** 会员端：只回传今天有效的活动 */
@@ -6188,11 +6188,11 @@ function reportPromotions() {
 ## 18. Admin.gs
 
 > Apps Script 里的档案名称：**`Admin`**（不要打 .gs）
-> 员工端：Dashboard、会员查询、手动调整、重设会员密码、设置 · 209 行 · SHA-256 `668612dea354d975`
+> 员工端：Dashboard、会员查询、手动调整、重设会员密码、设置 · 209 行 · SHA-256 `07d3aa47ae70a30f`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Admin.gs
+   YETIPSY MINI APP 2.1.5 — Admin.gs
    设置 · 积分调整 · Audit Log · 员工账号（Manager / Owner）
    ============================================================= */
 
@@ -6407,11 +6407,11 @@ function resetCustomerPassword(data, token) {
 ## 19. Auth.gs
 
 > Apps Script 里的档案名称：**`Auth`**（不要打 .gs）
-> ping / getPublicSettings / staffLogin / staffLogout · 89 行 · SHA-256 `02c0d70a4595e296`
+> ping / getPublicSettings / staffLogin / staffLogout · 89 行 · SHA-256 `0c39eee735f23d83`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Auth.gs
+   YETIPSY MINI APP 2.1.5 — Auth.gs
    -------------------------------------------------------------
    系统 ping · 员工登录（Salted Hash + 失败锁定）
    会员登录在 Customers.gs（因为要处理「同一个号码只注册一次」）
@@ -6506,11 +6506,11 @@ function getStaffSession(data, token) {
 ## 20. Code.gs
 
 > Apps Script 里的档案名称：**`Code`**（不要打 .gs）
-> ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 · 249 行 · SHA-256 `5c6f90235386fb9f`
+> ★ 唯一入口 doPost()：action 白名单、参数解析、错误包装 · 249 行 · SHA-256 `11f4b2dfdabafc0c`
 
 ```javascript
 /* =============================================================
-   YETIPSY MINI APP 1.3 — Code.gs
+   YETIPSY MINI APP 2.1.5 — Code.gs
    -------------------------------------------------------------
    Web App 入口。
 

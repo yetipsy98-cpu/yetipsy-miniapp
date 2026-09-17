@@ -107,13 +107,35 @@ bootstrapOwner('owner', '你的密码');    // 建立第一个老板账号（只
 
 ```bash
 npm run build:copypaste   # 从 apps-script/*.gs 产生 APPS-SCRIPT-COPY-PASTE.md
+npm run check:backend     # 确认 GitHub 上的 .gs 是最新版（见下）
 ```
 
 不想用 `clasp` 的话，打开 <https://script.google.com>，照着
 `APPS-SCRIPT-COPY-PASTE.md` 把 20 个档案贴进去即可。
 
+### 改了 .gs 之后一定要做的事
+
+```
+改 apps-script/*.gs  →  npm run build:copypaste  →  npm run check:backend  →  commit + push
+```
+
+`check:backend` 会检查 6 件事（任何一项失败都会叫你去修）：
+
+1. `apps-script/` 里每个 `.gs` 都有被载入（没有漏档）
+2. `Code.gs` 的 action 表里每个函数真的存在（少贴档案会在这里爆）
+3. 前端 `js/*.js` 呼叫的每个 action，后端都有实作
+4. 版本号码一致：`Config.gs` 的 `APP_VERSION` = `package.json` =
+   `js/config.js` = `service-worker.js` 快取名 = 每个 `.gs` 档头
+5. `APPS-SCRIPT-COPY-PASTE.md` 跟 `apps-script/*.gs` 一模一样（没过期）
+6. 用**真正的 `.gs`** 跑一次端到端：老板登录 → 建菜单 → POS 进单（带明细）→
+   扫会员码进分 → 会员点单（含规格加价）→ 看板完成发积分
+
+贴完 Apps Script 之后，用员工账号进 **MORE 页**最下面看版本：
+`✓ 后端 v2.1.5 · 已是最新版` 就对了。
+
 > 2.1 起本机 demo 服务器与自动化测试套件已移除（线上版不需要它们），
-> `tools/google-shim.js` 仍保留给产生复制贴上文件用。
+> `tools/google-shim.js` 与 `tools/load-backend.js` 保留给
+> `build:copypaste` / `check:backend` 用（它们跑的是同一份生产 .gs）。
 
 ---
 

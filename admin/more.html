@@ -84,7 +84,12 @@
     <a href="../index.html" class="tiny muted-2">CUSTOMER APP 会员端</a>
   </div>
 
-  <div class="footnote">YETIPSY MINI APP 1.6 · ORDERING EDITION</div>
+  <!-- 后端版本：贴完 Apps Script 之后看这里，就知道是不是最新版 -->
+  <div class="center mt-16">
+    <span id="backendVersion" class="tiny muted-2">后端版本检查中…</span>
+  </div>
+
+  <div class="footnote">YETIPSY MINI APP 2.1.5 · FOODCOURT POS EDITION</div>
 
 </div>
 
@@ -104,6 +109,28 @@
   document.getElementById('staffUser').textContent  = '@' + (s.username || '');
 
   document.getElementById('logoutBtn').addEventListener('click', ADMIN.logout);
+
+  /* -------------------------------------------------------------
+     后端版本：贴完 Apps Script 后可以在这里确认有没有贴到最新版
+     ------------------------------------------------------------- */
+  var want = YETIPSY_CONFIG.APP_VERSION || '';
+  var badge = document.getElementById('backendVersion');
+
+  API.system.ping().then(function (res) {
+    var got = (res && res.success && res.data && res.data.version) ? String(res.data.version) : '';
+    if (!got) {
+      badge.textContent = '⚠ 连不上后端 · 请检查 js/config.js 的 API_URL';
+      return;
+    }
+    if (got === want) {
+      badge.textContent = '✓ 后端 v' + got + ' · 已是最新版';
+      badge.style.color = '#5DD39E';
+    } else {
+      badge.textContent = '⚠ 后端 v' + got + ' ≠ 前端 v' + want +
+        ' · 请重新贴 Apps Script（' + got + ' 是旧版）';
+      badge.style.color = '#E2696B';
+    }
+  });
 })();
 </script>
 </body>

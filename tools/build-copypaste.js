@@ -53,7 +53,8 @@ const read = (f) => fs.readFileSync(path.join(SRC, f), 'utf8');
 const sha16 = (s) => crypto.createHash('sha256').update(s, 'utf8').digest('hex').slice(0, 16);
 const lines = (s) => s.replace(/\n+$/, '').split('\n').length;
 
-function build() {
+/** 产生文件内容（不写档），check-backend.js 用它来确认文件有没有过期 */
+function render() {
   const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
   const missingDesc = FILE_ORDER.filter((f) => !DESC[f]);
   if (missingDesc.length) throw new Error('缺少说明：' + missingDesc.join(', '));
@@ -138,8 +139,14 @@ function build() {
 `;
 
   const doc = head + body + tail;
-  fs.writeFileSync(OUT, doc, 'utf8');
-  return { files: FILE_ORDER.length, lines: total, bytes: Buffer.byteLength(doc, 'utf8') };
+  return { doc: doc, files: FILE_ORDER.length, lines: total, bytes: Buffer.byteLength(doc, 'utf8') };
+}
+
+/** 产生文件并写档（npm run build:copypaste） */
+function build() {
+  const r = render();
+  fs.writeFileSync(OUT, r.doc, 'utf8');
+  return r;
 }
 
 if (require.main === module) {
@@ -148,4 +155,4 @@ if (require.main === module) {
     r.lines + ' 行 · ' + (r.bytes / 1024).toFixed(1) + ' KB');
 }
 
-module.exports = { build };
+module.exports = { build, render, OUT };

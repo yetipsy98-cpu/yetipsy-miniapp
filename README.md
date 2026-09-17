@@ -67,6 +67,17 @@ Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积�
 > · **登出不等后端**：按下去立刻清 session、立刻跳登录页（后端只是顺带通知），
 >   员工端每一页的顶栏都有登出
 
+> **2.1.5 起，版本号码对齐 + 自动检查后端是否最新：**
+> · `Config.gs` 的 `APP_VERSION`、`package.json`、`js/config.js`、
+>   `service-worker.js` 快取名、20 个 `.gs` 档头现在都是同一个版本号
+> · 新增 `npm run check:backend`：检查「`apps-script/` 有没有漏档 /
+>   Code.gs 的 action 有没有指向不存在的函数 / 前端用到的 90 个 action
+>   后端是否都有 / 版本号码是否一致 / `APPS-SCRIPT-COPY-PASTE.md`
+>   有没有过期 / 用**真正的 .gs** 跑一次 POS 进单 + 会员点单端到端」
+> · 员工端 **MORE 页最下方**会显示后端版本：
+>   `✓ 后端 v2.1.5 · 已是最新版`，若还贴着旧版会红字提示重新贴 Apps Script
+> · 规则：**任何 `.gs` 的改动都先更新到 GitHub**，再从 GitHub 贴到 Apps Script
+
 Foodcourt Claim（1.x 原流程，保留但已移出员工首页、入口在 MORE，仅 MANAGER / OWNER）：
 
 ```
@@ -75,7 +86,9 @@ Foodcourt Claim（1.x 原流程，保留但已移出员工首页、入口在 MOR
 
 **不做（Phase 1 明确排除）：**
 
-Foodcourt API、线上付款闸（DuitNow / FPX / 信用卡）、POS、库存、会计、
+Foodcourt API、线上付款闸（DuitNow / FPX / 信用卡）、**真正的 POS 收银**
+（2.1 的员工端点餐台只是「点商品 → 记录单据 → 扫会员码进分」，
+不接钱箱 / 不刷卡，付款仍在 foodcourt 柜台）、库存、会计、
 厨房系统、订位、外送、WhatsApp 自动化、SMS OTP、Native App、多分店、拆单积分。
 
 > 「线上点餐」在 2.0 已经做了（自助点单 + 员工看板），
@@ -253,17 +266,39 @@ yetipsy-miniapp/
 
 ## 4. 维护
 
-改完 `apps-script/*.gs` 之后，重新产生那份手动部署用的复制贴上文件：
+### ★ 改后端（apps-script/*.gs）的固定流程
+
+**任何 .gs 的改动都只从 GitHub 走** —— 不要在 Apps Script 编辑器里直接改，
+否则线上和 GitHub 会变成两个版本。
 
 ```bash
-npm run build:copypaste   # = node tools/build-copypaste.js
+# 1) 改 apps-script/*.gs
+# 2) 重新产生复制贴上文件（少了这步 GitHub 上就是旧版）
+npm run build:copypaste
+# 3) 检查：版本号码一致 / 前端用到的 action 后端都有 / 复制贴上文件没过期 /
+#    用「真正的 .gs」跑一次 POS 进单 + 会员点单端到端
+npm run check:backend
+# 4) commit + push
 ```
+
+`npm run check:backend` 全部通过时，GitHub 上的 `apps-script/*.gs`
+就是最新版；它也会检查每个 `.gs` 档头写的版本号码（现在是 `2.1.5`）
+跟 `package.json`、`js/config.js`、`service-worker.js` 一致。
+
+**贴完怎么确认贴的是最新版？**
+用员工账号进 **MORE 页**，最下面会显示：
+
+- `✓ 后端 v2.1.5 · 已是最新版` → 贴对了
+- `⚠ 后端 vX ≠ 前端 v2.1.5 · 请重新贴 Apps Script` → 还是旧版
+
+（后端版本来自 `ping` 回的 `APP_VERSION`，也就是 `Config.gs` 那一行。）
 
 部署后端有两条路（择一）：
 
 1. **手动**：打开 Apps Script 编辑器，照 `APPS-SCRIPT-COPY-PASTE.md` 贴上 20 个档案
 2. **自动**：把 `apps-script/` push 上 GitHub，`.github/workflows/deploy-apps-script.yml`
    会用 `clasp` 自动推送并建立新版本（需要 `CLASP_SCRIPT_ID` / `CLASPRC_JSON` 两个 secrets）
+   —— 这个 workflow 只在 `main` 分支生效，所以在分支上开发时要手动贴
 
 > 本机 demo 服务器与自动化测试套件已在 2.1 移除（线上版不需要它们）。
 > 旧版仍在 git 历史里：`git log -- demo/`。
