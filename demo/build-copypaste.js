@@ -15,16 +15,22 @@
 const fs = require('fs');
 const path = require('path');
 const crypto = require('crypto');
-const { FILE_ORDER } = require('./load-backend');
+const { FILE_ORDER, loadBackend } = require('./load-backend');
+
+/* 分页清单从 Config.gs 的 SCHEMA 直接读出来，避免文件里的数字跟实作脱节 */
+const { sandbox: CFG } = loadBackend();
+const SHEET_NAMES = Object.keys(CFG.SCHEMA).map((k) => CFG.SCHEMA[k].sheet);
+const SHEET_COUNT = SHEET_NAMES.length;
+const SHEET_LIST = SHEET_NAMES.map((n) => '`' + n + '`').join(' ');
 
 const ROOT = path.join(__dirname, '..');
 const SRC = path.join(ROOT, 'apps-script');
 const OUT = path.join(ROOT, 'APPS-SCRIPT-COPY-PASTE.md');
 
 const DESC = {
-  'Config.gs': '所有设定与 12 张表的栏位定义（要改规则就改这里）',
+  'Config.gs': '所有设定与 ' + SHEET_COUNT + ' 张表的栏位定义（要改规则就改这里）',
   'Utils.gs': '公用工具：E.164 电话正规化、错误码、日期、JSON 回应',
-  'Database.gs': 'setupDatabase()、补栏位、防重复注册工具、dedupeCustomers()',
+  'Database.gs': 'setupDatabase()、upgradeToV2()、补栏位、防重复注册工具、dedupeCustomers()',
   'Security.gs': 'Session Token、权限（STAFF/MANAGER/OWNER）、Rate Limit、登入锁定',
   'Audit.gs': 'Audit Log 写入与查询（最多保留 5000 条）',
   'Points.gs': '积分累计 / 等级门槛计算',
@@ -71,9 +77,12 @@ function build() {
     '5. 每个档案贴完按 **💾 储存**（Ctrl+S）。\n' +
     '6. 全部贴完 → 选 `Database` 档案 → 执行 `setupDatabase()`\n' +
     '   → 授权（进阶 → 前往专案 → 允许）→ 再执行一次 `bootstrapOwner()`。\n' +
-    '7. 回 Google Sheet 看是否出现 **12 个分页**：`Settings` `Sequences` `Customers`\n' +
-    '   `Staff` `Sessions` `Orders` `Claims` `Rewards` `PointTx` `WalletTx`\n' +
-    '   `Promotions` `AuditLogs`。\n\n' +
+    '7. 回 Google Sheet 看是否出现 **' + SHEET_COUNT + ' 个分页**：' + SHEET_LIST + '。\n' +
+    '8. **已经在跑 1.x 的老板看这里**：不要重跑 `setupDatabase()`，\n' +
+    '   改执行 `upgradeToV2({ backup: true })` —— 它只会补建 2.0 的 5 张表\n' +
+    '   （`Categories` `Products` `ProductOptions` `AppOrders` `OrderItems`）\n' +
+    '   和 12 个新设定，**既有会员 / 积分 / 钱包 / Claim 一列都不会动**。\n' +
+    '   想看升级状态就执行 `reportUpgradeStatus()`。\n\n' +
     '| 顺序 | Apps Script 里的档案名 | 行数 | 内容 |\n|---|---|---|---|\n' + rows + '\n\n' +
     '> ⚠️ **' + FILE_ORDER.length + ' 个档案全部贴完再执行**，少一个会报 `xxx is not defined`。\n\n---\n';
 

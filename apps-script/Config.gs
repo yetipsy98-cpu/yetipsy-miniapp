@@ -204,6 +204,128 @@ var SCHEMA = {
     ]
   },
 
+  /* ============ 2.0 点单系统（新增，不动 1.x 任何表）============ */
+
+  categories: {                              // 酒单分类（§27，后台可改，不 Hardcode）
+    sheet: 'Categories',
+    v2: true,          // 2.0 新增：Sheet 还没建时当空表，不影响 1.x
+    maxRows: 0,
+    columns: [
+      ['categoryId', 'CategoryID', 's'],
+      ['nameEN',     'NameEN',     's'],
+      ['nameZH',     'NameZH',     's'],
+      ['status',     'Status',     's'],     // ACTIVE / INACTIVE
+      ['sortOrder',  'SortOrder',  'n'],
+      ['createdAt',  'CreatedAt',  's'],
+      ['updatedAt',  'UpdatedAt',  's']
+    ]
+  },
+
+  products: {                                // 商品（§26；图片只存 URL §33）
+    sheet: 'Products',
+    v2: true,          // 2.0 新增：Sheet 还没建时当空表，不影响 1.x
+    maxRows: 0,
+    columns: [
+      ['productId',        'ProductID',        's'],
+      ['categoryId',       'CategoryID',       's'],
+      ['nameEN',           'NameEN',           's'],
+      ['nameZH',           'NameZH',           's'],
+      ['descriptionEN',    'DescriptionEN',    's'],
+      ['descriptionZH',    'DescriptionZH',    's'],
+      ['priceSen',         'PriceSen',         'n'],   // 分为单位；Backend 唯一价格来源（§41）
+      ['originalPriceSen', 'OriginalPriceSen', 'n'],   // 促销前原价（§40）
+      ['promoPriceSen',    'PromoPriceSen',    'n'],
+      ['promoStart',       'PromoStart',       's'],
+      ['promoEnd',         'PromoEnd',         's'],
+      ['tags',             'Tags',             's'],   // refreshing,citrus,mint（§35）
+      ['strength',         'Strength',         's'],   // LIGHT / MEDIUM / STRONG（§36，可空）
+      ['imageURL',         'ImageURL',         's'],   // GitHub /assets/menu/*.webp
+      ['status',           'Status',           's'],   // ACTIVE / ARCHIVED
+      ['available',        'Available',        's'],   // TRUE / FALSE = SOLD OUT（§31）
+      ['sortOrder',        'SortOrder',        'n'],
+      ['createdAt',        'CreatedAt',        's'],
+      ['updatedAt',        'UpdatedAt',        's']
+    ]
+  },
+
+  productOptions: {                          // Size / ICE / SWEETNESS（§8，不写死）
+    sheet: 'ProductOptions',
+    v2: true,          // 2.0 新增：Sheet 还没建时当空表，不影响 1.x
+    maxRows: 0,
+    columns: [
+      ['optionId',           'OptionID',           's'],
+      ['productId',          'ProductID',          's'],
+      ['optionGroup',        'OptionGroup',        's'],   // SIZE / ICE / SWEETNESS / EXTRA
+      ['optionGroupNameEN',  'OptionGroupNameEN',  's'],
+      ['optionGroupNameZH',  'OptionGroupNameZH',  's'],
+      ['nameEN',             'NameEN',             's'],
+      ['nameZH',             'NameZH',             's'],
+      ['priceAdjustmentSen', 'PriceAdjustmentSen', 'n'],   // 加价（分），0 = 不加价
+      ['required',           'Required',           's'],   // TRUE = 必选
+      ['status',             'Status',             's'],
+      ['sortOrder',          'SortOrder',          'n'],
+      ['createdAt',          'CreatedAt',          's'],
+      ['updatedAt',          'UpdatedAt',          's']
+    ]
+  },
+
+  appOrders: {                               // 点单订单主表（§29，与 1.x Orders 分开）
+    sheet: 'AppOrders',
+    v2: true,          // 2.0 新增：Sheet 还没建时当空表，不影响 1.x
+    maxRows: 0,
+    columns: [
+      ['appOrderId',         'AppOrderID',         's'],
+      ['orderNumber',        'OrderNumber',        's'],   // 显示用 YT260917001（§45）
+      ['customerId',         'CustomerID',         's'],
+      ['orderType',          'OrderType',          's'],   // TABLE / TAKEAWAY / COUNTER
+      ['tableNumber',        'TableNumber',        's'],
+      ['itemCount',          'ItemCount',          'n'],
+      ['subtotalSen',        'SubtotalSen',        'n'],   // Backend 自己算（§41）
+      ['walletRequestedSen', 'WalletRequestedSen', 'n'],   // Cart 阶段只是「要求」（§10）
+      ['walletUsedSen',      'WalletUsedSen',      'n'],   // 真正扣掉才写（§54）
+      ['discountSen',        'DiscountSen',        'n'],
+      ['finalAmountSen',     'FinalAmountSen',     'n'],
+      ['pointsEarned',       'PointsEarned',       'n'],
+      ['orderStatus',        'OrderStatus',        's'],   // SUBMITTED→CONFIRMED→PREPARING→READY→COMPLETED/CANCELLED
+      ['paymentMethod',      'PaymentMethod',      's'],   // COUNTER/CASH/DUITNOW/CARD/FOODCOURT/ONLINE
+      ['paymentStatus',      'PaymentStatus',      's'],   // UNPAID/PENDING/PAID/REFUNDED/FAILED
+      ['paymentReference',   'PaymentReference',   's'],
+      ['quoteToken',         'QuoteToken',         's'],   // 对应 Checkout Quote（§43）
+      ['idempotencyKey',     'IdempotencyKey',     's'],   // 防重复下单（§44）
+      ['customerNote',       'CustomerNote',       's'],
+      ['channel',            'Channel',            's'],   // YETIPSY_APP（§51 通路分析）
+      ['ordersTxId',         'OrdersTxID',         's'],   // 完成后回写 1.x Orders 的纪录 ID
+      ['handledBy',          'HandledBy',          's'],
+      ['createdAt',          'CreatedAt',          's'],
+      ['confirmedAt',        'ConfirmedAt',        's'],
+      ['readyAt',            'ReadyAt',            's'],
+      ['completedAt',        'CompletedAt',        's'],
+      ['cancelledAt',        'CancelledAt',        's'],
+      ['cancelledBy',        'CancelledBy',        's'],
+      ['cancelReason',       'CancelReason',       's'],
+      ['updatedAt',          'UpdatedAt',          's']
+    ]
+  },
+
+  orderItems: {                              // 订单明细（§30，必须快照名称与单价）
+    sheet: 'OrderItems',
+    v2: true,          // 2.0 新增：Sheet 还没建时当空表，不影响 1.x
+    maxRows: 0,
+    columns: [
+      ['orderItemId',         'OrderItemID',         's'],
+      ['appOrderId',          'AppOrderID',          's'],
+      ['productId',           'ProductID',           's'],
+      ['productNameSnapshot', 'ProductNameSnapshot', 's'],  // 下单当时的名称（§30）
+      ['unitPriceSen',        'UnitPriceSen',        'n'],  // 下单当时的单价（§30）
+      ['quantity',            'Quantity',            'n'],
+      ['optionsJSON',         'OptionsJSON',         's'],  // 选了哪些规格
+      ['optionsPriceSen',     'OptionsPriceSen',     'n'],  // 规格加价合计
+      ['lineTotalSen',        'LineTotalSen',        'n'],
+      ['customerNote',        'CustomerNote',        's'],
+      ['createdAt',           'CreatedAt',           's']
+    ]
+  },
+
   audit: {
     sheet: 'AuditLogs',
     maxRows: 5000,
@@ -267,7 +389,21 @@ function defaultSettings() {
 
     /* 钱包 */
     MAX_WALLET_USAGE_PERCENT: '20',
-    MIN_WALLET_REDEEM_BILL:   '30'
+    MIN_WALLET_REDEEM_BILL:   '30',
+
+    /* ===== 2.0 点单系统（§63）===== */
+    ORDERING_ENABLED:              'TRUE',   // FALSE = 顾客端不能下单
+    ORDERING_PAUSED:               'FALSE',  // 员工紧急暂停接单（§64/§65）
+    ORDERING_OPEN_TIME:            '18:30',  // 点单开放 HH:MM
+    ORDERING_CLOSE_TIME:           '00:00',
+    ALLOW_PICKUP:                  'TRUE',   // 允许 COUNTER PICKUP（§11）
+    ALLOW_TABLE_ORDER:             'TRUE',   // 允许填桌号
+    MAX_ORDER_ITEMS:               '20',     // 单张订单最多几项
+    VISIT_SESSION_HOURS:           '6',      // 6 小时内多张订单算 1 次到店（§56）
+    ORDER_POLL_SECONDS:            '8',      // 员工看板轮询（§46，不要 1 秒）
+    CUSTOMER_ORDER_POLL_SECONDS:   '12',     // 顾客订单页轮询（§47）
+    CHECKOUT_QUOTE_EXPIRY_MINUTES: '5',      // Checkout Quote 有效期（§43）
+    MENU_CACHE_SECONDS:            '120'     // 菜单缓存（§82；钱包/余额绝不缓存）
   };
 }
 
@@ -276,6 +412,9 @@ var SETTING_DESC = {
   BAR_NAME:                 'Bar name / 品牌名称',
   CURRENCY:                 'Currency / 货币',
   TIMEZONE:                 'Timezone / 时区',
+  MEMBER_CODE_SECONDS:      'Member code rotates every (sec) / 会员条码几秒换一次',
+  MEMBER_VERIFY_SECONDS:    'Scan verify valid (sec) / 扫码验证有效秒数',
+  REQUIRE_MEMBER_CODE_SCAN: 'Scan member code before redeem / 抵扣前必须扫会员条码',
   DEFAULT_COUNTRY_CODE:     'Default country code / 预设国家码（60=MY, 65=SG）',
   ALLOWED_COUNTRY_CODES:    'Allowed country codes (comma separated) / 允许的国家码',
   CUSTOMER_PASSWORD_MIN:    'Member password min length / 会员密码最少字符',
@@ -296,7 +435,21 @@ var SETTING_DESC = {
   REWARD_WEIGHTS:           'Reward probability weights JSON',
   REWARD_EXPIRY_DAYS:       'Reward validity days / 奖励有效天数',
   MAX_WALLET_USAGE_PERCENT: 'Max wallet usage % of bill / 钱包最高抵扣比例',
-  MIN_WALLET_REDEEM_BILL:   'Min bill for redemption (RM) / 最低抵扣账单'
+  MIN_WALLET_REDEEM_BILL:   'Min bill for redemption (RM) / 最低抵扣账单',
+
+  /* 2.0 点单系统 */
+  ORDERING_ENABLED:              'Ordering enabled / 是否开放点单',
+  ORDERING_PAUSED:               'Orders paused by staff / 员工暂停接单',
+  ORDERING_OPEN_TIME:            'Ordering opens (HH:MM) / 点单开始时间',
+  ORDERING_CLOSE_TIME:           'Ordering closes (HH:MM) / 点单结束时间',
+  ALLOW_PICKUP:                  'Allow counter pickup / 允许柜台自取',
+  ALLOW_TABLE_ORDER:             'Allow table orders / 允许桌号点单',
+  MAX_ORDER_ITEMS:               'Max items per order / 单张订单上限',
+  VISIT_SESSION_HOURS:           'Hours counted as one visit / 几小时内算同一次到店',
+  ORDER_POLL_SECONDS:            'Staff polling seconds / 员工看板刷新秒数',
+  CUSTOMER_ORDER_POLL_SECONDS:   'Customer polling seconds / 顾客订单刷新秒数',
+  CHECKOUT_QUOTE_EXPIRY_MINUTES: 'Quote valid minutes / 结帐报价有效分钟',
+  MENU_CACHE_SECONDS:            'Menu cache seconds / 菜单缓存秒数'
 };
 
 /** Session 有效期 */

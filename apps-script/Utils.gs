@@ -216,6 +216,28 @@ var ERR = {
   STAFF_NOT_FOUND:         ['STAFF_NOT_FOUND', 'Staff account not found. / 找不到员工账号。'],
   USERNAME_TAKEN:          ['USERNAME_TAKEN', 'Username already exists. / 账号已存在。'],
   SETUP_REQUIRED:          ['SETUP_REQUIRED', 'Database is not set up yet. Run setupDatabase() first. / 资料库尚未初始化。'],
+  BUSY:                    ['BUSY', 'System is busy. Please try again. / 系统忙碌中，请稍后再试。'],
+
+  /* 2.0 点单系统 */
+  UPGRADE_REQUIRED:        ['UPGRADE_REQUIRED', 'Run upgradeToV2() in Apps Script first. / 请先在 Apps Script 执行 upgradeToV2()。'],
+  ORDERING_CLOSED:         ['ORDERING_CLOSED', 'Ordering is closed now. / 目前不在点单时间。'],
+  ORDERING_PAUSED:         ['ORDERING_PAUSED', 'Orders are temporarily paused. / 目前暂停接单。'],
+  MENU_EMPTY:              ['MENU_EMPTY', 'Menu is not set up yet. / 酒单尚未建立。'],
+  PRODUCT_NOT_FOUND:       ['PRODUCT_NOT_FOUND', 'Product not found. / 找不到这个商品。'],
+  PRODUCT_UNAVAILABLE:     ['PRODUCT_UNAVAILABLE', 'This item is sold out. / 这个商品已售完。'],
+  CATEGORY_NOT_FOUND:      ['CATEGORY_NOT_FOUND', 'Category not found. / 找不到这个分类。'],
+  OPTION_NOT_FOUND:        ['OPTION_NOT_FOUND', 'Product option not found. / 找不到这个规格。'],
+  OPTION_REQUIRED:         ['OPTION_REQUIRED', 'Please choose a required option. / 请选择必选规格。'],
+  INVALID_QUANTITY:        ['INVALID_QUANTITY', 'Invalid quantity. / 数量不正确。'],
+  TOO_MANY_ITEMS:          ['TOO_MANY_ITEMS', 'Too many items in one order. / 单张订单项目过多。'],
+  QUOTE_EXPIRED:           ['QUOTE_EXPIRED', 'Checkout quote expired. Please review your cart again. / 结帐报价已过期，请重新确认购物车。'],
+  QUOTE_MISMATCH:          ['QUOTE_MISMATCH', 'Prices changed since checkout. / 价格已变动，请重新结帐。'],
+  DUPLICATE_ORDER:         ['DUPLICATE_ORDER', 'This order was already submitted. / 这张订单已经提交过了。'],
+  ORDER_NOT_FOUND:         ['ORDER_NOT_FOUND', 'Order not found. / 找不到这张订单。'],
+  ORDER_STATUS_INVALID:    ['ORDER_STATUS_INVALID', 'This order cannot move to that status. / 这张订单不能变成这个状态。'],
+  ORDER_NOT_PAID:          ['ORDER_NOT_PAID', 'Confirm payment before completing. / 请先确认收款再完成订单。'],
+  ORDER_ALREADY_FINAL:     ['ORDER_ALREADY_FINAL', 'This order is already closed. / 这张订单已经结案。'],
+  CANCEL_NOT_ALLOWED:      ['CANCEL_NOT_ALLOWED', 'This order can no longer be cancelled. / 这张订单已无法取消。'],
   UNKNOWN_ACTION:          ['UNKNOWN_ACTION', 'Unknown action. / 未知的 API 动作。']
 };
 

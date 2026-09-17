@@ -7,7 +7,7 @@
     "demo": "node demo/server.js",
     "demo:reset": "node demo/server.js --reset",
     "build:copypaste": "node demo/build-copypaste.js",
-    "test": "node demo/test-apps-script.js && node demo/tests.js && node demo/smoke-ui.js && node demo/e2e-ui.js && node demo/test-login-ui.js && node demo/test-copypaste.js && node demo/test-scan-ui.js && node demo/test-home-ui.js",
+    "test": "node demo/test-apps-script.js && node demo/tests.js && node demo/smoke-ui.js && node demo/e2e-ui.js && node demo/test-login-ui.js && node demo/test-copypaste.js && node demo/test-scan-ui.js && node demo/test-home-ui.js && node demo/test-upgrade.js",
     "test:api": "node demo/tests.js",
     "test:backend": "node demo/test-apps-script.js",
     "test:ui": "node demo/smoke-ui.js",
@@ -16,7 +16,8 @@
     "test:login": "node demo/test-login-ui.js",
     "test:copypaste": "node demo/test-copypaste.js",
     "test:scan": "node demo/test-scan-ui.js",
-    "test:home": "node demo/test-home-ui.js"
+    "test:home": "node demo/test-home-ui.js",
+    "test:upgrade": "node demo/test-upgrade.js"
   },
   "keywords": [
     "yetipsy",

@@ -185,16 +185,17 @@ npm run demo          # = node demo/server.js
 ## 4. 测试
 
 ```bash
-npm test                 # 全部 8 套（904 项检查）
+npm test                 # 全部 9 套（1070 项检查）
 
 npm run test:backend     # 直接执行 apps-script/*.gs（86 项）
-npm run test:api         # 完整 API 测试 25 组（196 项）
-npm run test:ui          # 前端 ↔ API ↔ 后端契约（349 项）
-npm run test:e2e         # 起 demo server 走完整 HTTP 流程（52 项）
+npm run test:api         # 完整 API 测试（242 项）
+npm run test:ui          # 前端 ↔ API ↔ 后端契约（354 项）
+npm run test:e2e         # 起 demo server 走完整 HTTP 流程（57 项）
 npm run test:login       # 用 jsdom 打开 login.html 点按钮（27 项，需先 npm install）
-npm run test:copypaste   # APPS-SCRIPT-COPY-PASTE.md 跟 .gs 同步、且贴上去能跑（60 项）
+npm run test:copypaste   # APPS-SCRIPT-COPY-PASTE.md 跟 .gs 同步、且贴上去能跑（84 项）
 npm run test:scan        # 用 jsdom 跑会员条码页与员工扫码抵扣页（66 项）
 npm run test:home        # 首页活动：后端失败时不能伪装成「暂无活动」（12 项）
+npm run test:upgrade     # 2.0 数据库升级：只加不减、幂等、1.x 不受影响（142 项）
 npm run build:copypaste  # 改完 .gs 之后重新产生那份复制贴上文件
 ```
 
@@ -302,12 +303,57 @@ App 内 `PROFILE` 页面有完整隐私说明。
 4. Deploy → New deployment → Web app → 复制 URL
 5. `js/config.js` 贴上 API URL（`REQUIRE_BACKEND: true`）→ push → 开启 GitHub Pages
 
-> 之后改后端只要 `git push`：CI 会先跑 904 项测试，再用 `clasp` 部署，
+> 之后改后端只要 `git push`：CI 会先跑 1070 项测试，再用 `clasp` 部署，
 > Web App URL 不变，前端不用动。设定方法见 `apps-script/README.md`。
 
 ---
 
-## 9. 未来扩充（Phase 2+）
+## 9. 2.0 Smart Ordering（进行中）
+
+2.0 的完整计划书在 [`PLAN-2.0.md`](PLAN-2.0.md)（86 节），1.x 的审计结果在
+[`docs/AUDIT-1.x.md`](docs/AUDIT-1.x.md)。**Phase 1（审计）与 Phase 2（数据库升级）已完成**，
+Phase 3（Menu）起尚未开始。
+
+### 9.1 已经就位的东西
+
+| 项目 | 内容 |
+|---|---|
+| 5 张新表 | `Categories` `Products` `ProductOptions` `AppOrders` `OrderItems`（§25–§30） |
+| 12 个新设定 | `ORDERING_ENABLED` `ORDERING_OPEN_TIME 18:30` `ORDERING_CLOSE_TIME 00:00` `ALLOW_PICKUP` `ALLOW_TABLE_ORDER` `MAX_ORDER_ITEMS 20` `VISIT_SESSION_HOURS 6` `ORDER_POLL_SECONDS 8` `CUSTOMER_ORDER_POLL_SECONDS 12` `CHECKOUT_QUOTE_EXPIRY_MINUTES 5` `ORDERING_PAUSED` `MENU_CACHE_SECONDS 120`（§63） |
+| 19 个点单错误码 + `BUSY` | `UPGRADE_REQUIRED` `ORDERING_CLOSED` `ORDERING_PAUSED` `MENU_EMPTY` `PRODUCT_NOT_FOUND` `PRODUCT_UNAVAILABLE` `CATEGORY_NOT_FOUND` `OPTION_NOT_FOUND` `OPTION_REQUIRED` `INVALID_QUANTITY` `TOO_MANY_ITEMS` `QUOTE_EXPIRED` `QUOTE_MISMATCH` `DUPLICATE_ORDER` `ORDER_NOT_FOUND` `ORDER_STATUS_INVALID` `ORDER_NOT_PAID` `ORDER_ALREADY_FINAL` `CANCEL_NOT_ALLOWED`（§66 / §43 / §44 / §55） |
+| 升级工具 | `upgradeToV2({ backup: true })` + `reportUpgradeStatus()`（§67 / §71） |
+| 测试 | `npm run test:upgrade`（142 项） |
+
+### 9.2 老板怎么升级（**不要重跑 `setupDatabase()`**）
+
+在 Apps Script 编辑器里选 `Database` 档案，执行：
+
+```javascript
+upgradeToV2({ backup: true })   // 会先复制一份 Spreadsheet 再升级
+```
+
+它**只加不减**：
+
+- 只建立「不存在」的 2.0 Sheet；已存在的一律不碰（连表头都不重写）
+- 只补「不存在」的设定键；你改过的值（例如 `BAR_NAME`）不会被覆盖
+- 只补「不存在」的序号键
+- 升级前后逐张比对资料列数，**任何一张变少就会在回报里标出来**
+- 可以重复执行：第二次跑会回报「新建 0 张、新增 0 个设定」
+
+想确认状态就执行 `reportUpgradeStatus()`，它会列出还缺哪些表和设定。
+
+> ⚠️ `setupDatabase()` 会重写表头并删掉「多出来的栏位」，对跑了一阵子的线上
+> Sheet 是危险动作 —— 升级请用 `upgradeToV2()`。（测试 `08` 组也验证了
+> `setupDatabase()` 重复执行本身不会清资料，但升级路径仍然只走 `upgradeToV2()`。）
+
+### 9.3 还没升级也不会坏（§68 向后相容）
+
+`SCHEMA` 里 2.0 的表标了 `v2: true`：Sheet 还没建时 `dbLoad()` 把它当**空表**，
+不会抛 `SETUP_REQUIRED`。所以贴完新的 `Config.gs`、还没执行 `upgradeToV2()` 的那段时间，
+1.x 的会员登录 / Claim / 钱包 / 积分 / 条码**照常运作**。
+真的去写订单才会回 `UPGRADE_REQUIRED`，不会静默丢资料。
+
+### 9.4 未来扩充
 
 已预留位置，不需要重写前端：
 

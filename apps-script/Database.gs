@@ -168,6 +168,14 @@ function dbLoad() {
     var def = SCHEMA[table];
     var sh = ss.getSheetByName(def.sheet);
     if (!sh) {
+      /* 2.0 新增的表还没建（老板尚未执行 upgradeToV2()）时当作空表，
+         这样 1.x 的会员 / Claim / 钱包 / 积分照常运作（§68 向后相容）。
+         真正的点单 API 会自己回 UPGRADE_REQUIRED，不会静默出错。 */
+      if (def.v2) {
+        DB_META.sheets[table] = null;
+        DB[table] = [];
+        return;
+      }
       throw new Error('SETUP_REQUIRED: 找不到 Sheet「' + def.sheet + '」，请先执行 setupDatabase()。');
     }
     DB_META.sheets[table] = sh;
@@ -242,6 +250,16 @@ function dbFlush() {
     var sh = DB_META.sheets[table];
     var appends = [];
     var updates = [];
+
+    /* 2.0 的表还没建：只要没资料要写就直接跳过，
+       有资料要写才报错（避免静默丢掉订单）。 */
+    if (!sh) {
+      if (DB[table].length) {
+        throw new Error('UPGRADE_REQUIRED: Sheet「' + def.sheet +
+          '」还不存在，请先在 Apps Script 执行 upgradeToV2()。');
+      }
+      return;
+    }
 
     DB[table].forEach(function (obj) {
       var rowNum = DB_META.rows.get(obj);
@@ -564,4 +582,189 @@ function promoObject(counter, title, subtitle, description, start, end) {
 
 function daysFromNow(days) {
   return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+}
+
+/* -------------------------------------------------------------
+   9. 2.0 升级（§67 / §71）—— 只加不减，绝不删资料
+   ------------------------------------------------------------- */
+
+/** 2.0 新增的序号键（与 1.x 的 customer/order/... 分开） */
+var V2_SEQUENCE_KEYS = ['category', 'product', 'option', 'apporder', 'orderitem', 'ordernum'];
+
+/**
+ * 2.0 数据库升级。**只加不减**，可重复执行（幂等）。
+ *
+ * 与 setupDatabase() 的关键差别：
+ *   setupDatabase() 会重写每张表的表头，并把「多出来的栏位」删掉 ——
+ *   对已经跑了一阵子的线上 Sheet 那是危险动作，§67 明确禁止。
+ *
+ * upgradeToV2() 只做四件事：
+ *   ① 记录升级前每张表的资料列数（升级后逐张比对，证明一列没少）
+ *   ② 只建立「不存在」的 2.0 Sheet；已存在的一律不碰（连表头都不重写）
+ *   ③ 只补「不存在」的设定键；既有的值一律不改
+ *   ④ 只补「不存在」的序号键
+ *
+ * options.backup = true 时会试着复制一份 Spreadsheet（环境不支持就只提醒）。
+ * 回传升级报告，可直接在 Apps Script 的「执行项目」里看 Logger 输出。
+ */
+function upgradeToV2(options) {
+  var opts = options || {};
+  var ss = dbSpreadsheet();
+
+  var lock = LockService.getScriptLock();
+  var locked = false;
+  try { locked = lock.tryLock(30000); } catch (e) { locked = false; }
+  if (!locked) return err('BUSY', 'Upgrade is locked by another request. / 另一个升级正在执行，请稍后再试。');
+
+  try {
+    var report = {
+      upgraded: true,
+      version: '2.0',
+      at: nowISO(),
+      backup: null,
+      createdSheets: [],
+      skippedSheets: [],
+      addedSettings: [],
+      unchangedSettings: [],
+      addedSequences: [],
+      rowCounts: {},
+      dataIntact: true,
+      problems: []
+    };
+
+    /* ① 备份（§67）：能复制就复制，不能就明确提醒，不要假装备份过了 */
+    if (opts.backup && typeof ss.copy === 'function') {
+      try {
+        var copy = ss.copy('Yetipsy BACKUP before 2.0 ' + nowISO().slice(0, 10));
+        report.backup = { ok: true, name: 'Yetipsy BACKUP before 2.0 ' + nowISO().slice(0, 10), id: copy.getId ? copy.getId() : null };
+      } catch (e2) {
+        report.backup = { ok: false, reason: String(e2 && e2.message || e2) };
+      }
+    } else {
+      report.backup = {
+        ok: false,
+        reason: '自动备份未执行。请手动在 Google Sheets 选「档案 → 建立副本」，' +
+                '或用 upgradeToV2({ backup: true }) 再执行一次。'
+      };
+    }
+
+    /* ① 升级前逐张记录资料列数 */
+    ss.getSheets().forEach(function (sh) {
+      report.rowCounts[sh.getName()] = { before: Math.max(0, sh.getLastRow() - 1), after: null };
+    });
+
+    /* ② 只建立不存在的 2.0 Sheet */
+    Object.keys(SCHEMA).forEach(function (table) {
+      var def = SCHEMA[table];
+      if (!def.v2) return;                       // 1.x 的表完全不碰
+      var sh = ss.getSheetByName(def.sheet);
+      if (sh) { report.skippedSheets.push(def.sheet); return; }
+
+      sh = ss.insertSheet(def.sheet);
+      var headers = def.columns.map(function (c) { return c[1]; });
+      var first = sh.getRange(1, 1, 1, headers.length);
+      first.setValues([headers]);
+      first.setFontWeight('bold');
+      first.setBackground('#171717');
+      first.setFontColor('#F4F1EA');
+      sh.setFrozenRows(1);
+      report.createdSheets.push(def.sheet);
+      report.rowCounts[def.sheet] = { before: 0, after: 0 };
+    });
+
+    /* ③ 只补不存在的设定键（既有值一律不改） */
+    var settingsSheet = ss.getSheetByName(SCHEMA.settings.sheet);
+    if (settingsSheet) {
+      var existing = {};
+      var last = settingsSheet.getLastRow();
+      if (last >= 2) {
+        var vals = settingsSheet.getRange(2, 1, last - 1, 1).getValues();
+        for (var i = 0; i < vals.length; i++) existing[String(vals[i][0])] = true;
+      }
+      var defs = defaultSettings();
+      var addRows = [];
+      Object.keys(defs).forEach(function (k) {
+        if (existing[k]) { report.unchangedSettings.push(k); return; }
+        addRows.push([k, String(defs[k]), SETTING_DESC[k] || '']);
+        report.addedSettings.push(k);
+      });
+      if (addRows.length) {
+        settingsSheet.getRange(last + 1, 1, addRows.length, 3).setValues(addRows);
+      }
+    } else {
+      report.problems.push('找不到 Settings Sheet，无法补设定。请先确认 1.x 的 setupDatabase() 跑过。');
+    }
+
+    /* ④ 只补不存在的序号键 */
+    var seqSheet = ss.getSheetByName(SCHEMA.sequences.sheet);
+    if (seqSheet) {
+      var haveSeq = {};
+      var slast = seqSheet.getLastRow();
+      if (slast >= 2) {
+        var svals = seqSheet.getRange(2, 1, slast - 1, 1).getValues();
+        for (var j = 0; j < svals.length; j++) haveSeq[String(svals[j][0])] = true;
+      }
+      var seqRows = [];
+      V2_SEQUENCE_KEYS.forEach(function (k) {
+        if (haveSeq[k]) return;
+        seqRows.push([k, 0]);
+        report.addedSequences.push(k);
+      });
+      if (seqRows.length) seqSheet.getRange(slast + 1, 1, seqRows.length, 2).setValues(seqRows);
+    }
+
+    /* ⑤ 升级后逐张比对，任何一张变少就是严重问题 */
+    ss.getSheets().forEach(function (sh) {
+      var name = sh.getName();
+      var after = Math.max(0, sh.getLastRow() - 1);
+      if (!report.rowCounts[name]) report.rowCounts[name] = { before: null, after: after };
+      report.rowCounts[name].after = after;
+      var before = report.rowCounts[name].before;
+      if (before !== null && after < before) {
+        report.dataIntact = false;
+        report.problems.push('「' + name + '」资料列数从 ' + before + ' 变成 ' + after + '！');
+      }
+    });
+
+    report.ok = report.dataIntact && !report.problems.length;
+
+    Logger.log('upgradeToV2() → 新建 Sheet: ' + (report.createdSheets.join(', ') || '(无，都已存在)'));
+    Logger.log('              已存在跳过: ' + (report.skippedSheets.join(', ') || '(无)'));
+    Logger.log('              新增设定 ' + report.addedSettings.length + ' 个 / 保留 ' + report.unchangedSettings.length + ' 个');
+    Logger.log('              新增序号键: ' + (report.addedSequences.join(', ') || '(无)'));
+    Logger.log('              旧资料完整: ' + (report.dataIntact ? 'YES ✅' : 'NO ❌ ' + report.problems.join(' ')));
+    if (!report.backup.ok) Logger.log('              备份: ' + report.backup.reason);
+
+    return ok(report);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 检查 2.0 是否已升级完成（诊断用，不修改任何资料） */
+function reportUpgradeStatus() {
+  var ss = dbSpreadsheet();
+  var missing = [];
+  Object.keys(SCHEMA).forEach(function (t) {
+    if (!SCHEMA[t].v2) return;
+    if (!ss.getSheetByName(SCHEMA[t].sheet)) missing.push(SCHEMA[t].sheet);
+  });
+
+  var settingsSheet = ss.getSheetByName(SCHEMA.settings.sheet);
+  var have = {};
+  if (settingsSheet && settingsSheet.getLastRow() >= 2) {
+    var vals = settingsSheet.getRange(2, 1, settingsSheet.getLastRow() - 1, 1).getValues();
+    for (var i = 0; i < vals.length; i++) have[String(vals[i][0])] = true;
+  }
+  var missingSettings = Object.keys(defaultSettings()).filter(function (k) { return !have[k]; });
+
+  var lines = [];
+  lines.push('=== YETIPSY 2.0 升级状态 ===');
+  lines.push('缺少的 Sheet (' + missing.length + '): ' + (missing.join(', ') || '无'));
+  lines.push('缺少的设定 (' + missingSettings.length + '): ' + (missingSettings.join(', ') || '无'));
+  lines.push(missing.length || missingSettings.length
+    ? '→ 还没升级完成。请执行 upgradeToV2()（建议 upgradeToV2({ backup: true })）。'
+    : '→ 2.0 数据库已就绪，1.x 资料未被改动。');
+  Logger.log(lines.join('\n'));
+  return ok({ ready: !missing.length && !missingSettings.length, missingSheets: missing, missingSettings: missingSettings });
 }

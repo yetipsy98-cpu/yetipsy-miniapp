@@ -18,15 +18,18 @@
 5. 每个档案贴完按 **💾 储存**（Ctrl+S）。
 6. 全部贴完 → 选 `Database` 档案 → 执行 `setupDatabase()`
    → 授权（进阶 → 前往专案 → 允许）→ 再执行一次 `bootstrapOwner()`。
-7. 回 Google Sheet 看是否出现 **12 个分页**：`Settings` `Sequences` `Customers`
-   `Staff` `Sessions` `Orders` `Claims` `Rewards` `PointTx` `WalletTx`
-   `Promotions` `AuditLogs`。
+7. 回 Google Sheet 看是否出现 **17 个分页**：`Settings` `Sequences` `Customers` `Staff` `Sessions` `Orders` `Claims` `Rewards` `PointTx` `WalletTx` `Promotions` `Categories` `Products` `ProductOptions` `AppOrders` `OrderItems` `AuditLogs`。
+8. **已经在跑 1.x 的老板看这里**：不要重跑 `setupDatabase()`，
+   改执行 `upgradeToV2({ backup: true })` —— 它只会补建 2.0 的 5 张表
+   （`Categories` `Products` `ProductOptions` `AppOrders` `OrderItems`）
+   和 12 个新设定，**既有会员 / 积分 / 钱包 / Claim 一列都不会动**。
+   想看升级状态就执行 `reportUpgradeStatus()`。
 
 | 顺序 | Apps Script 里的档案名 | 行数 | 内容 |
 |---|---|---|---|
-| 1 | `Config` | 307 | 所有设定与 12 张表的栏位定义（要改规则就改这里） |
-| 2 | `Utils` | 225 | 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 |
-| 3 | `Database` | 567 | setupDatabase()、补栏位、防重复注册工具、dedupeCustomers() |
+| 1 | `Config` | 460 | 所有设定与 17 张表的栏位定义（要改规则就改这里） |
+| 2 | `Utils` | 247 | 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 |
+| 3 | `Database` | 770 | setupDatabase()、upgradeToV2()、补栏位、防重复注册工具、dedupeCustomers() |
 | 4 | `Security` | 108 | Session Token、权限（STAFF/MANAGER/OWNER）、Rate Limit、登入锁定 |
 | 5 | `Audit` | 18 | Audit Log 写入与查询（最多保留 5000 条） |
 | 6 | `Points` | 83 | 积分累计 / 等级门槛计算 |
@@ -47,7 +50,7 @@
 ## 1. Config.gs
 
 > Apps Script 里的档案名称：**`Config`**（不要打 .gs）
-> 所有设定与 12 张表的栏位定义（要改规则就改这里） · 307 行 · SHA-256 `6480335150ce134b`
+> 所有设定与 17 张表的栏位定义（要改规则就改这里） · 460 行 · SHA-256 `e2be1f4d8864dafa`
 
 ```javascript
 /* =============================================================
@@ -256,6 +259,128 @@ var SCHEMA = {
     ]
   },
 
+  /* ============ 2.0 点单系统（新增，不动 1.x 任何表）============ */
+
+  categories: {                              // 酒单分类（§27，后台可改，不 Hardcode）
+    sheet: 'Categories',
+    v2: true,          // 2.0 新增：Sheet 还没建时当空表，不影响 1.x
+    maxRows: 0,
+    columns: [
+      ['categoryId', 'CategoryID', 's'],
+      ['nameEN',     'NameEN',     's'],
+      ['nameZH',     'NameZH',     's'],
+      ['status',     'Status',     's'],     // ACTIVE / INACTIVE
+      ['sortOrder',  'SortOrder',  'n'],
+      ['createdAt',  'CreatedAt',  's'],
+      ['updatedAt',  'UpdatedAt',  's']
+    ]
+  },
+
+  products: {                                // 商品（§26；图片只存 URL §33）
+    sheet: 'Products',
+    v2: true,          // 2.0 新增：Sheet 还没建时当空表，不影响 1.x
+    maxRows: 0,
+    columns: [
+      ['productId',        'ProductID',        's'],
+      ['categoryId',       'CategoryID',       's'],
+      ['nameEN',           'NameEN',           's'],
+      ['nameZH',           'NameZH',           's'],
+      ['descriptionEN',    'DescriptionEN',    's'],
+      ['descriptionZH',    'DescriptionZH',    's'],
+      ['priceSen',         'PriceSen',         'n'],   // 分为单位；Backend 唯一价格来源（§41）
+      ['originalPriceSen', 'OriginalPriceSen', 'n'],   // 促销前原价（§40）
+      ['promoPriceSen',    'PromoPriceSen',    'n'],
+      ['promoStart',       'PromoStart',       's'],
+      ['promoEnd',         'PromoEnd',         's'],
+      ['tags',             'Tags',             's'],   // refreshing,citrus,mint（§35）
+      ['strength',         'Strength',         's'],   // LIGHT / MEDIUM / STRONG（§36，可空）
+      ['imageURL',         'ImageURL',         's'],   // GitHub /assets/menu/*.webp
+      ['status',           'Status',           's'],   // ACTIVE / ARCHIVED
+      ['available',        'Available',        's'],   // TRUE / FALSE = SOLD OUT（§31）
+      ['sortOrder',        'SortOrder',        'n'],
+      ['createdAt',        'CreatedAt',        's'],
+      ['updatedAt',        'UpdatedAt',        's']
+    ]
+  },
+
+  productOptions: {                          // Size / ICE / SWEETNESS（§8，不写死）
+    sheet: 'ProductOptions',
+    v2: true,          // 2.0 新增：Sheet 还没建时当空表，不影响 1.x
+    maxRows: 0,
+    columns: [
+      ['optionId',           'OptionID',           's'],
+      ['productId',          'ProductID',          's'],
+      ['optionGroup',        'OptionGroup',        's'],   // SIZE / ICE / SWEETNESS / EXTRA
+      ['optionGroupNameEN',  'OptionGroupNameEN',  's'],
+      ['optionGroupNameZH',  'OptionGroupNameZH',  's'],
+      ['nameEN',             'NameEN',             's'],
+      ['nameZH',             'NameZH',             's'],
+      ['priceAdjustmentSen', 'PriceAdjustmentSen', 'n'],   // 加价（分），0 = 不加价
+      ['required',           'Required',           's'],   // TRUE = 必选
+      ['status',             'Status',             's'],
+      ['sortOrder',          'SortOrder',          'n'],
+      ['createdAt',          'CreatedAt',          's'],
+      ['updatedAt',          'UpdatedAt',          's']
+    ]
+  },
+
+  appOrders: {                               // 点单订单主表（§29，与 1.x Orders 分开）
+    sheet: 'AppOrders',
+    v2: true,          // 2.0 新增：Sheet 还没建时当空表，不影响 1.x
+    maxRows: 0,
+    columns: [
+      ['appOrderId',         'AppOrderID',         's'],
+      ['orderNumber',        'OrderNumber',        's'],   // 显示用 YT260917001（§45）
+      ['customerId',         'CustomerID',         's'],
+      ['orderType',          'OrderType',          's'],   // TABLE / TAKEAWAY / COUNTER
+      ['tableNumber',        'TableNumber',        's'],
+      ['itemCount',          'ItemCount',          'n'],
+      ['subtotalSen',        'SubtotalSen',        'n'],   // Backend 自己算（§41）
+      ['walletRequestedSen', 'WalletRequestedSen', 'n'],   // Cart 阶段只是「要求」（§10）
+      ['walletUsedSen',      'WalletUsedSen',      'n'],   // 真正扣掉才写（§54）
+      ['discountSen',        'DiscountSen',        'n'],
+      ['finalAmountSen',     'FinalAmountSen',     'n'],
+      ['pointsEarned',       'PointsEarned',       'n'],
+      ['orderStatus',        'OrderStatus',        's'],   // SUBMITTED→CONFIRMED→PREPARING→READY→COMPLETED/CANCELLED
+      ['paymentMethod',      'PaymentMethod',      's'],   // COUNTER/CASH/DUITNOW/CARD/FOODCOURT/ONLINE
+      ['paymentStatus',      'PaymentStatus',      's'],   // UNPAID/PENDING/PAID/REFUNDED/FAILED
+      ['paymentReference',   'PaymentReference',   's'],
+      ['quoteToken',         'QuoteToken',         's'],   // 对应 Checkout Quote（§43）
+      ['idempotencyKey',     'IdempotencyKey',     's'],   // 防重复下单（§44）
+      ['customerNote',       'CustomerNote',       's'],
+      ['channel',            'Channel',            's'],   // YETIPSY_APP（§51 通路分析）
+      ['ordersTxId',         'OrdersTxID',         's'],   // 完成后回写 1.x Orders 的纪录 ID
+      ['handledBy',          'HandledBy',          's'],
+      ['createdAt',          'CreatedAt',          's'],
+      ['confirmedAt',        'ConfirmedAt',        's'],
+      ['readyAt',            'ReadyAt',            's'],
+      ['completedAt',        'CompletedAt',        's'],
+      ['cancelledAt',        'CancelledAt',        's'],
+      ['cancelledBy',        'CancelledBy',        's'],
+      ['cancelReason',       'CancelReason',       's'],
+      ['updatedAt',          'UpdatedAt',          's']
+    ]
+  },
+
+  orderItems: {                              // 订单明细（§30，必须快照名称与单价）
+    sheet: 'OrderItems',
+    v2: true,          // 2.0 新增：Sheet 还没建时当空表，不影响 1.x
+    maxRows: 0,
+    columns: [
+      ['orderItemId',         'OrderItemID',         's'],
+      ['appOrderId',          'AppOrderID',          's'],
+      ['productId',           'ProductID',           's'],
+      ['productNameSnapshot', 'ProductNameSnapshot', 's'],  // 下单当时的名称（§30）
+      ['unitPriceSen',        'UnitPriceSen',        'n'],  // 下单当时的单价（§30）
+      ['quantity',            'Quantity',            'n'],
+      ['optionsJSON',         'OptionsJSON',         's'],  // 选了哪些规格
+      ['optionsPriceSen',     'OptionsPriceSen',     'n'],  // 规格加价合计
+      ['lineTotalSen',        'LineTotalSen',        'n'],
+      ['customerNote',        'CustomerNote',        's'],
+      ['createdAt',           'CreatedAt',           's']
+    ]
+  },
+
   audit: {
     sheet: 'AuditLogs',
     maxRows: 5000,
@@ -319,7 +444,21 @@ function defaultSettings() {
 
     /* 钱包 */
     MAX_WALLET_USAGE_PERCENT: '20',
-    MIN_WALLET_REDEEM_BILL:   '30'
+    MIN_WALLET_REDEEM_BILL:   '30',
+
+    /* ===== 2.0 点单系统（§63）===== */
+    ORDERING_ENABLED:              'TRUE',   // FALSE = 顾客端不能下单
+    ORDERING_PAUSED:               'FALSE',  // 员工紧急暂停接单（§64/§65）
+    ORDERING_OPEN_TIME:            '18:30',  // 点单开放 HH:MM
+    ORDERING_CLOSE_TIME:           '00:00',
+    ALLOW_PICKUP:                  'TRUE',   // 允许 COUNTER PICKUP（§11）
+    ALLOW_TABLE_ORDER:             'TRUE',   // 允许填桌号
+    MAX_ORDER_ITEMS:               '20',     // 单张订单最多几项
+    VISIT_SESSION_HOURS:           '6',      // 6 小时内多张订单算 1 次到店（§56）
+    ORDER_POLL_SECONDS:            '8',      // 员工看板轮询（§46，不要 1 秒）
+    CUSTOMER_ORDER_POLL_SECONDS:   '12',     // 顾客订单页轮询（§47）
+    CHECKOUT_QUOTE_EXPIRY_MINUTES: '5',      // Checkout Quote 有效期（§43）
+    MENU_CACHE_SECONDS:            '120'     // 菜单缓存（§82；钱包/余额绝不缓存）
   };
 }
 
@@ -328,6 +467,9 @@ var SETTING_DESC = {
   BAR_NAME:                 'Bar name / 品牌名称',
   CURRENCY:                 'Currency / 货币',
   TIMEZONE:                 'Timezone / 时区',
+  MEMBER_CODE_SECONDS:      'Member code rotates every (sec) / 会员条码几秒换一次',
+  MEMBER_VERIFY_SECONDS:    'Scan verify valid (sec) / 扫码验证有效秒数',
+  REQUIRE_MEMBER_CODE_SCAN: 'Scan member code before redeem / 抵扣前必须扫会员条码',
   DEFAULT_COUNTRY_CODE:     'Default country code / 预设国家码（60=MY, 65=SG）',
   ALLOWED_COUNTRY_CODES:    'Allowed country codes (comma separated) / 允许的国家码',
   CUSTOMER_PASSWORD_MIN:    'Member password min length / 会员密码最少字符',
@@ -348,7 +490,21 @@ var SETTING_DESC = {
   REWARD_WEIGHTS:           'Reward probability weights JSON',
   REWARD_EXPIRY_DAYS:       'Reward validity days / 奖励有效天数',
   MAX_WALLET_USAGE_PERCENT: 'Max wallet usage % of bill / 钱包最高抵扣比例',
-  MIN_WALLET_REDEEM_BILL:   'Min bill for redemption (RM) / 最低抵扣账单'
+  MIN_WALLET_REDEEM_BILL:   'Min bill for redemption (RM) / 最低抵扣账单',
+
+  /* 2.0 点单系统 */
+  ORDERING_ENABLED:              'Ordering enabled / 是否开放点单',
+  ORDERING_PAUSED:               'Orders paused by staff / 员工暂停接单',
+  ORDERING_OPEN_TIME:            'Ordering opens (HH:MM) / 点单开始时间',
+  ORDERING_CLOSE_TIME:           'Ordering closes (HH:MM) / 点单结束时间',
+  ALLOW_PICKUP:                  'Allow counter pickup / 允许柜台自取',
+  ALLOW_TABLE_ORDER:             'Allow table orders / 允许桌号点单',
+  MAX_ORDER_ITEMS:               'Max items per order / 单张订单上限',
+  VISIT_SESSION_HOURS:           'Hours counted as one visit / 几小时内算同一次到店',
+  ORDER_POLL_SECONDS:            'Staff polling seconds / 员工看板刷新秒数',
+  CUSTOMER_ORDER_POLL_SECONDS:   'Customer polling seconds / 顾客订单刷新秒数',
+  CHECKOUT_QUOTE_EXPIRY_MINUTES: 'Quote valid minutes / 结帐报价有效分钟',
+  MENU_CACHE_SECONDS:            'Menu cache seconds / 菜单缓存秒数'
 };
 
 /** Session 有效期 */
@@ -364,7 +520,7 @@ var ORDER_SOURCES = ['FOODCOURT', 'DIRECT', 'YETIPSY_APP', 'MANUAL', 'FOODCOURT_
 ## 2. Utils.gs
 
 > Apps Script 里的档案名称：**`Utils`**（不要打 .gs）
-> 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 · 225 行 · SHA-256 `f49900a67d2b595b`
+> 公用工具：E.164 电话正规化、错误码、日期、JSON 回应 · 247 行 · SHA-256 `6a0fefa697d55715`
 
 ```javascript
 /* =============================================================
@@ -585,6 +741,28 @@ var ERR = {
   STAFF_NOT_FOUND:         ['STAFF_NOT_FOUND', 'Staff account not found. / 找不到员工账号。'],
   USERNAME_TAKEN:          ['USERNAME_TAKEN', 'Username already exists. / 账号已存在。'],
   SETUP_REQUIRED:          ['SETUP_REQUIRED', 'Database is not set up yet. Run setupDatabase() first. / 资料库尚未初始化。'],
+  BUSY:                    ['BUSY', 'System is busy. Please try again. / 系统忙碌中，请稍后再试。'],
+
+  /* 2.0 点单系统 */
+  UPGRADE_REQUIRED:        ['UPGRADE_REQUIRED', 'Run upgradeToV2() in Apps Script first. / 请先在 Apps Script 执行 upgradeToV2()。'],
+  ORDERING_CLOSED:         ['ORDERING_CLOSED', 'Ordering is closed now. / 目前不在点单时间。'],
+  ORDERING_PAUSED:         ['ORDERING_PAUSED', 'Orders are temporarily paused. / 目前暂停接单。'],
+  MENU_EMPTY:              ['MENU_EMPTY', 'Menu is not set up yet. / 酒单尚未建立。'],
+  PRODUCT_NOT_FOUND:       ['PRODUCT_NOT_FOUND', 'Product not found. / 找不到这个商品。'],
+  PRODUCT_UNAVAILABLE:     ['PRODUCT_UNAVAILABLE', 'This item is sold out. / 这个商品已售完。'],
+  CATEGORY_NOT_FOUND:      ['CATEGORY_NOT_FOUND', 'Category not found. / 找不到这个分类。'],
+  OPTION_NOT_FOUND:        ['OPTION_NOT_FOUND', 'Product option not found. / 找不到这个规格。'],
+  OPTION_REQUIRED:         ['OPTION_REQUIRED', 'Please choose a required option. / 请选择必选规格。'],
+  INVALID_QUANTITY:        ['INVALID_QUANTITY', 'Invalid quantity. / 数量不正确。'],
+  TOO_MANY_ITEMS:          ['TOO_MANY_ITEMS', 'Too many items in one order. / 单张订单项目过多。'],
+  QUOTE_EXPIRED:           ['QUOTE_EXPIRED', 'Checkout quote expired. Please review your cart again. / 结帐报价已过期，请重新确认购物车。'],
+  QUOTE_MISMATCH:          ['QUOTE_MISMATCH', 'Prices changed since checkout. / 价格已变动，请重新结帐。'],
+  DUPLICATE_ORDER:         ['DUPLICATE_ORDER', 'This order was already submitted. / 这张订单已经提交过了。'],
+  ORDER_NOT_FOUND:         ['ORDER_NOT_FOUND', 'Order not found. / 找不到这张订单。'],
+  ORDER_STATUS_INVALID:    ['ORDER_STATUS_INVALID', 'This order cannot move to that status. / 这张订单不能变成这个状态。'],
+  ORDER_NOT_PAID:          ['ORDER_NOT_PAID', 'Confirm payment before completing. / 请先确认收款再完成订单。'],
+  ORDER_ALREADY_FINAL:     ['ORDER_ALREADY_FINAL', 'This order is already closed. / 这张订单已经结案。'],
+  CANCEL_NOT_ALLOWED:      ['CANCEL_NOT_ALLOWED', 'This order can no longer be cancelled. / 这张订单已无法取消。'],
   UNKNOWN_ACTION:          ['UNKNOWN_ACTION', 'Unknown action. / 未知的 API 动作。']
 };
 
@@ -599,7 +777,7 @@ function err(key, customMessage) {
 ## 3. Database.gs
 
 > Apps Script 里的档案名称：**`Database`**（不要打 .gs）
-> setupDatabase()、补栏位、防重复注册工具、dedupeCustomers() · 567 行 · SHA-256 `f1d3c15495800d63`
+> setupDatabase()、upgradeToV2()、补栏位、防重复注册工具、dedupeCustomers() · 770 行 · SHA-256 `b58a934e52c52959`
 
 ```javascript
 /* =============================================================
@@ -772,6 +950,14 @@ function dbLoad() {
     var def = SCHEMA[table];
     var sh = ss.getSheetByName(def.sheet);
     if (!sh) {
+      /* 2.0 新增的表还没建（老板尚未执行 upgradeToV2()）时当作空表，
+         这样 1.x 的会员 / Claim / 钱包 / 积分照常运作（§68 向后相容）。
+         真正的点单 API 会自己回 UPGRADE_REQUIRED，不会静默出错。 */
+      if (def.v2) {
+        DB_META.sheets[table] = null;
+        DB[table] = [];
+        return;
+      }
       throw new Error('SETUP_REQUIRED: 找不到 Sheet「' + def.sheet + '」，请先执行 setupDatabase()。');
     }
     DB_META.sheets[table] = sh;
@@ -846,6 +1032,16 @@ function dbFlush() {
     var sh = DB_META.sheets[table];
     var appends = [];
     var updates = [];
+
+    /* 2.0 的表还没建：只要没资料要写就直接跳过，
+       有资料要写才报错（避免静默丢掉订单）。 */
+    if (!sh) {
+      if (DB[table].length) {
+        throw new Error('UPGRADE_REQUIRED: Sheet「' + def.sheet +
+          '」还不存在，请先在 Apps Script 执行 upgradeToV2()。');
+      }
+      return;
+    }
 
     DB[table].forEach(function (obj) {
       var rowNum = DB_META.rows.get(obj);
@@ -1168,6 +1364,191 @@ function promoObject(counter, title, subtitle, description, start, end) {
 
 function daysFromNow(days) {
   return new Date(Date.now() + days * 86400000).toISOString().slice(0, 10);
+}
+
+/* -------------------------------------------------------------
+   9. 2.0 升级（§67 / §71）—— 只加不减，绝不删资料
+   ------------------------------------------------------------- */
+
+/** 2.0 新增的序号键（与 1.x 的 customer/order/... 分开） */
+var V2_SEQUENCE_KEYS = ['category', 'product', 'option', 'apporder', 'orderitem', 'ordernum'];
+
+/**
+ * 2.0 数据库升级。**只加不减**，可重复执行（幂等）。
+ *
+ * 与 setupDatabase() 的关键差别：
+ *   setupDatabase() 会重写每张表的表头，并把「多出来的栏位」删掉 ——
+ *   对已经跑了一阵子的线上 Sheet 那是危险动作，§67 明确禁止。
+ *
+ * upgradeToV2() 只做四件事：
+ *   ① 记录升级前每张表的资料列数（升级后逐张比对，证明一列没少）
+ *   ② 只建立「不存在」的 2.0 Sheet；已存在的一律不碰（连表头都不重写）
+ *   ③ 只补「不存在」的设定键；既有的值一律不改
+ *   ④ 只补「不存在」的序号键
+ *
+ * options.backup = true 时会试着复制一份 Spreadsheet（环境不支持就只提醒）。
+ * 回传升级报告，可直接在 Apps Script 的「执行项目」里看 Logger 输出。
+ */
+function upgradeToV2(options) {
+  var opts = options || {};
+  var ss = dbSpreadsheet();
+
+  var lock = LockService.getScriptLock();
+  var locked = false;
+  try { locked = lock.tryLock(30000); } catch (e) { locked = false; }
+  if (!locked) return err('BUSY', 'Upgrade is locked by another request. / 另一个升级正在执行，请稍后再试。');
+
+  try {
+    var report = {
+      upgraded: true,
+      version: '2.0',
+      at: nowISO(),
+      backup: null,
+      createdSheets: [],
+      skippedSheets: [],
+      addedSettings: [],
+      unchangedSettings: [],
+      addedSequences: [],
+      rowCounts: {},
+      dataIntact: true,
+      problems: []
+    };
+
+    /* ① 备份（§67）：能复制就复制，不能就明确提醒，不要假装备份过了 */
+    if (opts.backup && typeof ss.copy === 'function') {
+      try {
+        var copy = ss.copy('Yetipsy BACKUP before 2.0 ' + nowISO().slice(0, 10));
+        report.backup = { ok: true, name: 'Yetipsy BACKUP before 2.0 ' + nowISO().slice(0, 10), id: copy.getId ? copy.getId() : null };
+      } catch (e2) {
+        report.backup = { ok: false, reason: String(e2 && e2.message || e2) };
+      }
+    } else {
+      report.backup = {
+        ok: false,
+        reason: '自动备份未执行。请手动在 Google Sheets 选「档案 → 建立副本」，' +
+                '或用 upgradeToV2({ backup: true }) 再执行一次。'
+      };
+    }
+
+    /* ① 升级前逐张记录资料列数 */
+    ss.getSheets().forEach(function (sh) {
+      report.rowCounts[sh.getName()] = { before: Math.max(0, sh.getLastRow() - 1), after: null };
+    });
+
+    /* ② 只建立不存在的 2.0 Sheet */
+    Object.keys(SCHEMA).forEach(function (table) {
+      var def = SCHEMA[table];
+      if (!def.v2) return;                       // 1.x 的表完全不碰
+      var sh = ss.getSheetByName(def.sheet);
+      if (sh) { report.skippedSheets.push(def.sheet); return; }
+
+      sh = ss.insertSheet(def.sheet);
+      var headers = def.columns.map(function (c) { return c[1]; });
+      var first = sh.getRange(1, 1, 1, headers.length);
+      first.setValues([headers]);
+      first.setFontWeight('bold');
+      first.setBackground('#171717');
+      first.setFontColor('#F4F1EA');
+      sh.setFrozenRows(1);
+      report.createdSheets.push(def.sheet);
+      report.rowCounts[def.sheet] = { before: 0, after: 0 };
+    });
+
+    /* ③ 只补不存在的设定键（既有值一律不改） */
+    var settingsSheet = ss.getSheetByName(SCHEMA.settings.sheet);
+    if (settingsSheet) {
+      var existing = {};
+      var last = settingsSheet.getLastRow();
+      if (last >= 2) {
+        var vals = settingsSheet.getRange(2, 1, last - 1, 1).getValues();
+        for (var i = 0; i < vals.length; i++) existing[String(vals[i][0])] = true;
+      }
+      var defs = defaultSettings();
+      var addRows = [];
+      Object.keys(defs).forEach(function (k) {
+        if (existing[k]) { report.unchangedSettings.push(k); return; }
+        addRows.push([k, String(defs[k]), SETTING_DESC[k] || '']);
+        report.addedSettings.push(k);
+      });
+      if (addRows.length) {
+        settingsSheet.getRange(last + 1, 1, addRows.length, 3).setValues(addRows);
+      }
+    } else {
+      report.problems.push('找不到 Settings Sheet，无法补设定。请先确认 1.x 的 setupDatabase() 跑过。');
+    }
+
+    /* ④ 只补不存在的序号键 */
+    var seqSheet = ss.getSheetByName(SCHEMA.sequences.sheet);
+    if (seqSheet) {
+      var haveSeq = {};
+      var slast = seqSheet.getLastRow();
+      if (slast >= 2) {
+        var svals = seqSheet.getRange(2, 1, slast - 1, 1).getValues();
+        for (var j = 0; j < svals.length; j++) haveSeq[String(svals[j][0])] = true;
+      }
+      var seqRows = [];
+      V2_SEQUENCE_KEYS.forEach(function (k) {
+        if (haveSeq[k]) return;
+        seqRows.push([k, 0]);
+        report.addedSequences.push(k);
+      });
+      if (seqRows.length) seqSheet.getRange(slast + 1, 1, seqRows.length, 2).setValues(seqRows);
+    }
+
+    /* ⑤ 升级后逐张比对，任何一张变少就是严重问题 */
+    ss.getSheets().forEach(function (sh) {
+      var name = sh.getName();
+      var after = Math.max(0, sh.getLastRow() - 1);
+      if (!report.rowCounts[name]) report.rowCounts[name] = { before: null, after: after };
+      report.rowCounts[name].after = after;
+      var before = report.rowCounts[name].before;
+      if (before !== null && after < before) {
+        report.dataIntact = false;
+        report.problems.push('「' + name + '」资料列数从 ' + before + ' 变成 ' + after + '！');
+      }
+    });
+
+    report.ok = report.dataIntact && !report.problems.length;
+
+    Logger.log('upgradeToV2() → 新建 Sheet: ' + (report.createdSheets.join(', ') || '(无，都已存在)'));
+    Logger.log('              已存在跳过: ' + (report.skippedSheets.join(', ') || '(无)'));
+    Logger.log('              新增设定 ' + report.addedSettings.length + ' 个 / 保留 ' + report.unchangedSettings.length + ' 个');
+    Logger.log('              新增序号键: ' + (report.addedSequences.join(', ') || '(无)'));
+    Logger.log('              旧资料完整: ' + (report.dataIntact ? 'YES ✅' : 'NO ❌ ' + report.problems.join(' ')));
+    if (!report.backup.ok) Logger.log('              备份: ' + report.backup.reason);
+
+    return ok(report);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** 检查 2.0 是否已升级完成（诊断用，不修改任何资料） */
+function reportUpgradeStatus() {
+  var ss = dbSpreadsheet();
+  var missing = [];
+  Object.keys(SCHEMA).forEach(function (t) {
+    if (!SCHEMA[t].v2) return;
+    if (!ss.getSheetByName(SCHEMA[t].sheet)) missing.push(SCHEMA[t].sheet);
+  });
+
+  var settingsSheet = ss.getSheetByName(SCHEMA.settings.sheet);
+  var have = {};
+  if (settingsSheet && settingsSheet.getLastRow() >= 2) {
+    var vals = settingsSheet.getRange(2, 1, settingsSheet.getLastRow() - 1, 1).getValues();
+    for (var i = 0; i < vals.length; i++) have[String(vals[i][0])] = true;
+  }
+  var missingSettings = Object.keys(defaultSettings()).filter(function (k) { return !have[k]; });
+
+  var lines = [];
+  lines.push('=== YETIPSY 2.0 升级状态 ===');
+  lines.push('缺少的 Sheet (' + missing.length + '): ' + (missing.join(', ') || '无'));
+  lines.push('缺少的设定 (' + missingSettings.length + '): ' + (missingSettings.join(', ') || '无'));
+  lines.push(missing.length || missingSettings.length
+    ? '→ 还没升级完成。请执行 upgradeToV2()（建议 upgradeToV2({ backup: true })）。'
+    : '→ 2.0 数据库已就绪，1.x 资料未被改动。');
+  Logger.log(lines.join('\n'));
+  return ok({ ready: !missing.length && !missingSettings.length, missingSheets: missing, missingSettings: missingSettings });
 }
 ```
 

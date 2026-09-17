@@ -68,6 +68,8 @@ function loadBackend(options) {
 
     /* 维护工具（Apps Script 编辑器里手动执行的那些） */
     setupDatabase: () => sandbox.setupDatabase(),
+    upgradeToV2: (options) => sandbox.upgradeToV2(options),
+    reportUpgradeStatus: () => sandbox.reportUpgradeStatus(),
     bootstrapOwner: (u, p) => sandbox.bootstrapOwner(u, p),
     dedupeCustomers: (dryRun) => sandbox.dedupeCustomers(dryRun),
     migratePhonesToE164: (dryRun) => sandbox.migratePhonesToE164(dryRun),

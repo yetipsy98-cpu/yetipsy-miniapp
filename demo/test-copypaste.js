@@ -89,8 +89,18 @@ suite.group('02 · ★ 用文件里的字真的跑一次（不是读 .gs 档）'
   sandbox.setupDatabase();
   sandbox.bootstrapOwner('owner', 'yetipsy123');   // 顾客部署后要跑的第二支
   const sheets = shim.spreadsheet.getSheets().map((sh) => sh.getName());
-  t.check('setupDatabase() 建出 12 个分页', sheets.length === 12, sheets.join(', '));
+  /* 分页数直接对照 Config.gs 的 SCHEMA，避免这里写死数字跟实作脱节 */
+  const expectedSheets = Object.keys(sandbox.SCHEMA).map((k) => sandbox.SCHEMA[k].sheet);
+  t.check('setupDatabase() 建出的分页跟 SCHEMA 一样（' + expectedSheets.length + ' 个）',
+    sheets.length === expectedSheets.length, sheets.join(', '));
+  expectedSheets.forEach((name) => {
+    t.check('有「' + name + '」分页', sheets.indexOf(name) >= 0);
+  });
   t.check('没有 OtpCodes 分页', sheets.indexOf('OtpCodes') === -1);
+  /* 2.0 的 5 张表也要在（§59 / §71） */
+  ['Categories', 'Products', 'ProductOptions', 'AppOrders', 'OrderItems'].forEach((name) => {
+    t.check('2.0 有「' + name + '」分页', sheets.indexOf(name) >= 0);
+  });
 
   const PWD = 'copy-paste-123';
 
@@ -174,8 +184,18 @@ suite.group('03 · 文件里的说明跟实作一致', (t) => {
   t.check('档案数写 15', doc.indexOf('**15 个档案') !== -1);
   t.check('版本号跟 package.json 一致',
     doc.indexOf('版本 ' + pkg.version) !== -1, pkg.version);
-  t.check('分页数写 12（跟 Config.gs 的 SHEETS 一样）',
-    doc.indexOf('**12 个分页**') !== -1);
+  /* group 02 的 sandbox 不在这里的作用域；上面已经读过 cfg（Config.gs 原文），
+     直接在新的 vm context 里执行它拿 SCHEMA */
+  const schemaBox = {};
+  vm.createContext(schemaBox);
+  vm.runInContext(cfg, schemaBox, { filename: 'Config.gs' });
+  const sheetCount = Object.keys(schemaBox.SCHEMA).length;
+  t.check('分页数写 ' + sheetCount + '（跟 Config.gs 的 SCHEMA 一样）',
+    doc.indexOf('**' + sheetCount + ' 个分页**') !== -1);
+  t.check('说明里有 upgradeToV2()（§67 升级路径）',
+    doc.indexOf('upgradeToV2({ backup: true })') !== -1);
+  t.check('说明里有 reportUpgradeStatus()',
+    doc.indexOf('reportUpgradeStatus()') !== -1);
   t.check('标明不用 WhatsApp OTP', doc.indexOf('不用 WhatsApp OTP') !== -1);
   t.check('列出 4 个密码设定', ['CUSTOMER_PASSWORD_MIN', 'LOGIN_MAX_ATTEMPTS',
     'LOGIN_LOCK_MINUTES', 'PASSWORD_SELFSERVICE_SETUP'].every((k) => doc.indexOf(k) !== -1));
