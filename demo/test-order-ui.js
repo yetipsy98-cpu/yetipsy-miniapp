@@ -268,6 +268,96 @@ suite.group('04 · 换桌号与关钱包会重新报价', async (t) => {
 });
 
 /* -------------------------------------------------------------
+   04b · §11 取餐方式：桌号 ↔ 柜台自取
+   -------------------------------------------------------------
+   为什么要有：这段 UI 之前从来没被任何测试执行过。
+   静态契约检查看得到 data-type 属性存在，但看不到「点了没反应」
+   或「切过去后端报价没更新」—— 这一轮已经吃过两次这种亏。
+   用独立页实例，不动 05 要下单的共用页。
+   ------------------------------------------------------------- */
+suite.group('04b · §11 桌号 ↔ 柜台自取 切换会重新报价', async (t) => {
+  const page = await openPage(global.__JSDOM, '/checkout.html?table=A12', (w) => {
+    w.localStorage.setItem('yt_customer_token', global.__token);
+    w.localStorage.setItem('yt_customer_profile', JSON.stringify(global.__profile));
+    w.localStorage.setItem('yt_cart_v2', JSON.stringify(global.__cart));
+  });
+  const { win, doc } = page;
+
+  const ready = await until(() => win.CHECKOUT && win.CHECKOUT.debugState().hasQuote, 15000);
+  t.check('结帐页拿到报价', ready);
+  t.equal('★ 桌牌 QR 带入桌号 A12', win.CHECKOUT.debugState().tableNumber, 'A12');
+  t.equal('★ 型态是 TABLE', win.CHECKOUT.debugState().orderType, 'TABLE');
+
+  /* 两个选项都画出来了 */
+  t.check('★ 画面有「桌号」选项',
+    !!doc.querySelector('#checkoutBody [data-type="TABLE"]'));
+  t.check('★ 画面有「柜台自取」选项',
+    !!doc.querySelector('#checkoutBody [data-type="COUNTER"]'));
+  t.check('★ 选中的是桌号',
+    /selected/.test(doc.querySelector('#checkoutBody [data-type="TABLE"]').className));
+
+  /* ① 切到柜台自取 → 桌号要清空、报价要换一张 */
+  const keyA = win.CHECKOUT.debugState().idempotencyKey;
+  doc.querySelector('#checkoutBody [data-type="COUNTER"]')
+    .dispatchEvent(new win.Event('click', { bubbles: true }));
+
+  const toCounter = await until(() => win.CHECKOUT.debugState().orderType === 'COUNTER', 15000);
+  t.check('★ 切成柜台自取', toCounter, JSON.stringify(win.CHECKOUT.debugState()));
+  t.equal('★ 桌号已清空', win.CHECKOUT.debugState().tableNumber, '');
+  t.check('★ 重新报价（key 换了）',
+    win.CHECKOUT.debugState().idempotencyKey !== keyA);
+  t.check('★ 切到自取后桌号输入框消失',
+    !doc.getElementById('tableInput'));
+
+  /* ② 切回桌号 → 没填桌号要弹「你在哪一桌？」，不是送一个注定失败的请求 */
+  doc.querySelector('#checkoutBody [data-type="TABLE"]')
+    .dispatchEvent(new win.Event('click', { bubbles: true }));
+
+  const asked = await until(() => !!doc.getElementById('askTableInput'), 15000);
+  t.check('★ 切回桌号会问「你在哪一桌？」', asked,
+    doc.getElementById('checkoutBody').textContent.slice(0, 60));
+  const askText = doc.getElementById('checkoutBody').textContent;
+  t.check('★ 问句是中文的', askText.indexOf('你在哪一桌') !== -1);
+  t.check('★ 也提供「柜台自取」出口', !!doc.getElementById('askCounterBtn'));
+
+  /* ③ 填桌号 → 正常报价 */
+  const askInput = doc.getElementById('askTableInput');
+  askInput.value = 'b07';                       /* 小写要转大写 */
+  askInput.dispatchEvent(new win.Event('change', { bubbles: true }));
+
+  const quoted = await until(() => win.CHECKOUT.debugState().hasQuote &&
+    win.CHECKOUT.debugState().tableNumber === 'B07', 15000);
+  t.check('★ 填了桌号就正常报价', quoted, JSON.stringify(win.CHECKOUT.debugState()));
+  t.equal('★ 桌号转成大写 B07', win.CHECKOUT.debugState().tableNumber, 'B07');
+  t.equal('型态 TABLE', win.CHECKOUT.debugState().orderType, 'TABLE');
+  t.check('金额算出来了', win.CHECKOUT.debugState().finalAmount > 0);
+
+  /* ④ 从「你在哪一桌？」直接选柜台自取 */
+  const page2 = await openPage(global.__JSDOM, '/checkout.html?table=A12', (w) => {
+    w.localStorage.setItem('yt_customer_token', global.__token);
+    w.localStorage.setItem('yt_customer_profile', JSON.stringify(global.__profile));
+    w.localStorage.setItem('yt_cart_v2', JSON.stringify(global.__cart));
+  });
+  const win2 = page2.win, doc2 = page2.doc;
+  await until(() => win2.CHECKOUT && win2.CHECKOUT.debugState().hasQuote, 15000);
+  doc2.querySelector('#checkoutBody [data-type="COUNTER"]')
+    .dispatchEvent(new win.Event('click', { bubbles: true }));
+  await until(() => win2.CHECKOUT.debugState().orderType === 'COUNTER', 15000);
+  doc2.querySelector('#checkoutBody [data-type="TABLE"]')
+    .dispatchEvent(new win.Event('click', { bubbles: true }));
+  await until(() => !!doc2.getElementById('askCounterBtn'), 15000);
+
+  doc2.getElementById('askCounterBtn').dispatchEvent(new win.Event('click', { bubbles: true }));
+  const backToCounter = await until(() => win2.CHECKOUT.debugState().orderType === 'COUNTER' &&
+    win2.CHECKOUT.debugState().hasQuote, 15000);
+  t.check('★ 从问句直接选柜台自取也能报价', backToCounter,
+    JSON.stringify(win2.CHECKOUT.debugState()));
+
+  page.dom.window.close();
+  page2.dom.window.close();
+});
+
+/* -------------------------------------------------------------
    05 · 下单 → 跳到订单页 → 购物车清空
    ------------------------------------------------------------- */
 suite.group('05 · 下单成功并跳转（§44 §45）', async (t) => {
