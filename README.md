@@ -10,8 +10,8 @@ Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积�
 | 你要的东西 | 放在哪里 | 费用 |
 |---|---|---|
 | 前端（会员端 / 员工端 HTML+JS） | 这个 repo → GitHub Pages | RM0 |
-| 后端（业务逻辑，16 个 `.gs`） | 这个 repo 的 `apps-script/` → 部署到 Google Apps Script | RM0 |
-| 资料库（13 张表） | Google Sheets | RM0 |
+| 后端（业务逻辑，20 个 `.gs`） | 这个 repo 的 `apps-script/` → 部署到 Google Apps Script | RM0 |
+| 资料库（17 张表 · 39 个设置） | Google Sheets | RM0 |
 | 自动部署 | GitHub Actions + `clasp`（push 就上线） | RM0 |
 
 > **1.2 修正了「同一个号码重复注册」**：电话号码一律规范化成 E.164
@@ -101,16 +101,22 @@ yetipsy-miniapp/
 │   ├── admin*.js        员工端各页面逻辑
 │   └── vendor/          qrcode.js（MIT）· jsQR.js（Apache-2.0）
 │
-├── apps-script/         ★ 生产后端（Google Apps Script，15 个档案）
+├── apps-script/         ★ 生产后端（Google Apps Script，20 个 .gs · 84 个 action）
 │   ├── Code.gs          Web App 入口（doPost / doGet · action 分派 · 交易锁）
-│   ├── Config.gs        13 张 Sheet 的栏位定义 · 默认设置 · 错误讯息
+│   ├── Config.gs        17 张 Sheet 的栏位定义 · 39 个设置 · 错误讯息
 │   ├── Utils.gs         时间 · 金额(SEN) · SHA-256 · ★ 电话 E.164 规范化
-│   ├── Database.gs      Sheets 存取层 · setupDatabase() · dedupeCustomers()
+│   ├── Database.gs      Sheets 存取层 · setupDatabase() · upgradeToV2() · dedupeCustomers()
 │   ├── Security.gs      Session（只存 hash）· 角色 · Rate limit
 │   ├── Auth.gs          ping · 员工登录（失败 6 次锁 5 分钟）
 │   ├── Customers.gs     ★ 查号码/注册/密码登录（同一个号码只有一笔）
 │   ├── Orders.gs Claims.gs Points.gs Rewards.gs Wallet.gs
 │   ├── Promotions.gs Admin.gs Audit.gs
+│   │  ↓ 2.0 点单（新增 6 个）
+│   ├── Menu.gs          酒单：分类 / 商品 / 规格 · 促销价 · 售罄 · 快取
+│   ├── Checkout.gs      结帐报价：后端重算价格 · Quote 5 分钟 · 幂等识别码
+│   ├── AppOrders.gs     订单：placeOrder（幂等）· 查询 · 取消 · 再点一次 · 快照
+│   ├── OrderBoard.gs    员工看板：接单 / 制作 / 完成（幂等）· 收款才扣钱包
+│   └── Analytics.gs     业绩分析：今日统计 · 通路业绩 · 热销 · 会员
 │   ├── appsscript.json  Apps Script manifest（V8 · 时区 · 权限）
 │   ├── .clasp.json.example  部署设定范本
 │   └── README.md        部署 / 自动推送 / 维护工具
@@ -119,15 +125,25 @@ yetipsy-miniapp/
 │   ├── google-shim.js   在 Node 里模拟 Sheets / Lock / Properties / UrlFetch
 │   ├── load-backend.js  把 apps-script/*.gs 载入 Node（测的是真实后端）
 │   ├── server.js        本机 demo 服务器（npm run demo）
-│   ├── tests.js         API 测试 25 组 / 196 项
+│   ├── tests.js         API 测试 27 组 / 242 项
 │   ├── test-apps-script.js  后端单元测试 86 项
-│   ├── smoke-ui.js      前端 ↔ API ↔ 后端契约检查 349 项
-│   ├── e2e-ui.js        端到端 HTTP 测试 52 项
+│   ├── smoke-ui.js      前端 ↔ API ↔ 后端契约检查 463 项
+│   ├── e2e-ui.js        端到端 HTTP 测试 57 项
 │   ├── test-login-ui.js 登录页 DOM 测试（jsdom 真的开页面点按钮）27 项
 │   ├── build-copypaste.js 产生复制贴上文件（手动部署用）
-│   ├── test-copypaste.js 复制贴上文件校验（跟 .gs 同步 + 可执行）60 项
+│   ├── test-copypaste.js 复制贴上文件校验（跟 .gs 同步 + 可执行）94 项
 │   ├── test-scan-ui.js  条码 / 扫码抵扣 DOM 测试 66 项
 │   ├── test-home-ui.js  首页活动区块 DOM 测试 12 项
+│   │  ↓ 2.0 点单（新增 8 个套件）
+│   ├── test-upgrade.js  数据库升级 upgradeToV2() 142 项（§67 不动旧资料）
+│   ├── test-menu.js     酒单后端 139 项
+│   ├── test-menu-ui.js  酒单 / 商品 / 购物车页 DOM 88 项
+│   ├── test-checkout.js 结帐与订单后端 155 项
+│   ├── test-orderboard.js 员工看板 159 项（幂等 / 钱包 / 权限）
+│   ├── test-order-ui.js 结帐 / 订单 / 看板页 DOM 119 项
+│   ├── test-security.js 安全审计 214 项（§81 的 12 项攻击逐条试）
+│   ├── test-analytics.js 业绩分析 103 项
+│   ├── test-mvp.js      ★ §84 现场验收 115 项（含 Reward 进钱包）
 │   └── harness.js       测试框架（零依赖）
 │
 ├── .github/workflows/
@@ -192,7 +208,7 @@ npm run test:api         # 完整 API 测试（242 项）
 npm run test:ui          # 前端 ↔ API ↔ 后端契约（354 项）
 npm run test:e2e         # 起 demo server 走完整 HTTP 流程（57 项）
 npm run test:login       # 用 jsdom 打开 login.html 点按钮（27 项，需先 npm install）
-npm run test:copypaste   # APPS-SCRIPT-COPY-PASTE.md 跟 .gs 同步、且贴上去能跑（84 项）
+npm run test:copypaste   # APPS-SCRIPT-COPY-PASTE.md 跟 .gs 同步、且贴上去能跑（94 项）
 npm run test:scan        # 用 jsdom 跑会员条码页与员工扫码抵扣页（66 项）
 npm run test:home        # 首页活动：后端失败时不能伪装成「暂无活动」（12 项）
 npm run test:upgrade     # 2.0 数据库升级：只加不减、幂等、1.x 不受影响（142 项）
