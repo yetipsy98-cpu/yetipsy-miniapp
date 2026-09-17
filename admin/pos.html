@@ -52,8 +52,8 @@
     <div class="pad" id="pad">
       <button class="pad-head" id="padToggle">
         <span class="pad-head-left">
-          <span class="a-label" style="margin:0">录入 FOODCOURT 单据</span>
-          <span class="pad-hint">金额照单据输入 · 之后扫顾客会员码</span>
+          <span class="a-label" style="margin:0">记录 FOODCOURT 单据</span>
+          <span class="pad-hint">照收据抄一次 · 不是帮顾客点单</span>
         </span>
         <span class="pad-head-right">
           <span class="pad-peek" id="padPeek">RM 0.00</span>
@@ -62,17 +62,13 @@
       </button>
 
       <div class="pad-body" id="padBody">
+        <input class="a-input" id="ticketNoInput" placeholder="单据编号（收据上那串）FC8231"
+               maxlength="30" autocomplete="off" inputmode="text">
+
         <div class="pad-amount">
           <span class="pa-cur">RM</span>
           <span class="pa-val" id="padAmount">0.00</span>
-        </div>
-
-        <div class="pad-quick" id="padQuick">
-          <button class="pq" data-quick="10">10</button>
-          <button class="pq" data-quick="20">20</button>
-          <button class="pq" data-quick="50">50</button>
-          <button class="pq" data-quick="100">100</button>
-          <button class="pq clear" data-quick="clear">清空 CLR</button>
+          <button class="pad-clr" id="padClear">清空 CLR</button>
         </div>
 
         <div class="pad-keys" id="padKeys">
@@ -93,15 +89,13 @@
         </div>
 
         <div class="pad-fields">
-          <input class="a-input" id="ticketNoInput" placeholder="单据号码（选填）FC8231"
-                 maxlength="30" autocomplete="off" inputmode="text">
           <input class="a-input" id="ticketNoteInput" placeholder="备注（选填）4 号桌"
                  maxlength="60" autocomplete="off">
         </div>
 
         <button class="big-action" id="saveTicketBtn">
-          加入待进单 ADD TICKET
-          <span class="ba-sub">付款在 foodcourt · 这里只记录单据</span>
+          记录单据 SAVE RECEIPT
+          <span class="ba-sub">进「待进单」队列 · 顾客出示会员码时才进分</span>
         </button>
       </div>
     </div>

@@ -266,14 +266,7 @@ var ADMIN_POS = (function () {
         padPress(btn.getAttribute('data-key'));
       });
     }
-    var quick = document.getElementById('padQuick');
-    if (quick) {
-      quick.addEventListener('click', function (e) {
-        var btn = e.target.closest ? e.target.closest('[data-quick]') : null;
-        if (!btn) return;
-        padQuick(btn.getAttribute('data-quick'));
-      });
-    }
+    on('padClear', function () { padQuick('clear'); });
     on('ticketNoInput', null, function (e) { if (e.key === 'Enter') saveTicket(); });
   }
 
