@@ -194,10 +194,25 @@ var API = (function () {
       return call('getClaimByCode', { code: code }, { sessionType: 'auto' });
     },
 
+    /* 认领一张 Foodcourt 小票。tokenOrCode 可以是三种形式：
+         · 32 位 token（顾客扫店员 QR 取得）
+         · 4 位短码（顾客手输，字母表刻意去掉易看错的 I / O / 0 / 1）
+         · { token: ..., code: ... } 物件（js/claim.js 用这个）
+
+       ★ 字串不能一律当 token 送：后端 findClaimByTokenOrCode 见到 token
+         非空就只查 token 哈希、直接返回，永远不会退回查短码 ——
+         把 4 位短码当 token 送会拿到 INVALID_CLAIM_TOKEN。
+         参数名叫 tokenOrCode，行为就得真的两种都收。 */
     claimOrder: function (tokenOrCode) {
-      var payload = (typeof tokenOrCode === 'string')
-        ? { token: tokenOrCode }
-        : (tokenOrCode || {});
+      var payload;
+      if (typeof tokenOrCode === 'string') {
+        var s = tokenOrCode.trim();
+        payload = /^[A-Z2-9]{4}$/.test(s.toUpperCase())
+          ? { code: s.toUpperCase() }
+          : { token: s };
+      } else {
+        payload = tokenOrCode || {};
+      }
       return call('claimOrder', payload, { sessionType: 'auto' });
     },
     getPendingReward: function (rewardId) {

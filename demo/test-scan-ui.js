@@ -431,6 +431,46 @@ suite.group('07b · 短码认领也能用（顾客手输的情况）', async (t)
   const after = (await post('getProfile', {}, global.__customerToken)).data.customer;
   t.equal('积分累计正确', after.currentPoints, before.currentPoints + 40);
 
+  /* ★ 回归：字串形式。API.customer.claimOrder 的参数名叫 tokenOrCode，
+     以前却把任何字串一律当 token 送 —— 传 4 位短码会拿到
+     INVALID_CLAIM_TOKEN。后端 findClaimByTokenOrCode 见到 token 非空
+     就只查 token 哈希、直接返回，不会退回查短码，所以这个错很安静。
+     短码（4 字元、字母表去掉 I/O/0/1）与 token（32 位十六进位）
+     格式不重叠，可以无歧义分辨。 */
+  const made2 = await post('createClaim', {
+    source: 'FOODCOURT',
+    externalOrderId: 'SCANUI3-' + Date.now(),
+    amount: 3000
+  }, global.__staffToken);
+  t.okIs(made2, '建立第三笔 Claim');
+
+  const beforeStr = (await post('getProfile', {}, global.__customerToken)).data.customer;
+  const byString = await win.API.customer.claimOrder(made2.data.claimCode);
+  t.okIs(byString, '★ 直接把短码当字串传也能认领（参数名不再说谎）');
+  t.equal('拿到 30 分', byString.data.pointsEarned, 30);
+  const afterStr = (await post('getProfile', {}, global.__customerToken)).data.customer;
+  t.equal('★ 积分累计正确', afterStr.currentPoints, beforeStr.currentPoints + 30);
+
+  /* 小写短码也要收（顾客手输不会刻意按大写） */
+  const made3 = await post('createClaim', {
+    source: 'FOODCOURT',
+    externalOrderId: 'SCANUI4-' + Date.now(),
+    amount: 2000
+  }, global.__staffToken);
+  const byLower = await win.API.customer.claimOrder(made3.data.claimCode.toLowerCase());
+  t.okIs(byLower, '★ 小写短码也认得');
+  t.equal('拿到 20 分', byLower.data.pointsEarned, 20);
+
+  /* 32 位 token 仍然走 token 路（不能被误判成短码） */
+  const made4 = await post('createClaim', {
+    source: 'FOODCOURT',
+    externalOrderId: 'SCANUI5-' + Date.now(),
+    amount: 1000
+  }, global.__staffToken);
+  const byToken = await win.API.customer.claimOrder(made4.data.token);
+  t.okIs(byToken, '★ 32 位 token 当字串传仍走 token 路');
+  t.equal('拿到 10 分', byToken.data.pointsEarned, 10);
+
   page.dom.window.close();
 });
 

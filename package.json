@@ -1,6 +1,6 @@
 {
   "name": "yetipsy-miniapp",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "YETIPSY MINI APP 1.3 — FOODCOURT EDITION. Membership / Points / Reward / Wallet on Google Sheets + Google Apps Script + GitHub Pages (RM0). 前端在 GitHub Pages，后端程式码在 repo 的 apps-script/，资料在 Google Sheets。",
   "private": true,
   "scripts": {
