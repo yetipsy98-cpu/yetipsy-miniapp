@@ -42,6 +42,7 @@ const DESC = {
   'Checkout.gs': '★ 2.0 结帐报价：后端重算价格、钱包上限、Quote 5 分钟有效期、防重复下单的识别码',
   'AppOrders.gs': '★ 2.0 订单：placeOrder（幂等）、订单查询、取消、再点一次、名称与单价快照',
   'OrderBoard.gs': '★ 2.0 员工看板：接单 / 制作 / 完成（幂等）、收款才扣钱包、取消退回、6 小时内只算一次到店',
+  'Analytics.gs': '★ 2.0 业绩分析：今日统计、通路业绩（App / Foodcourt 分得开且不重复计算）、热销商品、会员分析',
   'Claims.gs': 'QR / 4 位 Code 认领（只存 token 的 hash）',
   'Promotions.gs': '优惠规则',
   'Admin.gs': '员工端：Dashboard、会员查询、手动调整、重设会员密码、设置',

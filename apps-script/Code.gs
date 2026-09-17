@@ -119,7 +119,12 @@ function getHandlers() {
     completeOrder: completeOrder,               // §55 幂等 · §22 这一步才发积分
     cancelAppOrder: cancelAppOrder,             // §54 已扣钱包要 REVERSAL
     markPaymentPaid: markPaymentPaid,           // §54 这一步才真的扣钱包
-    setOrderingPaused: setOrderingPaused        // §65 暂停 / 恢复接单
+    setOrderingPaused: setOrderingPaused,       // §65 暂停 / 恢复接单
+
+    /* ===== 2.0 点单：业绩分析（Phase 11）===== */
+    getSalesAnalytics: getSalesAnalytics,       // §50 今日统计 + §51 通路业绩
+    getProductAnalytics: getProductAnalytics,   // §50 TOP PRODUCTS
+    getMemberAnalytics: getMemberAnalytics      // §52 会员分析
   };
 }
 

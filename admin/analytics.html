@@ -1,0 +1,66 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B0B0B">
+<title>YETIPSY STAFF — 业绩报表</title>
+<link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
+<link rel="stylesheet" href="../css/app.css">
+<link rel="stylesheet" href="../css/admin.css">
+<style>
+.panel { border: 1px solid var(--a-line); border-radius: 14px; padding: 12px; }
+#rangeStrip { display: flex; gap: 6px; padding: 8px 0 12px; }
+.cat-chip { border: 1px solid var(--a-line); border-radius: 999px; padding: 4px 12px;
+  font-size: 11px; letter-spacing: 1px; cursor: pointer; }
+.cat-chip.active { border-color: var(--a-gold); color: var(--a-gold); }
+
+/* 通路业绩条 */
+.ch-row { display: flex; align-items: center; gap: 10px; padding: 6px 0; }
+.ch-name { flex: 0 0 40%; font-size: 12px; letter-spacing: .6px; }
+.ch-bar { flex: 1 1 auto; height: 8px; background: rgba(255,255,255,.07);
+  border-radius: 999px; overflow: hidden; }
+.ch-fill { height: 100%; background: var(--a-gold); border-radius: 999px; }
+.ch-val { flex: 0 0 auto; text-align: right; font-size: 13px; font-weight: 700;
+  color: var(--a-gold); min-width: 84px; }
+.ch-sub { display: block; font-size: 10px; color: var(--a-muted); font-weight: 400; }
+.rank { color: var(--a-gold); font-weight: 700; }
+
+/* 趋势图 */
+.tr-chart { display: flex; align-items: flex-end; gap: 4px; height: 110px; }
+.tr-col { flex: 1 1 0; display: flex; flex-direction: column; align-items: center;
+  justify-content: flex-end; height: 100%; min-width: 0; }
+.tr-bar { width: 70%; max-width: 22px; background: rgba(255,255,255,.14);
+  border-radius: 3px 3px 0 0; display: flex; align-items: flex-end; overflow: hidden; }
+.tr-app { width: 100%; background: var(--a-gold); }
+.tr-day { font-size: 9px; color: var(--a-muted); margin-top: 4px; letter-spacing: .4px; }
+</style>
+</head>
+<body class="admin">
+
+<div class="a-page">
+
+  <div id="rangeStrip">
+    <div class="cat-chip" data-days="1">今天 TODAY</div>
+    <div class="cat-chip active" data-days="7">7 天</div>
+    <div class="cat-chip" data-days="30">30 天</div>
+  </div>
+
+  <div id="analyticsBody"></div>
+
+</div>
+
+<script src="../js/config.js"></script>
+<script src="../js/api.js"></script>
+<script src="../js/auth.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/admin.js"></script>
+<script src="../js/admin-analytics.js"></script>
+<script>
+  if (ADMIN.requireManager()) {
+    ADMIN.renderShell({ title: 'ANALYTICS' });
+    ADMIN_ANALYTICS.init();
+  }
+</script>
+</body>
+</html>

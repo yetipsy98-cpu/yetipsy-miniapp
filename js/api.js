@@ -406,6 +406,10 @@ var API = (function () {
     /** §65 暂停 / 恢复接单 */
     setOrderingPaused: function (paused) {
       return call('setOrderingPaused', { paused: !!paused }, { sessionType: 'staff' });
+    },
+    /* 2.0 菜单管理（§32）—— 只有 MANAGER / OWNER 能改 */
+    getMenu: function () {
+      return call('getMenu', {}, { sessionType: 'staff' });
     }
   };
 
@@ -467,6 +471,18 @@ var API = (function () {
     resetStaffPassword: function (staffId, password) {
       return call('resetStaffPassword', { staffId: staffId, password: password }, { sessionType: 'staff' });
     },
+    /* ============ 2.0 业绩分析（Phase 11，§50 §51 §52 §62）============ */
+    getSalesAnalytics: function (days) {
+      return call('getSalesAnalytics', { days: days || 7 }, { sessionType: 'staff' });
+    },
+    getProductAnalytics: function (days, limit) {
+      return call('getProductAnalytics',
+        { days: days || 7, limit: limit || 10 }, { sessionType: 'staff' });
+    },
+    getMemberAnalytics: function (days) {
+      return call('getMemberAnalytics', { days: days || 30 }, { sessionType: 'staff' });
+    },
+
     /* 会员忘记密码 / 号码被抢注 → Manager+ 在这里重设 */
     resetCustomerPassword: function (customerId, password) {
       return call('resetCustomerPassword',

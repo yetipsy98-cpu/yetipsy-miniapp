@@ -185,7 +185,7 @@ npm run demo          # = node demo/server.js
 ## 4. 测试
 
 ```bash
-npm test                 # 全部 15 套（2028 项检查）
+npm test                 # 全部 16 套（2166 项检查）
 
 npm run test:backend     # 直接执行 apps-script/*.gs（86 项）
 npm run test:api         # 完整 API 测试（242 项）
@@ -202,6 +202,7 @@ npm run test:checkout    # 2.0 结帐与订单：后端算价、Quote 过期、�
 npm run test:orderboard  # 2.0 员工看板：未收款不能完成、重复完成不重复发、钱包退回、6 小时一次到店（159 项）
 npm run test:orderui     # 用 jsdom 真的开结帐页 / 订单页 / 看板跑一遍（119 项）
 npm run test:security    # 2.0 安全审计：§81 的 12 项攻击逐条试（214 项）
+npm run test:analytics   # 2.0 业绩分析：通路业绩不重复计算、热销用快照（103 项）
 npm run build:copypaste  # 改完 .gs 之后重新产生那份复制贴上文件
 ```
 
@@ -309,7 +310,7 @@ App 内 `PROFILE` 页面有完整隐私说明。
 4. Deploy → New deployment → Web app → 复制 URL
 5. `js/config.js` 贴上 API URL（`REQUIRE_BACKEND: true`）→ push → 开启 GitHub Pages
 
-> 之后改后端只要 `git push`：CI 会先跑 2028 项测试，再用 `clasp` 部署，
+> 之后改后端只要 `git push`：CI 会先跑 2166 项测试，再用 `clasp` 部署，
 > Web App URL 不变，前端不用动。设定方法见 `apps-script/README.md`。
 
 ---
@@ -319,10 +320,9 @@ App 内 `PROFILE` 页面有完整隐私说明。
 2.0 的完整计划书在 [`PLAN-2.0.md`](PLAN-2.0.md)（86 节），1.x 的审计结果在
 [`docs/AUDIT-1.x.md`](docs/AUDIT-1.x.md)。
 
-**进度：Phase 1–9 与 Phase 12 已完成（审计 · 数据库升级 · Menu · Cart · Checkout ·
-建立订单 · 员工订单看板 · 会员整合 · 钱包压力测试 · 安全审计）。
-剩下 Phase 10（Owner 菜单管理页）与 Phase 11（分析报表）—— 后端 action 已就位，
-还缺 `admin/menu.html` / `admin/products.html` 与分析页。**
+**进度：计划书里的 12 个 Phase 全部完成。**
+顾客端（酒单 → 商品 → 购物车 → 结帐 → 订单追踪 → 我的订单）、
+员工端（订单看板 · 菜单管理）、Owner（业绩报表）都已可用。
 
 顾客端完整流程已可用：
 `menu.html`（酒单 + 搜寻 + 分类 + 风味筛选 + 售罄）→
@@ -346,8 +346,10 @@ App 内 `PROFILE` 页面有完整隐私说明。
 | 结帐后端 | `apps-script/Checkout.gs`（327 行）+ `apps-script/AppOrders.gs`（370 行）：`createCheckoutQuote` `getCheckoutQuote` `placeOrder` `getAppOrder` `getMyOrders` `requestOrderCancellation` `reorder` |
 | 结帐页面 | `checkout.html` `order.html` `orders.html` + `js/checkout.js` `js/order.js` `js/orders.js` |
 | 员工看板 | `apps-script/OrderBoard.gs`（460 行）：`getIncomingOrders` `getActiveOrders` `acceptOrder` `startPreparing` `markReady` `markPaymentPaid` `completeOrder` `cancelAppOrder` `setOrderingPaused` + `admin/orderboard.html` + `js/admin-orderboard.js` |
+| Owner 菜单管理 | `admin/menu.html` + `js/admin-menu.js`：新增 / 编辑商品、价格、分类、排序、促销（§40）、图片 URL（§33）、下架；普通员工只能切换售罄（§32） |
+| 业绩报表 | `apps-script/Analytics.gs`（308 行）+ `admin/analytics.html` + `js/admin-analytics.js`：今日统计、§51 通路业绩、热销商品、趋势图、会员分析 |
 | 安全审计 | §81 的 12 项攻击逐条验：改价 / 假钱包 / 假 CustomerID / 假总额 / 重复下单 / 重复完成 / 完成未付款 / 同一笔钱包用两次 / 点售罄商品 / 未授权改商品 / 未授权完成 / 重放请求，加上 §83 锁与 §78 钱包压力 |
-| 测试 | `test:upgrade` 142 · `test:menu` 139 · `test:menuui` 88 · `test:checkout` 155 · `test:orderboard` 159 · `test:orderui` 119 · `test:security` 214 |
+| 测试 | `test:upgrade` 142 · `test:menu` 139 · `test:menuui` 88 · `test:checkout` 155 · `test:orderboard` 159 · `test:orderui` 119 · `test:security` 214 · `test:analytics` 103 |
 
 ### 9.2 老板怎么升级（**不要重跑 `setupDatabase()`**）
 
