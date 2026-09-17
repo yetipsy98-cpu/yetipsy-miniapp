@@ -18,13 +18,13 @@
      · 没有相机 / 不是 HTTPS → 不存取 navigator.mediaDevices（会 TypeError），
        由呼叫端显示「手动输入」
 
-   用法：
-     SCANNER.start({
+   用法（★ 全域名是 MEMBER_SCANNER，照上面的警告，别写成 SCANNER）：
+     MEMBER_SCANNER.start({
        video:  <video 元素>,
        onCode: function (text) { … },
        onError: function (message) { … }
      });
-     SCANNER.stop();
+     MEMBER_SCANNER.stop();
    ============================================================= */
 
 var MEMBER_SCANNER = (function () {
