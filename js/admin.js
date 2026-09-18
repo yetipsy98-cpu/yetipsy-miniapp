@@ -11,7 +11,7 @@ var ADMIN = (function () {
 
   var NAV = [
     { page: 'index.html',     zh: '首页',   en: 'HOME' },
-    { page: 'claim.html',     zh: '开单',   en: 'CLAIM' },
+    { page: 'pos.html',       zh: 'POS',    en: 'POS' },
     { page: 'customers.html', zh: '顾客',   en: 'MEMBERS' },
     { page: 'more.html',      zh: '更多',   en: 'MORE' }
   ];
@@ -51,9 +51,14 @@ var ADMIN = (function () {
         '<div class="ah-title">' + UI.esc(options.title || '') + '</div>' +
         '<div class="ah-right">' +
           '<span class="role-pill">' + UI.esc(staff.role || '') + '</span>' +
+          /* ★ 每一页都能登出（以前只有首页 / MORE 有按钮） */
+          '<button class="ah-out" id="ahLogoutBtn">登出<span>OUT</span></button>' +
         '</div>' +
       '</div>';
     document.body.insertAdjacentHTML('afterbegin', header.outerHTML);
+
+    var ahOut = document.getElementById('ahLogoutBtn');
+    if (ahOut) ahOut.addEventListener('click', logout);
 
     var current = location.pathname.split('/').pop() || 'index.html';
     var nav = '<nav class="admin-nav">';
@@ -66,21 +71,40 @@ var ADMIN = (function () {
     document.body.insertAdjacentHTML('beforeend', nav);
     document.body.classList.add('has-admin-nav');
 
-    if (options.onLogout) {
-      // header 右侧点击登出由各页面自行绑定
-    }
+    /* ★ 预热：这一页载完就顺手把其余员工页面要的资料抓好，
+       这样点 POS / 看板 / 首页都是立刻出来 */
+    warmUp();
+  }
+
+  var warmBound = false;
+  function warmUp() {
+    try {
+      var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 300); };
+      idle(function () {
+        if (API.cache && API.cache.prefetchStaff) API.cache.prefetchStaff();
+      });
+      /* 从別的 App / 锁屏回到前景时再温一次（快取过期的资料顺手补新，
+         员工把平板拿起来就能直接用；20 秒内不会重复打后端） */
+      if (!warmBound) {
+        warmBound = true;
+        document.addEventListener('visibilitychange', function () {
+          if (document.hidden) return;
+          if (API.cache && API.cache.prefetchStaff) API.cache.prefetchStaff();
+        });
+      }
+    } catch (e) {}
   }
 
   /* ---------------- 登出 ---------------- */
 
+  /**
+   * ★ 登出不等后端（同会员端）：按下去立刻清 session、立刻跳登录页。
+   */
   function logout() {
     UI.confirmDialog('确定要登出吗？', 'Sign out of staff app?', '登出 SIGN OUT')
       .then(function (yes) {
         if (!yes) return;
-        API.staff.logout().then(function () {
-          AUTH.clearStaff();
-          location.replace('login.html');
-        });
+        AUTH.logoutStaff();
       });
   }
 

@@ -1,9 +1,10 @@
-# YETIPSY MINI APP 1.6 — ORDERING EDITION
+# YETIPSY MINI APP 2.1 — FOODCOURT POS EDITION
 
 > Foodcourt 负责点餐和付款。
 > Yetipsy 负责顾客关系。
 >
-> **1.6：员工扫会员码直接进分（主流程）+ 手机自助点单（Smart Ordering 2.0）。**
+> **2.1：员工端改成 POS 进单台（foodcourt 单据 → 扫会员码进分）；**
+> **会员首页只留四个入口（下单 / 会员码 / 会员中心 / 我的订单）+ 活动幕布。**
 
 Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积分 / 奖励 / 钱包系统。
 
@@ -12,7 +13,7 @@ Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积�
 | 你要的东西 | 放在哪里 | 费用 |
 |---|---|---|
 | 前端（会员端 / 员工端 HTML+JS） | 这个 repo → GitHub Pages | RM0 |
-| 后端（业务逻辑，20 个 `.gs`） | 这个 repo 的 `apps-script/` → 部署到 Google Apps Script | RM0 |
+| 后端（业务逻辑，**唯一一个 `.gs`**） | 这个 repo 的 `apps-script/Code.gs` → 部署到 Google Apps Script | RM0 |
 | 资料库（17 张表 · 39 个设置） | Google Sheets | RM0 |
 | 自动部署 | GitHub Actions + `clasp`（push 就上线） | RM0 |
 
@@ -27,31 +28,134 @@ Google Sheets + Google Apps Script + GitHub Pages · 月费 RM0 的会员 / 积�
 
 **做：**
 
-主流程（1.6 起）—— 员工扫会员码直接进分：
+主流程 A —— foodcourt 的单（POS 点餐台 + 进单，任何员工）：
 
 ```
-员工输入账单金额 → 扫顾客会员码 → 后端自动计算
-→ 累计 Spend → 获得 Points → 更新 Tier
+顾客在 foodcourt 点餐、付款（付款在 foodcourt 完成）
+→ 员工在 POS 台点商品（像 POS 机：商品格 → 清单，收据金额不同就手动输入）
+→ 记录单据 → 进「待进单」队列
+→ 顾客出示会员码 → 员工扫码 → 确认
+→ 后端自动计算：累计 Spend → Points → Tier
 → 自动产生 Reward → Reward 进入 Wallet → 促进下一次消费
 ```
 
-自助点单（Smart Ordering 2.0）：
+主流程 B —— mini app 的单（自助点单，顾客自己下单）：
 
 ```
-顾客开酒单 → 加入购物车 → 选桌号或自取 → 结帐（可用钱包抵扣）
-→ 员工看板接单 → 制作 → 完成
-→ 完成时才发 Points / Reward（§22），并写入同一套会员资料
+顾客开酒单（★ 一页搞定：选规格 → 加入购物车 → 看购物车 → 去结帐，
+           不用一直换页等载入）
+→ 选桌号或自取 → 结帐（可用钱包抵扣）
+→ 员工订单看板接单 → 制作 → 完成（收款后才完成）
+→ 完成时自动发 Points / Reward（§22），写进同一位会员的资料
 ```
+
+> **2.1.4 起，会员端与员工端都是「打开就能用，不用等」：**
+> · **预载**：会员首页载完会在背景按顺序抓好酒单 / 我的订单 / 钱包 /
+>   钱包记录 / 消费与积分记录 / 待领奖励 / 会员资料；
+>   员工端任何一页载完都会预热点餐台酒单 / 待进单 / 今日看板 / 订单看板
+> · **先画快取、再补最新**（stale-while-revalidate）：酒单 10 分钟、
+>   点餐台酒单 5 分钟、待进单 / 看板 20–30 秒、钱包与订单 1 分钟；
+>   过期就当没有，回归正常载入 —— 不会拿旧资料骗人
+> · **打后端之前先把画面画好**：网路慢（现场实测 3 秒）时，酒单与点餐台
+>   仍然在 1 秒内出现
+> · 酒单页搜寻 / 分类 / 风味筛选全部在本机做；点商品 → 底部抽屉选规格
+>   （规格跟着酒单一起回来）→ 加入购物车，不用跳去 cart.html
+> · 按过任何会改资料的动作（下单 / 兑奖 / 记录单据 / 进分 / 接单 / 收款）
+>   就丢掉相关快取，下一眼看到的一定是最新
+> · 快取按 scope 分：登入 / 登出会换 scope 并清空，换人用同一支手机
+>   不会看到上一位会员或员工的资料；条码 / 扫码 / 钱包扣款永远不吃快取
+> · **登出不等后端**：按下去立刻清 session、立刻跳登录页（后端只是顺带通知），
+>   员工端每一页的顶栏都有登出
+
+> **2.1.6 起，后端只剩唯一一个档案 `apps-script/Code.gs`：**
+> · GitHub 上那一个档案 = 你贴进 Apps Script 的那一份，**复制贴上只要一次**
+>   （以前要贴 20 个档案、还要对着 md 一节一节贴 —— 那个 md 已经删掉）
+> · 20 个模组变成同一个档案里的 20 个段落（段落开头都写着
+>   `/* ===== [3/20] Database.gs — … ===== */`，Ctrl+F 搜 `===== [` 就能跳段）
+> · 版本号码只有一组：档案内 `APP_VERSION`、档头、`package.json`、
+>   `js/config.js`、`service-worker.js` 快取名全部 = **2.1.17**
+> · `npm run check:backend` 会检查「只有一个 .gs / 20 个段落都在 /
+>   action 有没有指向不存在的函数 / 前端用到的 90 个 action 后端是否都有 /
+>   版本号码是否一致 / 用**这个档案**跑一次 POS 进单 + 会员点单端到端」
+> · 员工端 **MORE 页最下方**会显示后端版本：
+>   `✓ 后端 v2.1.17 · 已是最新版`，若还贴着旧版会红字提示重新贴 Apps Script
+> · 规则：**任何改动都先更新 GitHub 上这个档案**，再从 GitHub 贴到 Apps Script
+> · 2.1.10 起：新订单会**念出「您有新订单」**（浏览器内建语音，免下载）
+>   ＋画面跳大字横幅；装置不会讲中文就退回提示音。看板顶部的
+>   「🔔 声音 / 🔇 静音」同时管语音，旁边「🔊 试听」可以先试一下
+>   （第一次要先点一下画面，浏览器才准出声）。
+> · 2.1.11 修掉「卡片跳回已确认、要再按一次」：任何「按之前就发出去」的
+>   读取（慢回应、旧快取）回来后都会被丢掉，不会把卡片搬回上一栏；
+>   后端真的跟上了才放行（保护期 25 秒）。状态推进也全部**幂等**：
+>   重复点、或另一位员工先按了，都不会报错。
+> · 2.1.11 不卡的另一个关键：卡片只在「真的变了」才重画 ——
+>   等待秒数每 8 秒都在变，以前会害每一栏整块重画，现在只更新秒数。
+> · 2.1.10：看板按「接单并制作」= 接单 + 进入制作，**一个请求完成**，
+>   而且卡片是「按下去立刻移动」（后端回传最新快照，不用再抓一次），
+>   失败会自动退回原来那一栏。
+> · 从 2.1.8 起，所有页面的 css / js 都带版本号（`admin.css?v=2.1.11`）：
+>   改版后员工的浏览器一定抓到新的 css / js，不会看到「还是一样」的旧画面
+>   （**改版时记得连 `?v=` 一起 +1**，`npm run check:backend` 会检查有没有漏）
+> · **2.1.17 「全部预载」：顾客与员工都不再等**
+>   · 换页：service worker 改成「先给快取、背景更新」—— 点任何一页
+>     都是立刻画出来，不再等 Google 那边回应。
+>   · 资料：**每一个页面**载入后都会自动预载整份角色资料
+>     （会员：酒单 / 订单 / 钱包 / 记录 / 待领奖励 / 会员资料 / 活动；
+>     员工：点餐台 / 待进单 / 看板 / 订单 / 稽核 / 员工 / 设定 / 促销 /
+>     报表）。以前只有首页与员工外壳会预载，其他页打开还是要等。
+>   · 员工页原本「没有开快取」的只读资料（订单 / 稽核 / 员工 / 设定 /
+>     促销 / 报表 / 待进单队列）现在全部吃快取 → 打开就有上次的画面。
+>   · 会员码页：条码一定要问后端（一次性密语），但名字 / 等级 / 积分 /
+>     钱包先用快取画，不会整页空着等条码。
+>   · 订单页：先用手上的订单快取画一次，再去问最新状态。
+>   · 测试：`node tools/tests/warm-check.js`（后端故意调慢 2 秒，
+>     逐页检查 150 毫秒内有没有画面）、`node tools/tests/regression-check.js`
+>     （这几版修过的 7 组问题）。
+> · **2.1.16 修掉「选规格失效」**：后端 `optionsByProduct` 回的是**平铺**的
+>   规格清单（一个规格一笔），但顾客酒单 / 商品页 / 员工点餐台都当成
+>   「已经分好群」的资料在用 → 规格一列都画不出来（点了也没反应、
+>   加价也没算）。现在统一由 `UI.optionGroups()` 分组（两种形状都吃），
+>   必选、加价、加入购物车带的规格都跟着正确。
+> · **2.1.15 员工端菜单管理的「新增商品 / 编辑商品」改成小抽屉**：
+>   以前表单是页面最上面的一块，手机按「编辑」时表单在萤幕外，
+>   看起来就像「按了没反应」；现在从下面滑上来、标题在顶端、
+>   保存按钮固定在底部。分类也走同一个抽屉。
+>   另外「编辑」改成事件委派 + 点整张卡片也能编辑（列表重画不会失效）。
+> · **2.1.14 按确认不再有「处理中…」那一段**：卡片按下去立刻在新栏、
+>   按钮已经是下一个动作（只留一点点「还在跑」的呼吸效果）；
+>   连点会被挡住并给一句提示，不会重复送单。收款 / 取消这种要确认的
+>   动作才保留「收款中… / 取消中…」。
+> · **2.1.14 刷新变快**：员工看板 8 秒 → **4 秒**（`js/config.js` 的
+>   `BOARD_POLL_SECONDS`），顾客的取餐状态 12 秒 → **3 秒**
+>   （`CUSTOMER_ORDER_POLL_SECONDS`）。两个都是前端设定，随时可调，
+>   最短不要低于 3 秒（Apps Script 一次往返要约 1~2 秒）。
+> · **2.1.13 起看板没有「已确认」这一栏**：只剩 新订单 → 制作中 → 可取酒。
+>   后端若还留着停在 CONFIRMED 的单，卡片会并进「制作中」栏，看板也会
+>   自动帮它补一步推成 PREPARING（后端连这个 action 都没有时，按钮会写着
+>   「开始制作 START」，卡片不会凭空消失）；顾客端也同步不再显示「已确认」。
+> · **2.1.13 结帐改成「小抽屉」**：只占屏幕下方一小块（≤56vh，有把手），
+>   不盖满整页。而且报价在**酒单页加购时就已经算好**（存进 sessionStorage，
+>   带购物车指纹 + 30 秒余量检查），所以「酒单 → 去结帐 → 抽屉」全程
+>   0 次等待；购物车页、桌牌 QR 的 `checkout.html?table=` 也都照常可用。
+> · **2.1.12**：订单来了**按一下就直接进「制作中」**——就算 Apps Script
+>   还是旧版（不认得「接单并制作」），前端也会自己补上「开始制作」那一步，
+>   不会再停在「已确认」要你再按一次。
+> · **2.1.12 结帐改成「大抽屉」**：在购物车页按「结帐」不再换页，
+>   抽屉直接打开就是算好的金额（你还在看购物车的时候，后端已经在算价了）；
+>   抽屉里改数量 / 换桌号会自动重算，旧金额不可能按成订单。
+>   桌牌 QR 的旧连结（`checkout.html?table=B7`）照常可用。
 
 Foodcourt Claim（1.x 原流程，保留但已移出员工首页、入口在 MORE，仅 MANAGER / OWNER）：
 
 ```
-经理建立 Claim → 顾客认领 → 绑定会员 → 同上
+经理建立 Claim（生成 QR）→ 顾客自己扫码认领 → 绑定会员 → 同上
 ```
 
 **不做（Phase 1 明确排除）：**
 
-Foodcourt API、线上付款闸（DuitNow / FPX / 信用卡）、POS、库存、会计、
+Foodcourt API、线上付款闸（DuitNow / FPX / 信用卡）、**真正的 POS 收银**
+（2.1 的员工端点餐台只是「点商品 → 记录单据 → 扫会员码进分」，
+不接钱箱 / 不刷卡，付款仍在 foodcourt 柜台）、库存、会计、
 厨房系统、订位、外送、WhatsApp 自动化、SMS OTP、Native App、多分店、拆单积分。
 
 > 「线上点餐」在 2.0 已经做了（自助点单 + 员工看板），
@@ -92,8 +196,7 @@ Yetipsy Mini App         Yetipsy Staff Admin
 ```
 yetipsy-miniapp/
 │
-├── index.html           会员首页（积分 · 等级 · 钱包 · 今晚活动）← 线上版入口
-├── preview.html         单档离线预览（DEMO 用，不参与线上流程）
+├── index.html           会员首页 ★ 只有活动幕布 + 四个入口（下单 / 会员码 / 会员中心 / 我的订单）
 ├── login.html           手机登录 / 注册
 ├── claim.html           扫码或输入 Code 认领消费
 ├── reward.html          打开奖励（动画）
@@ -103,8 +206,10 @@ yetipsy-miniapp/
 │
 ├── admin/               员工端
 │   ├── login.html       员工登录
-│   ├── index.html       Dashboard（今晚营业额 / 认领数 / 新会员…）
-│   ├── claim.html       ★ 建立 Claim（5–10 秒）→ QR + Code
+│   ├── index.html       员工首页（POS / 订单看板 / 菜单状态 / 扫码抵扣 + 今晚统计）
+│   ├── pos.html         ★ POS 点餐台 + 进单（商品格 → 清单 → 扫会员码进分）
+│   ├── orderboard.html  ★ App 订单看板（接单 / 制作 / 完成 → 自动进分）
+│   ├── claim.html       建立 Claim → QR + Code（备用路径，Manager+）
 │   ├── customers.html   查找会员 · 钱包抵扣 · 调整（Manager+）
 │   ├── orders.html      订单 / 消费记录
 │   ├── settings.html    系统设置 + 优惠活动（Manager+）
@@ -122,55 +227,26 @@ yetipsy-miniapp/
 │   ├── admin*.js        员工端各页面逻辑
 │   └── vendor/          qrcode.js（MIT）· jsQR.js（Apache-2.0）
 │
-├── apps-script/         ★ 生产后端（Google Apps Script，20 个 .gs · 84 个 action）
-│   ├── Code.gs          Web App 入口（doPost / doGet · action 分派 · 交易锁）
-│   ├── Config.gs        17 张 Sheet 的栏位定义 · 39 个设置 · 错误讯息
-│   ├── Utils.gs         时间 · 金额(SEN) · SHA-256 · ★ 电话 E.164 规范化
-│   ├── Database.gs      Sheets 存取层 · setupDatabase() · upgradeToV2() · dedupeCustomers()
-│   ├── Security.gs      Session（只存 hash）· 角色 · Rate limit
-│   ├── Auth.gs          ping · 员工登录（失败 6 次锁 5 分钟）
-│   ├── Customers.gs     ★ 查号码/注册/密码登录（同一个号码只有一笔）
-│   ├── Orders.gs Claims.gs Points.gs Rewards.gs Wallet.gs
-│   ├── Promotions.gs Admin.gs Audit.gs
-│   │  ↓ 2.0 点单（新增 6 个）
-│   ├── Menu.gs          酒单：分类 / 商品 / 规格 · 促销价 · 售罄 · 快取
-│   ├── Checkout.gs      结帐报价：后端重算价格 · Quote 5 分钟 · 幂等识别码
-│   ├── AppOrders.gs     订单：placeOrder（幂等）· 查询 · 取消 · 再点一次 · 快照
-│   ├── OrderBoard.gs    员工看板：接单 / 制作 / 完成（幂等）· 收款才扣钱包
-│   └── Analytics.gs     业绩分析：今日统计 · 通路业绩 · 热销 · 会员
+├── apps-script/         ★ 生产后端（Google Apps Script）
+│   ├── Code.gs          ★ 唯一档案：20 个段落（Config → … → Code 入口）都在里面
+│   │                      [1/20] Config  [2/20] Utils  [3/20] Database  [4/20] Security
+│   │                      [5/20] Audit  [6/20] Points  [7/20] Rewards  [8/20] Wallet
+│   │                      [9/20] Customers  [10/20] Orders  [11/20] Menu  [12/20] Checkout
+│   │                      [13/20] AppOrders  [14/20] OrderBoard  [15/20] Analytics
+│   │                      [16/20] Claims  [17/20] Promotions  [18/20] Admin  [19/20] Auth
+│   │                      [20/20] Code（doPost / doGet · action 分派 · 交易锁）
+│   │                      Ctrl+F 搜 `===== [` 可以跳段
 │   ├── appsscript.json  Apps Script manifest（V8 · 时区 · 权限）
 │   ├── .clasp.json.example  部署设定范本
 │   └── README.md        部署 / 自动推送 / 维护工具
 │
-├── demo/                本机测试与演示（不需要 Google 账号）
-│   ├── google-shim.js   在 Node 里模拟 Sheets / Lock / Properties / UrlFetch
-│   ├── load-backend.js  把 apps-script/*.gs 载入 Node（测的是真实后端）
-│   ├── server.js        本机 demo 服务器（npm run demo）
-│   ├── tests.js         API 测试 27 组 / 242 项
-│   ├── test-apps-script.js  后端单元测试 86 项
-│   ├── smoke-ui.js      前端 ↔ API ↔ 后端契约检查 463 项
-│   ├── e2e-ui.js        端到端 HTTP 测试 57 项
-│   ├── test-login-ui.js 登录页 DOM 测试（jsdom 真的开页面点按钮）27 项
-│   ├── build-copypaste.js 产生复制贴上文件（手动部署用）
-│   ├── test-copypaste.js 复制贴上文件校验（跟 .gs 同步 + 可执行）94 项
-│   ├── test-scan-ui.js  条码 / 扫码抵扣 DOM 测试 66 项
-│   ├── test-home-ui.js  首页活动区块 DOM 测试 12 项
-│   │  ↓ 2.0 点单（新增 8 个套件）
-│   ├── test-upgrade.js  数据库升级 upgradeToV2() 142 项（§67 不动旧资料）
-│   ├── test-menu.js     酒单后端 139 项
-│   ├── test-menu-ui.js  酒单 / 商品 / 购物车页 DOM 88 项
-│   ├── test-checkout.js 结帐与订单后端 155 项
-│   ├── test-orderboard.js 员工看板 159 项（幂等 / 钱包 / 权限）
-│   ├── test-order-ui.js 结帐 / 订单 / 看板页 DOM 119 项
-│   ├── test-security.js 安全审计 214 项（§81 的 12 项攻击逐条试）
-│   ├── test-analytics.js 业绩分析 103 项
-│   ├── test-mvp.js      ★ §84 现场验收 115 项（含 Reward 进钱包）
-│   ├── test-admin-ui.js 员工端 / 顾客端页面 DOM 123 项（§32 权限分界）
-│   └── harness.js       测试框架（零依赖）
+├── tools/                Node 检查工具（不参与线上流程）
+│   ├── load-backend.js     把 Code.gs 载入 Node 沙箱（跑的就是线上那一份）
+│   ├── google-shim.js      模拟 Sheets / Lock / Properties / Cache / SHA-256
+│   └── check-backend.js    npm run check:backend：6 类检查 + 端到端
 │
 ├── .github/workflows/
-│   ├── ci.yml                 每次 push / PR 跑全部测试
-│   └── deploy-apps-script.yml push 后用 clasp 自动部署后端
+│   └── deploy-apps-script.yml push apps-script/ 之后用 clasp 自动部署后端
 │
 ├── manifest.json         PWA（可加到手机主画面）
 ├── service-worker.js     只 Cache App Shell，不 Cache 任何敏感资料
@@ -180,117 +256,114 @@ yetipsy-miniapp/
 
 ---
 
-## 3. 立即试用（DEMO 模式，不需要 Google 账号）
+## 3. 现场怎么用
 
-```bash
-cd yetipsy-miniapp
-npm run demo          # = node demo/server.js
-```
+### A. Foodcourt 的单（员工端 POS 点餐台 · 任何角色）
 
-> DEMO 服务器会把 `js/config.js` 的 `API_URL` 换成空字串再伺服出去，
-> 所以 repo 里的 `config.js` 可以一直保持线上 URL，不用为了试用改来改去。
-> 线上版的页面（`index.html` 等）在 `REQUIRE_BACKEND: true` 时
-> **不会**偷偷退回 DEMO —— 没连上后端就直接显示错误，避免「以为在线上版，
-> 其实资料只存在自己手机」。
+1. 顾客在 foodcourt 点餐、付款（**付款在 foodcourt 完成，App 不收款**）
+2. 员工端 → 首页 `POS 进单`（或底部 `POS`）
+3. **点餐台 KIOSK**（像 POS 机）：搜寻或点分类 → 点商品 → 底部那张单累积件数与金额
+   - 有规格的商品（Size / ICE / SWEETNESS）会先跳规格表，可以顺手选数量
+   - 点错了：格子上的 `−` 先减一杯；要细改就开 `清单 TICKET`，每行可以
+     `+` / `−` / `✕`（减到 0 就移除）、也能整张清空
+   - 收据金额跟合计不一样（折扣 / 税）→ 勾「手动输入金额」用键盘打收据上的数字
+   - 单据号码（例如 `FC8231`）、备注可以按「内用 / 外带」快速填
+     → `记录单据 SAVE RECEIPT`
+4. 单据进入「待进单」队列；一张单只会收一次，重复单号会被挡
+   - 忙的时候可以先把几张单录进队列，顾客来了再逐张扫码
+   - 记录完会直接接到扫码步骤（现场最常见的顺序）
+5. 顾客出示会员码 → 扫一维条码（或请顾客报出条码内容手动输入）
+6. 确认画面显示会员与金额 → `确认进分 CONFIRM`
+   → `+86 分`、满门槛自动发 Reward、六小时内只算一次到店
+7. 结果页 `下一张 NEXT TICKET` 回到点餐台
 
-| | 网址 |
-|---|---|
-| 会员端 | http://localhost:3000/ |
-| 员工端 | http://localhost:3000/admin/login.html |
+> 清单（点了什么）会写进单据的备注栏，队列与确认画面都看得到；
+> 积分只看金额，清单不影响分数（§57）。
 
-员工账号（密码都是 `yetipsy123`）：
+> 单据录错 → 队列里点 `取消 ✕`（还没进分的单据才能取消）。
+> 已经进分的单据不能在 POS 取消 —— 那会动到积分与 Reward，
+> 要走「订单」页由 Manager 处理。
 
-| 账号 | 角色 | 可以做 |
-|---|---|---|
-| `owner` | OWNER | 全部（含员工账号管理、业绩报表） |
-| `manager` | MANAGER | 设置、调整积分/钱包、Audit Log、取消订单、建立 Foodcourt Claim、改价 / 新增商品 |
-| `staff` | STAFF | 扫会员码进分、查找会员、钱包抵扣、菜单上下架 / 标售罄、订单看板与完成订单 |
+### B. Mini app 的单（顾客自己下单）
 
-> ★ 权限是后端硬规定，不是画面隐藏。以 plain STAFF 实测：
-> `createClaim` / `updateProduct` / `getSalesAnalytics` 一律回 `UNAUTHORIZED`；
-> `grantOrder` / `redeemWallet` / `scanMemberCode` / `setProductStatus` /
-> `setProductAvailability` / `getIncomingOrders` / `completeOrder` 都放行。
-> 所以「建立 Claim」在 1.6 已经**不是** STAFF 能做的事（`Claims.gs` 里
-> `requireStaff(token, ['MANAGER','OWNER'])`）。
+1. 顾客 → 首页 `下单` → 酒单 → 购物车 → 结帐（可用钱包抵扣）
+2. 员工端 → `ORDER BOARD` → `接单 → 开始制作 → 做好了`
+3. 收款：`收款并标记 PAID`（用钱包会**在这一步**才真的扣，§54）
+4. `完成订单 COMPLETE` → 自动发积分 / Reward，顾客的 `我的订单` 也看得到
 
-**主流程 Demo：员工扫会员码进分（1.6 起的主要操作）**
+> Mini app 的单不需要再扫会员码 —— 下单的人就是会员本人（§22）。
 
-1. 会员端 → 输入手机号码（例如 `123456789`，会正规化成 `+60123456789`）→ 注册
-2. 会员端 → 底部 `会员码` → 画出一维条码 + QR（60 秒自动更换）
-3. 员工端（任一角色）→ 首页第一个大按钮 `SCAN & GRANT`
-4. **先输账单金额**（例如 `86.00`）→ `NEXT`
-5. 扫会员条码（或手动输入会员编号）→ `CONFIRM` → 出现 `+86 分`，
-   满 RM30 自动发一张 Reward
+### C. 备用：Foodcourt Claim（生成 QR，Manager / Owner）
 
-> 顺序是「先输金额、后扫码」：扫码会同时发出一张 180 秒的验证码，
-> 先扫码再慢慢输金额会把那个窗口耗掉。
-
-**次要流程 Demo：Foodcourt Claim（限 Manager / Owner）**
-
-1. 员工端 → `MORE` → `Create Claim` → 来源 `FOODCOURT`、单号 `FC8231`、金额 `86.00`
+1. 员工端 → `MORE` → `Create Claim` → 来源 `FOODCOURT`、单号、金额
 2. 画面出现 QR + Claim Code（例如 `Y7K2`）
-3. 会员端 → 右上角认领入口 → 输入 Code 或扫 QR → `CLAIM MY ORDER`
+3. 顾客 → 首页右上角 `认领` → 扫码或输入 Code → `CLAIM MY ORDER`
 4. 得到 `+86 POINTS` → `OPEN REWARD` → 奖励进 Wallet
-5. 员工端 → `SCAN & REDEEM` → 扫会员码 → 输入账单 `60.00` → 系统算出可抵扣
-   上限（钱包余额 vs 20%）→ `CONFIRM REDEEM`
 
-> ★ 员工首页已经**没有** `+ CREATE CLAIM` 按钮了（1.6 起移到 `MORE`）。
-> 首页四个大按钮固定是：SCAN & GRANT / ORDER BOARD / MENU STATUS / SCAN & REDEEM。
+> ★ 员工首页**没有** `+ CREATE CLAIM` 按钮；首页四个大按钮是
+> POS 进单 / ORDER BOARD / MENU STATUS / SCAN & REDEEM。
 
-资料存在 `demo/demo-data.json`，删掉这个文件就会重置。
+### D. 钱包抵扣（顾客想用钱包余额付 foodcourt 的钱）
+
+1. 顾客 → `会员码`
+2. 员工端 → `SCAN & REDEEM` → 扫会员码 → 输入账单金额
+3. 系统算出可抵扣上限（钱包余额 vs 20% 上限）→ `CONFIRM REDEEM`
+
+### 员工权限（后端硬规定，不是画面隐藏）
+
+| 角色 | 可以做 |
+|---|---|
+| `staff` | POS 进单、订单看板与完成订单、查找会员、钱包抵扣、菜单上下架 / 标售罄 |
+| `manager` | 以上 + 设置、调整积分/钱包、Audit Log、取消订单、建立 Claim、改价 / 新增商品、业绩报表 |
+| `owner` | 全部（含员工账号管理） |
+
+> 以 plain STAFF 实测：`createClaim` / `updateProduct` / `getSalesAnalytics`
+> 一律回 `UNAUTHORIZED`；`createPosTicket` / `getPosQueue` / `bindPosTicket` /
+> `cancelPosTicket` / `grantOrder` / `redeemWallet` / `scanMemberCode` /
+> `completeOrder` 都放行。
 
 ---
 
-## 4. 测试
+## 4. 维护
+
+### ★ 改后端（apps-script/Code.gs）的固定流程
+
+**后端只有唯一一个档案：`apps-script/Code.gs`**（约 6600 行，里面是 20 个段落）。
+它就是你贴到 Google Apps Script 的那一份 —— 所以「GitHub 上是最新版」
+等于「贴上去就是最新版」，中间不需要再产生任何文件。
+
+**规则：任何改动都先改 GitHub 上这一个档案，再从 GitHub 贴到 Apps Script。**
+不要在 Apps Script 编辑器里直接改，否则两边会变成不同版本。
 
 ```bash
-npm test                 # 全部 18 套（2405 项检查）
-
-npm run test:backend     # 直接执行 apps-script/*.gs（86 项）
-npm run test:api         # 完整 API 测试（242 项）
-npm run test:ui          # 前端 ↔ API ↔ 后端契约（354 项）
-npm run test:e2e         # 起 demo server 走完整 HTTP 流程（57 项）
-npm run test:login       # 用 jsdom 打开 login.html 点按钮（27 项，需先 npm install）
-npm run test:copypaste   # APPS-SCRIPT-COPY-PASTE.md 跟 .gs 同步、且贴上去能跑（94 项）
-npm run test:scan        # 用 jsdom 跑会员条码页与员工扫码抵扣页（66 项）
-npm run test:home        # 首页活动：后端失败时不能伪装成「暂无活动」（12 项）
-npm run test:upgrade     # 2.0 数据库升级：只加不减、幂等、1.x 不受影响（142 项）
-npm run test:menu        # 2.0 菜单 API：价格只由后端定、促销时间窗、售罄、权限、缓存（139 项）
-npm run test:menuui      # 用 jsdom 真的开 menu/product/cart 三页跑一遍（88 项）
-npm run test:checkout    # 2.0 结帐与订单：后端算价、Quote 过期、幂等、钱包只记录不扣（155 项）
-npm run test:orderboard  # 2.0 员工看板：未收款不能完成、重复完成不重复发、钱包退回、6 小时一次到店（159 项）
-npm run test:orderui     # 用 jsdom 真的开结帐页 / 订单页 / 看板跑一遍（119 项）
-npm run test:security    # 2.0 安全审计：§81 的 12 项攻击逐条试（214 项）
-npm run test:analytics   # 2.0 业绩分析：通路业绩不重复计算、热销用快照（103 项）
-npm run test:mvp         # ★ §84 现场验收：Jason 那一单从下单到钱包收到 Reward（115 项）
-npm run test:admin-ui    # 员工端 / 顾客端页面真的开起来跑（123 项）
-npm run build:copypaste  # 改完 .gs 之后重新产生那份复制贴上文件
+# 1) 改 apps-script/Code.gs
+# 2) 检查：只有一个 .gs / 20 个段落都在 / action 有没有指向不存在的函数 /
+#    前端用到的 90 个 action 后端都有 / 版本号码一致 /
+#    用这个档案跑一次 POS 进单 + 会员点单端到端
+npm run check:backend
+# 3) commit + push
 ```
 
-`demo/google-shim.js` 在 Node 里模拟 `SpreadsheetApp` / `LockService` /
-`PropertiesService` / `CacheService` / `Utilities.computeDigest` / `UrlFetchApp`，
-所以测试执行的是 **`apps-script/` 里真实的后端程式码**，不是另一份复制品。
+**怎么把后端更新到线上（只有一次复制贴上）：**
 
-覆盖项目（企划书 §69 + 防重复注册）：
+1. 打开 <https://script.google.com> 你的专案
+2. 把 **Code 以外的旧档案全部删掉**（点档案右侧 ⋮ → 删除）
+   —— 以前要贴 20 个档案，现在只要一个；留着旧的会跟这份打架
+3. 打开 `Code` → Ctrl+A 全选 → 贴上 GitHub 上 `apps-script/Code.gs` 的全部内容
+4. 💾 储存（Ctrl+S）→ 部署 → 管理部署 → 编辑（✏️）→ 版本：建立新版本 → 部署
+   （API URL 不会变，前端不用改）
 
-| # | 测试 | # | 测试 |
-|---|---|---|---|
-| 01 | 新会员注册 | 12 | 会员等级更新 |
-| 02 | ★ 旧会员登录（同一号码不重复注册） | 13 | 奖励产生 |
-| 03 | 员工登录 | 14 | 打开奖励 |
-| 04 | 建立 Foodcourt Claim | 15 | 重复打开奖励 → 拒绝 |
-| 05 | 重复订单号 → 拒绝 | 16 | 钱包余额 |
-| 06 | 扫描有效 QR | 17 | 钱包抵扣 |
-| 07 | 无效 QR → 拒绝 | 18 | 超出抵扣上限 → 拒绝 |
-| 08 | 过期 Claim → 拒绝 | 19 | 余额不足 → 拒绝 |
-| 09 | 认领订单 | 20 | 并发认领 → 只有一个成功 |
-| 10 | 重复认领 → 拒绝 | 21 | 并发领奖 → 只有一个成功 |
-| 11 | 积分发放 | 22 | 未授权 Admin API → 拒绝 |
+**贴完怎么确认是最新版？** 用员工账号进 **MORE 页**，最下面会显示：
 
-另外验证：取消订单会撤销积分与已领奖励、Audit Log 完整、
-Dashboard 统计、密码以 Salted Hash 储存且每人 Salt 不同。
+- `✓ 后端 v2.1.17 · 已是最新版` → 贴对了
+- `⚠ 后端 vX ≠ 前端 v2.1.17 · 请重新贴 Apps Script` → 还是旧版
 
----
+（这个版本号来自 `ping` 回的 `APP_VERSION`，也就是档案里第 52 行那一行。）
+
+> 也可以让 GitHub Actions 自动推：`.github/workflows/deploy-apps-script.yml`
+> 会在 `main` 分支的 `apps-script/` 有改动时用 `clasp push` + `clasp deploy`
+> （需要 `CLASP_SCRIPT_ID` / `CLASPRC_JSON` 两个 secrets）；
+> 在开发分支上工作时还是要手动贴。
 
 ## 5. 核心规则（实作摘要）
 
@@ -376,30 +449,31 @@ App 内 `PROFILE` 页面有完整隐私说明。
 
 ---
 
-## 9. 2.0 Smart Ordering（进行中）
+## 9. 2.0 Smart Ordering
 
-2.0 的完整计划书在 [`PLAN-2.0.md`](PLAN-2.0.md)（86 节），1.x 的审计结果在
-[`docs/AUDIT-1.x.md`](docs/AUDIT-1.x.md)。
+2.0 的完整计划书在 [`PLAN-2.0.md`](PLAN-2.0.md)（86 节）。
 
-**进度：计划书里的 12 个 Phase 全部完成，§84 现场验收流程已逐步跑通。**
+**进度：计划书里的 12 个 Phase 全部完成。**
 顾客端（酒单 → 商品 → 购物车 → 结帐 → 订单追踪 → 我的订单）、
 员工端（订单看板 · 菜单管理）、Owner（业绩报表）都已可用。
 
-`npm run test:mvp` 就是 §84 那条现场流程的自动化版本：
+§84 那条现场流程（原本由 `test-mvp.js` 自动化，已在 2.1 移除）：
 Jason 登入 → 酒单 → Mojito×2 + Long Island = RM72 → 钱包抵 RM8 → 桌号 A12 →
 下单 → 员工接单 / 制作 / 完成 → 钱包只扣一次、积分只发一次（64 分，§57）、
 到店只算一次、Reward 只产生一次 → **Jason 打开 Reward，钱包收到钱**。
 同时确认 AppOrder / OrderItems / PointTransaction / WalletTransaction /
 AuditLog 都正确写入，而 §85 的 Foodcourt 认领照常运作。
 
-顾客端完整流程已可用：
-`menu.html`（酒单 + 搜寻 + 分类 + 风味筛选 + 售罄）→
-`product.html`（规格 Size / ICE / SWEETNESS + 数量 + 备注）→
-`cart.html`（购物车）→ `checkout.html`（后端报价 + 桌号 + 钱包 + 确认）→
+顾客端完整流程：
+`menu.html`（★ 单页点单：搜寻 / 分类 / 风味 / 规格抽屉 / 购物车条，全部不换页）→
+`checkout.html`（后端报价 + 桌号 / 外带 + 钱包 + 确认）→
 `order.html`（订单进度追踪）/ `orders.html`（我的订单 + 再点一次）。
+`product.html`（规格 + 备注的完整页）与 `cart.html`（购物车页）保留给
+直接连结与返回键使用，功能与抽屉相同。
 
 员工端：`admin/orderboard.html` —— 三栏看板（NEW / CONFIRMED / PREPARING / READY）、
 等待计时、新单提示音（可 MUTE）、收款、完成、取消、一键暂停接单。
+`admin/pos.html` —— foodcourt 通路：录入单据 → 待进单队列 → 扫会员码进分。
 
 ### 9.1 已经就位的东西
 

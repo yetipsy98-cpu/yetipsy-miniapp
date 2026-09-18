@@ -19,7 +19,7 @@ var ORDERS = (function () {
 
   var STATUS = {
     SUBMITTED: { zh: '已提交', en: 'SUBMITTED', color: 'var(--gold)' },
-    CONFIRMED: { zh: '已确认', en: 'CONFIRMED', color: 'var(--gold)' },
+    CONFIRMED: { zh: '制作中', en: 'PREPARING', color: 'var(--gold)' },   // 2.1.13 不再显示「已确认」
     PREPARING: { zh: '制作中', en: 'PREPARING', color: 'var(--gold)' },
     READY:     { zh: '可以取酒', en: 'READY',   color: 'var(--ok)' },
     COMPLETED: { zh: '已完成', en: 'COMPLETED', color: 'var(--ok)' },

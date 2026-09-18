@@ -6,7 +6,7 @@
 <meta name="theme-color" content="#0D0D0D">
 <title>YETIPSY — 会员条码</title>
 <link rel="manifest" href="manifest.json">
-<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/app.css?v=2.1.17">
 <style>
 /* 条码要白底黑条，扫描器才认得；这一页刻意反白 */
 .code-stage {
@@ -86,30 +86,30 @@
   </div>
 
   <div class="code-tip">
-    把这一页出示给店员扫描，用来确认是你本人，然后才能抵扣钱包。<br>
+    把这一页出示给店员扫描 —— 确认是你本人，然后进分或抵扣钱包。<br>
     条码每 <span id="ttlText">60</span> 秒自动更换，旧码扫过就失效。<br>
     <span class="muted-2">Show this screen to our staff to verify it’s really you
-    before any wallet redemption.</span>
+    before any points, reward or wallet action.</span>
   </div>
 
   <div class="code-actions">
     <button id="refreshBtn" class="btn btn-secondary">
       <span>换一条<span class="btn-sub-label">REFRESH</span></span>
     </button>
-    <a href="wallet.html" class="btn btn-primary">
-      <span>返回钱包<span class="btn-sub-label">BACK</span></span>
+    <a href="index.html" class="btn btn-primary">
+      <span>返回首页<span class="btn-sub-label">HOME</span></span>
     </a>
   </div>
 
 </div>
 
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/vendor/jsbarcode.min.js"></script>
-<script src="js/vendor/qrcode.js"></script>
-<script src="js/code.js"></script>
+<script src="js/config.js?v=2.1.17"></script>
+<script src="js/api.js?v=2.1.17"></script>
+<script src="js/auth.js?v=2.1.17"></script>
+<script src="js/ui.js?v=2.1.17"></script>
+<script src="js/vendor/jsbarcode.min.js?v=2.1.17"></script>
+<script src="js/vendor/qrcode.js?v=2.1.17"></script>
+<script src="js/code.js?v=2.1.17"></script>
 
 <script>
 /* PWA：註冊 Service Worker（只 Cache App Shell，不 Cache 任何敏感资料） */

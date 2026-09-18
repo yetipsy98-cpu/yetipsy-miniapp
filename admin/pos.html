@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#0B0B0B">
+<title>YETIPSY STAFF — POS 进单</title>
+<link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
+<link rel="stylesheet" href="../css/app.css?v=2.1.17">
+<link rel="stylesheet" href="../css/admin.css?v=2.1.17">
+</head>
+<body class="admin">
+
+<div class="a-page pos-page">
+
+  <!-- 分页：点餐台（像 POS 机）/ 待进单队列 -->
+  <div class="pos-tabs">
+    <button class="pt on" id="tabKiosk">
+      点餐台 <span class="pt-en">KIOSK</span>
+    </button>
+    <button class="pt" id="tabQueue">
+      待进单 <span class="pt-en">QUEUE</span>
+      <span class="pt-badge" id="tabQueueCount">0</span>
+    </button>
+    <span class="net-pill" id="netPill" style="display:none">⚠ 连线不稳</span>
+  </div>
+  <div class="tiny muted-2" id="posVersion" style="text-align:right;margin:-6px 2px 6px"></div>
+
+  <!-- ================= ① 点餐台 ================= -->
+  <div id="stepKiosk">
+
+    <div class="kiosk-search">
+      <input class="a-input" id="kioskSearch" type="search" autocomplete="off"
+             placeholder="找商品 Search product…">
+    </div>
+
+    <div class="pos-bar">
+      <span class="a-sub" id="kioskStatus">载入中…</span>
+      <button class="chip" id="kioskRefreshBtn">刷新 REFRESH</button>
+    </div>
+
+    <div class="cat-strip kiosk-cats" id="kioskCats"></div>
+    <div class="kiosk-grid" id="kioskGrid"></div>
+
+    <!-- 底部：目前这张单 -->
+    <div class="kiosk-bar" id="kioskBar" style="display:none">
+      <button class="kb-main" id="kioskOpenTicket">
+        <span class="kb-count" id="kbCount">0</span>
+        <span class="kb-text">这张单 <span class="kb-total" id="kbTotal">RM 0.00</span></span>
+      </button>
+      <button class="kb-go" id="kioskTicketBtn">明细</button>
+      <button class="kb-go primary" id="kioskCheckoutBtn">结账 CHECKOUT</button>
+    </div>
+  </div>
+
+  <!-- ================= ② 待进单队列 ================= -->
+  <div id="stepQueue" style="display:none">
+
+    <div class="pos-stats">
+      <div class="dash-card">
+        <div class="dc-label">待进单 OPEN</div>
+        <div class="dc-value gold" id="statOpen">0</div>
+      </div>
+      <div class="dash-card">
+        <div class="dc-label">今日进单 BOUND</div>
+        <div class="dc-value" id="statBound">0</div>
+      </div>
+      <div class="dash-card">
+        <div class="dc-label">今日积分 POINTS</div>
+        <div class="dc-value" id="statPoints">0</div>
+      </div>
+    </div>
+
+    <div class="pos-bar">
+      <span class="a-sub" id="queueStatus">载入中…</span>
+      <button class="chip" id="posMuteBtn">🔔 声音 SOUND</button>
+      <button class="chip" id="refreshBtn">刷新 REFRESH</button>
+    </div>
+
+    <div class="a-section-title">
+      待进单 OPEN <span class="pos-count" id="queueCount">0</span>
+    </div>
+    <div id="queueBody"></div>
+
+    <div class="a-section-title">今日已进单 TODAY</div>
+    <div id="todayBody"></div>
+  </div>
+
+  <!-- ================= ③ 扫会员码 ================= -->
+  <div id="stepScan" style="display:none">
+    <div class="a-section-title" style="margin-top:0">② 扫顾客会员码 SCAN MEMBER</div>
+
+    <div class="ticket picked" id="scanTicketBox"></div>
+
+    <div class="pos-scan" id="scanBox" style="display:none">
+      <video id="scanVideo" muted playsinline></video>
+      <div class="scan-frame"></div>
+    </div>
+
+    <div class="a-sub mt-12" id="scanHint">请顾客出示会员码（条码，或条码下方的 QR）</div>
+    <div class="a-sub mt-8" id="scanSupport"></div>
+
+    <button class="btn btn-primary mt-16" id="startScanBtn" style="width:100%">开启相机 START CAMERA</button>
+    <button class="btn btn-ghost mt-8" id="stopScanBtn" style="width:100%;display:none">停止 STOP</button>
+
+    <div class="a-divider"></div>
+    <div class="a-sub">相机不能用？请顾客报出条码内容，手动输入</div>
+    <div class="row-between mt-8" style="gap:8px">
+      <input class="a-input" id="manualInput" placeholder="YT1|YT000001|…" style="flex:1 1 auto">
+      <button class="btn btn-secondary" id="manualBtn" style="width:auto;padding:0 16px">输入</button>
+    </div>
+
+    <div class="a-divider"></div>
+    <div class="a-sub">顾客没带手机 / 没会员码？用手机号找会员（会写 AUDIT）</div>
+    <div class="row-between mt-8" style="gap:8px">
+      <input class="a-input" id="memberSearchInput" inputmode="tel"
+             placeholder="0123456789 / +60123456789" style="flex:1 1 auto">
+      <button class="btn btn-secondary" id="memberSearchBtn" style="width:auto;padding:0 16px">找会员</button>
+    </div>
+    <div id="memberHits"></div>
+
+    <button class="btn btn-ghost mt-16" id="backToQueueBtn" style="width:100%">← 回待进单 BACK</button>
+  </div>
+
+  <!-- ================= ④ 确认进分 ================= -->
+  <div id="stepConfirm" style="display:none">
+    <div class="a-section-title" style="margin-top:0">③ 确认进分 CONFIRM</div>
+
+    <div class="cust-card" id="confirmCustomer"></div>
+    <div class="panel" id="confirmTicket"></div>
+
+    <div class="a-sub mt-8" id="verifyLeft">—</div>
+
+    <button class="btn btn-primary mt-16 big-action" id="confirmBtn" style="width:100%">
+      确认进分 CONFIRM
+      <span class="ba-sub">积分 / Reward / 到店次数由后端自动计算</span>
+    </button>
+    <button class="btn btn-ghost mt-8" id="rescanBtn" style="width:100%">重新扫码 RESCAN</button>
+  </div>
+
+  <!-- ================= ⑤ 结果 ================= -->
+  <div id="stepResult" style="display:none">
+    <div class="a-section-title" style="margin-top:0">✓ 已进单 DONE</div>
+
+    <div class="cust-card" style="text-align:center">
+      <div class="a-title" id="rName">—</div>
+      <div class="pos-big mt-8" id="rPoints">+0 分</div>
+      <div class="a-sub" id="rReward"></div>
+    </div>
+
+    <div class="panel">
+      <div class="pos-row"><span class="pos-k">单据 TICKET</span><span class="pos-v" id="rTicket">—</span></div>
+      <div class="pos-row"><span class="pos-k">消费 BILL</span><span class="pos-v" id="rBill">—</span></div>
+      <div class="pos-row"><span class="pos-k">到店 VISIT</span><span class="pos-v" id="rVisit">—</span></div>
+      <div class="pos-row"><span class="pos-k">积分总计 TOTAL</span><span class="pos-v" id="rTotal">—</span></div>
+    </div>
+
+    <div class="a-sub mt-12">
+      积分按 POINTS_PER_RM 自动计算，达门槛自动发 Reward 到顾客的会员端。<br>
+      六小时内的重复消费不会重复计到店次数。
+    </div>
+
+    <button class="btn btn-primary mt-16" id="nextTicketBtn" style="width:100%">下一张 NEXT TICKET</button>
+  </div>
+
+</div>
+
+<!-- ================= 清单抽屉（POS 机的订单清单） ================= -->
+<div class="pos-sheet" id="ticketSheet" style="display:none">
+  <div class="pos-sheet-inner">
+    <div class="ps-head">
+      <div>
+        <div class="ps-title">② 结账 <span class="tiny muted-2">CHECKOUT</span></div>
+        <div class="a-sub" id="ticketSub">—</div>
+      </div>
+      <button class="ps-close" id="ticketSheetClose">✕</button>
+    </div>
+
+    <div class="ps-body" id="ticketLines"></div>
+
+    <div class="ps-total">
+      <span>合计 TOTAL</span>
+      <b id="ticketTotal">RM 0.00</b>
+    </div>
+
+    <div class="ps-fields">
+      <input class="a-input" id="ticketNoInput" placeholder="单据编号（选填）FC8231"
+             maxlength="30" autocomplete="off">
+      <input class="a-input" id="ticketNoteInput" placeholder="备注（选填）4 号桌"
+             maxlength="60" autocomplete="off">
+    </div>
+    <div class="ps-quick" id="noteChips">
+      <button class="pq" data-note="内用">内用 DINE-IN</button>
+      <button class="pq" data-note="外带">外带 TAKEAWAY</button>
+      <button class="pq" data-note="">清除 CLEAR</button>
+    </div>
+
+    <div class="a-sub" style="margin:10px 2px 4px">付款方式 PAYMENT</div>
+    <div class="ps-quick" id="payChips">
+      <button class="pq on" data-pay="CASH">现金 CASH</button>
+      <button class="pq" data-pay="CARD">刷卡 CARD</button>
+      <button class="pq" data-pay="DUITNOW">DuitNow QR</button>
+      <button class="pq" data-pay="COUNTER">柜台付 COUNTER</button>
+    </div>
+
+    <label class="ps-check">
+      <input type="checkbox" id="manualAmountToggle">
+      <span>收据金额跟这里不同？直接输入收据上的金额</span>
+    </label>
+
+    <!-- 金额键盘（POS 机那样） -->
+    <div class="ps-pad" id="manualPad" style="display:none">
+      <div class="pad-amount">
+        <span class="pa-cur">RM</span>
+        <span class="pa-val" id="manualAmount">0.00</span>
+        <button class="pad-clr" id="manualClear">清空 CLR</button>
+      </div>
+      <div class="pad-keys" id="padKeys">
+        <button class="pk" data-key="1">1</button>
+        <button class="pk" data-key="2">2</button>
+        <button class="pk" data-key="3">3</button>
+        <button class="pk" data-key="4">4</button>
+        <button class="pk" data-key="5">5</button>
+        <button class="pk" data-key="6">6</button>
+        <button class="pk" data-key="7">7</button>
+        <button class="pk" data-key="8">8</button>
+        <button class="pk" data-key="9">9</button>
+        <button class="pk" data-key="."><span class="pk-sub">POINT</span>.</button>
+        <button class="pk" data-key="0">0</button>
+        <button class="pk back" data-key="del">⌫</button>
+      </div>
+    </div>
+
+    <button class="big-action" id="saveTicketBtn">
+      结账 · 记录单据 CHECKOUT
+      <span class="ba-sub">下一步：扫顾客会员码进分（顾客没带会员码也可以搜手机号）</span>
+    </button>
+    <div class="row-between mt-8" style="gap:8px">
+      <button class="btn btn-ghost" id="sheetAddMoreBtn" style="flex:1 1 auto">＋ 加商品 ADD</button>
+      <button class="chip ps-clear" id="ticketClearBtn">清空 CLEAR</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= 规格抽屉（有规格的商品） ================= -->
+<div class="pos-sheet" id="optionSheet" style="display:none">
+  <div class="pos-sheet-inner">
+    <div class="ps-head">
+      <div>
+        <div class="ps-title" id="optTitle">—</div>
+        <div class="a-sub" id="optSub">—</div>
+      </div>
+      <button class="ps-close" id="optionSheetClose">✕</button>
+    </div>
+
+    <div class="ps-body" id="optionBody"></div>
+
+    <div class="ps-total">
+      <span>这一杯 EACH</span>
+      <b id="optPrice">RM 0.00</b>
+    </div>
+
+    <div class="opt-foot">
+      <div class="qty-ctrl">
+        <button class="qty-btn" id="optQtyMinus">−</button>
+        <span class="qty-value" id="optQtyValue">1</span>
+        <button class="qty-btn" id="optQtyPlus">+</button>
+      </div>
+      <button class="big-action" id="optAddBtn" style="margin:0">加入 ADD</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/config.js?v=2.1.17"></script>
+<script src="../js/api.js?v=2.1.17"></script>
+<script src="../js/auth.js?v=2.1.17"></script>
+<script src="../js/ui.js?v=2.1.17"></script>
+<script src="../js/admin.js?v=2.1.17"></script>
+<script src="../js/scanner.js?v=2.1.17"></script>
+<script src="../js/vendor/jsQR.js?v=2.1.17"></script>
+<script src="../js/admin-pos.js?v=2.1.17"></script>
+<script>
+  if (ADMIN.requireAuth()) {
+    ADMIN.renderShell({ title: 'POS 进单' });
+    ADMIN_POS.init();
+  }
+</script>
+</body>
+</html>

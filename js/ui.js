@@ -1,7 +1,7 @@
 /* =============================================================
    YETIPSY — ui.js
    -------------------------------------------------------------
-   共用 UI 工具：金额格式化（sen）、Toast、底部导航、
+   共用 UI 工具：金额格式化（sen）、Toast、页面顶部栏、
    中英双语标签、QR 生成、QR 扫描、载入状态
    ============================================================= */
 
@@ -179,21 +179,10 @@ var UI = (function () {
   }
 
   /* =========================================================
-     6. 底部导航（会员端）
+     6. 图标（线性 SVG，跟着 currentColor）
      ========================================================= */
 
-  /* 2.0 会员端导览：HOME（导览界面）· MENU · 会员码 · 会员中心
-     钱包 / 我的订单 / 活动记录改从首页下方与会员中心进入，
-     页面本身都还在（§68 不能断掉 1.x 的网址）。 */
-  var NAV = [
-    { page: 'index.html',    zh: '首页',     en: 'HOME',        icon: 'home' },
-    { page: 'menu.html',     zh: '酒单',     en: 'MENU',        icon: 'menu' },
-    { page: 'code.html',     zh: '会员码',   en: 'MEMBER CODE', icon: 'scan' },
-    { page: 'profile.html',  zh: '会员中心', en: 'MEMBER',      icon: 'profile' }
-  ];
-
   var ICONS = {
-    home: '<path d="M3 10.5 12 3l9 7.5"/><path d="M5.5 9.5V20h13V9.5"/>',
     activity: '<path d="M4 12h3l2.5-6 3 12L15 12h5"/>',
     orders: '<path d="M6 3.5h9l3.5 3.5v13.5H6Z"/><path d="M9 10h6M9 13.5h6M9 17h4"/>',
     wallet: '<path d="M3 7.5A2.5 2.5 0 0 1 5.5 5H18a1 1 0 0 1 1 1v2"/><path d="M3 7.5V18a1 1 0 0 0 1 1h15a2 2 0 0 0 2-2v-6a2 2 0 0 0-2-2H6"/><circle cx="17" cy="14" r="1.2"/>',
@@ -206,22 +195,6 @@ var UI = (function () {
     return '<svg class="icon" width="' + (size || 22) + '" height="' + (size || 22) +
       '" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" ' +
       'stroke-linecap="round" stroke-linejoin="round">' + (ICONS[name] || '') + '</svg>';
-  }
-
-  function renderBottomNav(active) {
-    var current = active || location.pathname.split('/').pop() || 'index.html';
-    var html = '<nav class="bottom-nav">';
-    NAV.forEach(function (item) {
-      var isActive = item.page === current;
-      html += '<a href="' + item.page + '" class="nav-item' + (isActive ? ' active' : '') + '">' +
-        icon(item.icon) +
-        '<span class="nav-zh">' + item.zh + '</span>' +
-        '<span class="nav-en">' + item.en + '</span>' +
-        '</a>';
-    });
-    html += '</nav>';
-    document.body.insertAdjacentHTML('beforeend', html);
-    document.body.classList.add('has-bottom-nav');
   }
 
   /* =========================================================
@@ -439,6 +412,55 @@ var UI = (function () {
     return local.length >= 7 && local.length <= 12;
   }
 
+  /**
+   * 规格分组（2.1.16）
+   * ---------------------------------------------------------
+   * 后端 `optionsByProduct[productId]` 给的是「每个规格一笔」的平铺清单：
+   *   [{ optionId, optionGroup:'SIZE', nameEN:'Large', priceAdjustment:400, … }]
+   * 但画面要的是「一群一列」（SIZE → Large / Regular）：
+   *   [{ optionGroup:'SIZE', nameEN:'SIZE', options:[…] }]
+   * 这里把两种形状都吃下来，顺便滤掉已下架的规格。
+   * （以前 menu.js / pos 都直接当成分好群的资料用，结果规格一列都画不出来 → 选规格失效。）
+   */
+  function optionGroups(list) {
+    var out = [], index = {};
+
+    function group(key, en, zh, required) {
+      var k = String(key || '').toUpperCase() || 'OPTION';
+      if (!index[k]) {
+        index[k] = { optionGroup: key || k, nameEN: en || key || k, nameZH: zh || '',
+                     required: !!required, options: [] };
+        out.push(index[k]);
+      }
+      var g = index[k];
+      if (!g.nameEN && en) g.nameEN = en;
+      if (!g.nameZH && zh) g.nameZH = zh;
+      if (required) g.required = true;
+      return g;
+    }
+
+    (list || []).forEach(function (o) {
+      if (!o) return;
+      if (String(o.status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;   // 下架的规格不显示
+
+      /* 已经是「一群」的形状（有的版本这样回）→ 原样收下 */
+      if (o.options && typeof o.options.length === 'number') {
+        var g0 = group(o.optionGroup || o.nameEN, o.nameEN || o.optionGroup, o.nameZH, o.required);
+        (o.options || []).forEach(function (x) {
+          if (!x || String(x.status || 'ACTIVE').toUpperCase() !== 'ACTIVE') return;
+          g0.options.push(x);
+          if (x.required) g0.required = true;
+        });
+        return;
+      }
+
+      var g = group(o.optionGroup, o.optionGroupNameEN || o.optionGroup, o.optionGroupNameZH, o.required);
+      g.options.push(o);
+    });
+
+    return out.filter(function (g) { return g.options.length; });
+  }
+
   function confirmDialog(messageZh, messageEn, confirmText) {
     return new Promise(function (resolve) {
       var overlay = document.createElement('div');
@@ -467,7 +489,154 @@ var UI = (function () {
     });
   }
 
+  /* =========================================================
+     语音播报 + 大字提示（2.1.10）
+     ---------------------------------------------------------
+     新订单来的时候员工要「听得到 + 看得到」：
+       UI.say('您有新订单')        → 讲出来（浏览器的语音合成，免下载）
+       UI.announceNewOrder(2)     → 讲「您有 2 个新订单」＋画面跳大字横幅
+     浏览器规则：语音通常要页面先被点过才准出声，
+     所以 UI.say 会在第一次点画面时自动「解锁」（讲一个空白字串）。
+     ========================================================= */
+  var voiceOn = true;          // 页面可以用 UI.setVoice(false) 关掉
+  var unlocked = false;
+
+  function speech() {
+    return (typeof window !== 'undefined' && window.speechSynthesis) || null;
+  }
+
+  /** 挑一个中文声音；没有就随便挑一个（英文声音唸中文数字也还能懂） */
+  function pickVoice() {
+    var syn = speech();
+    if (!syn || !syn.getVoices) return null;
+    var list = syn.getVoices() || [];
+    if (!list.length) return null;
+    var want = ['zh-CN', 'zh-TW', 'zh-HK', 'zh'];
+    for (var w = 0; w < want.length; w++) {
+      for (var i = 0; i < list.length; i++) {
+        if (String(list[i].lang || '').toLowerCase().indexOf(want[w].toLowerCase()) === 0) return list[i];
+      }
+    }
+    for (var j = 0; j < list.length; j++) {
+      if (String(list[j].lang || '').toLowerCase().indexOf('zh') === 0) return list[j];
+    }
+    return null;
+  }
+
+  /** 第一次点画面时把语音解锁（Chrome 要这个动作才肯出声） */
+  function unlockVoice() {
+    if (unlocked) return;
+    unlocked = true;
+    var syn = speech();
+    if (!syn) return;
+    try {
+      var u = new window.SpeechSynthesisUtterance(' ');
+      u.volume = 0;
+      u.lang = 'zh-CN';
+      syn.speak(u);
+    } catch (e) {}
+    document.removeEventListener('touchstart', unlockVoice);
+    document.removeEventListener('pointerdown', unlockVoice);
+    document.removeEventListener('keydown', unlockVoice);
+  }
+
+  function bindUnlock() {
+    try {
+      document.addEventListener('touchstart', unlockVoice, { passive: true });
+      document.addEventListener('pointerdown', unlockVoice);
+      document.addEventListener('keydown', unlockVoice);
+    } catch (e) {}
+  }
+
+  function setVoice(on) { voiceOn = !!on; }
+
+  /**
+   * 讲一句话。成功回 true；浏览器没有语音（或说不出话）回 false，
+   * 呼叫方可以改用「哔」声。
+   */
+  function say(text, options) {
+    var syn = speech();
+    if (!syn || !window.SpeechSynthesisUtterance) return false;
+    if (options && options.force !== true && !voiceOn) return false;
+    try {
+      if (syn.speaking) { syn.cancel(); }          // 不要排队排到天边
+      var u = new window.SpeechSynthesisUtterance(String(text));
+      var v = pickVoice();
+      u.lang = (v && v.lang) || 'zh-CN';
+      if (v) u.voice = v;
+      u.rate = (options && options.rate) || 1;
+      u.pitch = 1;
+      u.volume = 1;
+      syn.speak(u);
+      return true;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  /** 大字横幅：🔔 您有新订单（3.5 秒后自己收） */
+  function banner(text) {
+    var node = document.getElementById('voiceBanner');
+    if (!node) {
+      node = document.createElement('div');
+      node.id = 'voiceBanner';
+      node.className = 'voice-banner';
+      document.body.appendChild(node);
+    }
+    node.innerHTML = '<div class="vb-text">' + esc(text) + '</div>';
+    node.classList.add('on');
+    if (node._t) clearTimeout(node._t);
+    node._t = setTimeout(function () { node.classList.remove('on'); }, 3500);
+  }
+
+  /**
+   * 新订单：讲出来 + 跳横幅。
+   * count 1 → 「您有新订单」／多于 1 → 「您有 N 个新订单」
+   */
+  function announceNewOrder(count) {
+    var n = Math.max(1, Number(count) || 1);
+    var text = n > 1 ? '您有 ' + n + ' 个新订单' : '您有新订单';
+    var spoke = say(text);
+    banner(n > 1 ? '🔔 ' + text + '（' + n + '）' : '🔔 ' + text);
+    return spoke;
+  }
+
+  bindUnlock();
+
+  /* =========================================================
+     连线提示（每页一个 #netPill）
+     ---------------------------------------------------------
+     pageFailed = 这一页自己最后一次载入有没有失败
+     netState   = API.netState()（'ok' / 'slow' / 'offline'）
+     规则：自己失败 or 后端离线 → 显示「连线不稳 · 显示上次资料」
+           只是慢 → 显示「连线慢 · 重试中」
+           都正常 → 收起来
+     重点：别的请求成功（netState 变 ok）不会盖掉「这一页失败」的事实
+     ========================================================= */
+  function netPill(pageFailed, netState) {
+    var pill = document.getElementById('netPill');
+    if (!pill) return;
+    var st = netState;
+    if (!st && typeof API !== 'undefined' && API.netState) st = API.netState();
+    if (!st) st = 'ok';
+    if (!pageFailed && st === 'ok') {
+      pill.style.display = 'none';
+      pill.textContent = '';
+      return;
+    }
+    pill.textContent = (pageFailed || st === 'offline')
+      ? '⚠ 连线不稳 · 显示上次资料'
+      : '⚠ 连线慢 · 重试中';
+    pill.style.display = '';
+  }
+
   return {
+    say: say,
+    announceNewOrder: announceNewOrder,
+    setVoice: setVoice,
+    unlockVoice: unlockVoice,
+    voiceBanner: banner,
+    netPill: netPill,
     money: money,
     moneyPlain: moneyPlain,
     parseMoneyToSen: parseMoneyToSen,
@@ -487,7 +656,6 @@ var UI = (function () {
     hideLoading: hideLoading,
     setLoading: setLoading,
     icon: icon,
-    renderBottomNav: renderBottomNav,
     renderHeader: renderHeader,
     renderQR: renderQR,
     qrDataUrl: qrDataUrl,
@@ -498,6 +666,7 @@ var UI = (function () {
     normalizePhone: normalizePhone,
     isValidPhone: isValidPhone,
     allowedCountryCodes: allowedCountryCodes,
+    optionGroups: optionGroups,
     confirmDialog: confirmDialog
   };
 })();

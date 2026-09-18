@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#0B0B0B">
 <title>YETIPSY STAFF</title>
 <link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
-<link rel="stylesheet" href="../css/app.css">
-<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/app.css?v=2.1.17">
+<link rel="stylesheet" href="../css/admin.css?v=2.1.17">
 </head>
 <body class="admin">
 
@@ -40,28 +40,25 @@
     <a href="../index.html" class="tiny muted-2">BACK TO CUSTOMER APP 返回会员端</a>
   </div>
 
-  <div class="footnote">YETIPSY MINI APP 1.6 · ORDERING EDITION</div>
+  <div class="footnote">YETIPSY MINI APP 2.1.17 · FOODCOURT POS EDITION</div>
 </div>
 
-<script src="../js/config.js"></script>
-<script src="../js/api.js"></script>
-<script src="../js/auth.js"></script>
-<script src="../js/ui.js"></script>
-<script src="../js/admin.js"></script>
+<script src="../js/config.js?v=2.1.17"></script>
+<script src="../js/api.js?v=2.1.17"></script>
+<script src="../js/auth.js?v=2.1.17"></script>
+<script src="../js/ui.js?v=2.1.17"></script>
+<script src="../js/admin.js?v=2.1.17"></script>
 <script>
 (function () {
   var btn = document.getElementById('loginBtn');
   var u   = document.getElementById('usernameInput');
   var p   = document.getElementById('passwordInput');
 
-  if (YETIPSY_CONFIG.IS_MISCONFIGURED && YETIPSY_CONFIG.IS_MISCONFIGURED()) {
+  if (YETIPSY_CONFIG.IS_MISCONFIGURED()) {
     document.getElementById('demoBanner').innerHTML =
       '<div class="demo-banner" style="border-color:#E2696B;color:#E2696B">' +
       'BACKEND NOT CONFIGURED · 未配置后端<br>' +
       '<span class="tiny">请在 js/config.js 填入 API_URL（Google Apps Script Web App URL）。</span></div>';
-  } else if (YETIPSY_CONFIG.IS_DEMO()) {
-    document.getElementById('demoBanner').innerHTML =
-      '<div class="demo-banner">DEMO MODE · owner / manager / staff<br>password: yetipsy123</div>';
   }
 
   if (AUTH.isStaffLoggedIn()) {
@@ -86,6 +83,9 @@
         return;
       }
       AUTH.setStaffSession(res.data.token, res.data.staff);
+      /* 登入后马上预载员工端资料（点餐台酒单 / 待进单 / 看板），
+         这样进去第一页就已经有资料，不用等后端 */
+      try { if (API.cache && API.cache.prefetchStaff) API.cache.prefetchStaff(); } catch (e) {}
       location.replace('index.html');
     });
   }

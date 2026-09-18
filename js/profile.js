@@ -46,6 +46,10 @@ var PROFILE = (function () {
     document.getElementById('statSpend').textContent  = UI.money(c.totalSpend);
     document.getElementById('statVisits').textContent = UI.points(c.totalVisits);
 
+    /* 「钱包与记录」那一列的余额（首页只有四个入口，这里也让顾客看得到钱包） */
+    var walletRow = document.getElementById('walletRowValue');
+    if (walletRow) walletRow.textContent = UI.money(c.walletBalance);
+
     document.getElementById('nameInput').value     = c.name || '';
     document.getElementById('birthdayInput').value = c.birthday || '';
     document.getElementById('phoneInput').value    = c.phone || '';
@@ -58,6 +62,7 @@ var PROFILE = (function () {
 
     UI.setLoading(btn, true, 'SAVING');
     API.customer.updateProfile(name, birthday).then(function (res) {
+      if (res.success && API.cache) API.cache.clear();
       UI.setLoading(btn, false);
       if (!res.success) {
         if (!AUTH.handleSessionError(res.error)) UI.toast(res.error.message, 'error');
@@ -99,14 +104,17 @@ var PROFILE = (function () {
     });
   }
 
+  /**
+   * ★ 登出不等后端。
+   * 以前是 API.customer.logout().then(清 session + 跳页) —— 现场网路一慢
+   * （Apps Script 有时候要好几秒）就会变成「按了没反应」。
+   * 现在：按下去立刻清 session、立刻跳登录页，后端通知只是顺带送出的。
+   */
   function logout() {
     UI.confirmDialog('确定要登出吗？', 'Log out from this device?', '登出 LOG OUT')
       .then(function (yes) {
         if (!yes) return;
-        API.customer.logout().then(function () {
-          AUTH.clearCustomer();
-          location.replace('login.html');
-        });
+        AUTH.logoutCustomer();
       });
   }
 

@@ -22,26 +22,36 @@ GitHub Pages（前端 HTML/JS）  ──POST──▶  Google Apps Script Web Ap
 
 ## 1. 档案
 
-| 档案 | 职责 |
-|---|---|
-| `Code.gs` | Web App 入口：`doPost` / `doGet`、action 分派、交易锁、统一回应格式 |
-| `Config.gs` | 13 张 Sheet 的栏位定义、预设设置、错误讯息表 |
-| `Utils.gs` | 时间 / 金额(sen) / SHA-256 / ID / **电话号码 E.164 规范化** |
-| `Database.gs` | Sheets 存取层：`dbLoad` / `dbFlush` / `setupDatabase` / `bootstrapOwner` / `dedupeCustomers` |
-| `Security.gs` | Session（只存 token hash）、角色权限、Rate limit |
-| `Audit.gs` | 操作记录 |
-| `Points.gs` | 积分与等级（门槛读 Settings） |
-| `Rewards.gs` | 奖励产生（后端随机 + 每日预算） |
-| `Wallet.gs` | 钱包储值 / 抵扣（抵扣前必须扫过会员条码）/ 上限 |
-| `Customers.gs` | 会员查号码 / 注册 / 密码登录 / 改密码 / 会员条码（**同一个号码只有一笔**） |
-| `Orders.gs` | 已验证消费记录、取消订单（撤销积分与奖励） |
-| `Claims.gs` | Claim QR / Code、认领、Dashboard |
-| `Promotions.gs` | 活动 CRUD + 会员端可见性诊断（EXPIRED / NOT_STARTED / INACTIVE） |
-| `Admin.gs` | 设置、积分调整、Audit Log、员工账号 |
-| `Auth.gs` | `ping`、员工登录（失败 6 次锁 5 分钟） |
-| `appsscript.json` | Apps Script manifest（V8 runtime、时区、权限范围） |
+**只有一个：`Code.gs`**（约 6600 行 · 就是你 Ctrl+A 贴进 Apps Script 的那一份）。
 
----
+它里面按顺序分成 20 个段落，每段开头写着
+`/* ===== [n/20] Xxx.gs — 说明 ===== */`，在 Apps Script 编辑器里
+Ctrl+F 搜 `===== [` 就能跳段：
+
+| # | 段落 | 职责 |
+|---|---|---|
+| 1 | `Config` | 所有设定与 17 张表的栏位定义（要改规则改这里） |
+| 2 | `Utils` | 日期 / 金额(sen) / SHA-256 / ID / 电话 E.164 正规化 |
+| 3 | `Database` | `dbLoad` / `dbFlush` / `setupDatabase` / `bootstrapOwner` / `dedupeCustomers` |
+| 4 | `Security` | Session（只存 token hash）、角色权限、Rate limit、登入锁定 |
+| 5 | `Audit` | 操作记录 |
+| 6 | `Points` | 积分与等级（门槛读 Settings） |
+| 7 | `Rewards` | 奖励产生（后端随机 + 每日预算） |
+| 8 | `Wallet` | 钱包储值 / 抵扣（抵扣前必须扫过会员条码）/ 上限 |
+| 9 | `Customers` | 会员查号码 / 注册 / 密码登录 / 改密码 / 会员条码 |
+| 10 | `Orders` | 已验证消费记录、取消订单（撤销积分与奖励） |
+| 11 | `Menu` | 酒单：分类 / 商品 / 规格 / 促销价 / 售罄 / 菜单快取 |
+| 12 | `Checkout` | 结帐报价：后端重算价格、钱包上限、Quote 5 分钟、防重复下单 |
+| 13 | `AppOrders` | `placeOrder`（幂等）、订单查询、取消、再点一次 |
+| 14 | `OrderBoard` | 员工看板：接单 / 制作 / 完成（幂等）、收款才扣钱包 |
+| 15 | `Analytics` | 今日统计、通路业绩、热销商品、会员分析 |
+| 16 | `Claims` | Claim QR / Code、认领；**2.1 POS 进单**（`createPosTicket` / `getPosQueue` / `bindPosTicket` / `cancelPosTicket`） |
+| 17 | `Promotions` | 活动 CRUD + 会员端可见性诊断 |
+| 18 | `Admin` | 员工端：Dashboard、会员查询、手动调整、重设密码、设置 |
+| 19 | `Auth` | `ping`、`getPublicSettings`、员工登录（失败 6 次锁 5 分钟） |
+| 20 | `Code` | 唯一入口 `doPost()` / `doGet()`：action 白名单、交易锁、错误包装 |
+
+`appsscript.json` 是 manifest（V8 runtime、时区、权限范围）。
 
 ## 2. 第一次部署
 
@@ -94,26 +104,51 @@ bootstrapOwner('owner', '你的密码');    // 建立第一个老板账号（只
 > 它只能放在 GitHub Secrets，**不要**提交到 repo。
 > 建议使用一个专用的 Google 账号部署，不要用个人主帐号。
 
+> ⚠️ **第一次改成「单档案」时要手动清一次**：`clasp push` 只会覆盖同名档案，
+> **不会**帮你删掉远端已不存在的旧档案。所以第一次请打开 Apps Script 编辑器，
+> 把 20 个旧档案删到只剩 `Code`，之后 CI 推送才会干净。
+
 设定好之后：
 
 - `git push` 到 `main`，只要 `apps-script/` 有改动
-- `.github/workflows/deploy-apps-script.yml` 会先跑测试，再 `clasp push` + `clasp deploy`
+- `.github/workflows/deploy-apps-script.yml` 会直接 `clasp push` + `clasp deploy`
 - **Web App URL 不会变**，前端不用改
 - 没有设定 Secrets 时该 workflow 会跳过，不会让 CI 变红
 
 ---
 
-## 4. 本机测试（不需要 Google 账号）
+## 4. 手动部署（不想用 clasp 的话）
 
 ```bash
-node demo/test-apps-script.js   # 直接执行这些 .gs（在 Node 里模拟 Google 服务）
-node demo/tests.js              # 完整 API 测试（25 组 / 196 项）
-node demo/server.js             # 本机 demo 服务器 http://localhost:3000/
+npm run check:backend     # 确认 GitHub 上那一个档案是最新版（见下）
 ```
 
-`demo/google-shim.js` 用记忆体实作 `SpreadsheetApp` / `LockService` /
-`PropertiesService` / `CacheService` / `Utilities.computeDigest` / `UrlFetchApp`，
-所以测试跑的是**这里的真实程式码**，不是另一份复制品。
+打开 <https://script.google.com>，把 **`apps-script/Code.gs`**（唯一一个档案）
+的全部内容贴进专案里的 `Code` 档案，并把其他旧档案删掉即可。
+
+### 改了后端之后一定要做的事
+
+```
+改 apps-script/Code.gs  →  npm run check:backend  →  commit + push  →  贴到 Apps Script
+```
+
+`check:backend` 会检查 6 件事（任何一项失败都会叫你去修）：
+
+1. `apps-script/` 里只有一个 `.gs`（`Code.gs`），没有多余的旧档案
+2. 那个档案里 20 个段落（Config…Code）都还在，没有被误删
+3. `Code.gs` 的 action 表里每个函数真的存在
+4. 前端 `js/*.js` 呼叫的每个 action，后端都有实作
+5. 版本号码一致：`Code.gs` 的 `APP_VERSION` = 档头版本 =
+   `package.json` = `js/config.js` = `service-worker.js` 快取名
+6. 用**这个档案**跑一次端到端：老板登录 → 建菜单 → POS 进单（带明细）→
+   扫会员码进分 → 会员点单（含规格加价）→ 看板收款完成发积分
+
+贴完 Apps Script 之后，用员工账号进 **MORE 页**最下面看版本：
+`✓ 后端 v2.1.11 · 已是最新版` 就对了。
+
+> 2.1 起本机 demo 服务器与自动化测试套件已移除（线上版不需要它们），
+> `tools/google-shim.js` 与 `tools/load-backend.js` 保留给
+> `check:backend` 用 —— 它跑的就是线上那一份档案。
 
 ---
 

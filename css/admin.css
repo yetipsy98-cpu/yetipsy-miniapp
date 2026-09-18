@@ -26,9 +26,8 @@ body.admin {
 /* ADMIN HEADER */
 .admin-header {
   position: fixed; top: 0; left: 0; right: 0; z-index: 60;
-  background: rgba(11,11,11,.92);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  /* 不用 backdrop-filter：现场手机效能有限，模糊会让滚动明显变卡 */
+  background: rgba(11,11,11,.97);
   border-bottom: 1px solid var(--a-line);
 }
 .admin-header-inner {
@@ -46,9 +45,7 @@ body.admin.has-admin-nav { padding-bottom: calc(66px + env(safe-area-inset-botto
 .admin-nav {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 60;
   display: flex; max-width: 560px; margin: 0 auto;
-  background: rgba(14,14,14,.96);
-  backdrop-filter: blur(14px);
-  -webkit-backdrop-filter: blur(14px);
+  background: rgba(14,14,14,.98);
   border-top: 1px solid var(--a-line);
   padding-bottom: env(safe-area-inset-bottom, 0px);
 }
@@ -176,3 +173,431 @@ body.admin.has-admin-nav { padding-bottom: calc(66px + env(safe-area-inset-botto
   font-size: 8.5px; letter-spacing: 1.2px; padding: 3px 7px; border-radius: 6px;
   background: rgba(229,183,105,.12); color: var(--a-gold); border: 1px solid rgba(229,183,105,.3);
 }
+
+/* =============================================================
+   POS 点餐台 + 进单（admin/pos.html）
+   -------------------------------------------------------------
+   动线：商品格点单 → 清单（可手动改金额）→ 记录单据 → 扫会员码 → 进分
+   视觉：POS 机的样子 —— 大字、格子、底部一张单。
+   ============================================================= */
+
+.pos-page { padding-bottom: 40px; }
+.lane { contain: layout paint; }   /* 看板每栏独立含住排版 */
+
+/* 分页：点餐台 / 待进单 */
+.pos-tabs { display: flex; gap: 8px; margin-bottom: 14px; }
+.pos-tabs .pt {
+  flex: 1; position: relative;
+  padding: 11px 8px; border-radius: 13px; cursor: pointer;
+  border: 1px solid var(--a-line); background: rgba(255,255,255,.02);
+  color: var(--a-muted); font-size: 13px; font-weight: 650; letter-spacing: .5px;
+}
+.pos-tabs .pt-en { font-size: 8px; letter-spacing: 1.4px; opacity: .7; }
+.pos-tabs .pt.on {
+  color: var(--a-gold); border-color: rgba(229,183,105,.5);
+  background: rgba(229,183,105,.10);
+}
+.pos-tabs .pt-badge {
+  position: absolute; top: 6px; right: 8px;
+  min-width: 18px; height: 18px; padding: 0 5px;
+  border-radius: 999px; background: var(--a-gold); color: #0B0B0B;
+  font-size: 10px; font-weight: 800; line-height: 18px; text-align: center;
+}
+
+.pos-bar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+.pos-bar .a-sub { flex: 1 1 auto; }
+.pos-bar .a-sub.warn { color: var(--a-gold); }
+
+/* ---- 商品格（POS 机的按键区） ---- */
+.kiosk-cats { margin: 0 0 10px; }
+.kiosk-grid {
+  display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px;
+  padding-bottom: 84px;                       /* 留位置给底部那张单 */
+}
+.k-tile {
+  position: relative; cursor: pointer;
+  display: flex; flex-direction: column; gap: 2px;
+  min-height: 84px; padding: 10px 9px;
+  border: 1px solid var(--a-line); border-radius: 14px;
+  background: linear-gradient(165deg, #191919, #121212);
+  color: var(--a-text); text-align: left; font-family: inherit;
+}
+.k-tile:active { transform: scale(.97); border-color: rgba(229,183,105,.45); }
+.k-tile.in-cart { border-color: rgba(229,183,105,.55); background: rgba(229,183,105,.10); }
+.k-tile.is-sold { opacity: .38; }
+.k-tile .kt-name { font-size: 13px; font-weight: 700; line-height: 1.25; }
+.k-tile .kt-en { font-size: 8.5px; letter-spacing: .6px; color: var(--a-muted); }
+.k-tile .kt-price { margin-top: auto; font-size: 12px; font-weight: 750; color: var(--a-gold); }
+.k-tile .kt-qty {
+  position: absolute; top: 7px; right: 7px;
+  min-width: 19px; height: 19px; padding: 0 5px;
+  border-radius: 999px; background: var(--a-gold); color: #0B0B0B;
+  font-size: 11px; font-weight: 800; line-height: 19px; text-align: center;
+}
+
+/* ---- 底部：目前这张单 ---- */
+.kiosk-bar {
+  position: fixed; left: 0; right: 0; bottom: 0; z-index: 55;
+  display: flex; align-items: center; gap: 10px;
+  max-width: 560px; margin: 0 auto;
+  padding: 10px 14px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: rgba(14,14,14,.98); border-top: 1px solid var(--a-line);
+}
+.kb-main {
+  flex: 1 1 auto; display: flex; align-items: center; gap: 10px;
+  background: none; border: 0; padding: 0; cursor: pointer; color: var(--a-text); text-align: left;
+}
+.kb-count {
+  min-width: 26px; height: 26px; padding: 0 8px;
+  border-radius: 999px; background: var(--a-gold); color: #0B0B0B;
+  font-size: 13px; font-weight: 800; line-height: 26px; text-align: center;
+}
+.kb-text { font-size: 10px; letter-spacing: 1px; color: var(--a-muted); }
+.kb-total { display: block; font-size: 16px; font-weight: 750; color: var(--a-text); letter-spacing: 0; }
+.kb-go {
+  flex: 0 0 auto; padding: 12px 18px; border-radius: 13px; cursor: pointer;
+  border: 0; background: var(--a-gold); color: #0B0B0B;
+  font-size: 12px; font-weight: 750; letter-spacing: 1.4px;
+}
+
+/* ---- 清单抽屉 ---- */
+.pos-sheet {
+  position: fixed; inset: 0; z-index: 95;
+  background: rgba(0,0,0,.66);
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.pos-sheet-inner {
+  width: 100%; max-width: 560px; max-height: 88vh;
+  display: flex; flex-direction: column;
+  background: var(--a-card); border-radius: 22px 22px 0 0;
+  border: 1px solid var(--a-line); border-bottom: 0;
+  padding: 14px 14px calc(16px + env(safe-area-inset-bottom, 0px));
+  animation: ps-up .22s cubic-bezier(.2,.9,.3,1);
+}
+@keyframes ps-up { from { transform: translateY(40px); } to { transform: none; } }
+.ps-head { display: flex; align-items: flex-start; gap: 10px; margin-bottom: 8px; }
+.ps-title { font-size: 16px; font-weight: 700; }
+.ps-close {
+  margin-left: auto; width: 32px; height: 32px; border-radius: 10px;
+  border: 1px solid var(--a-line); background: var(--a-card-2); color: var(--a-muted);
+  cursor: pointer; font-size: 13px;
+}
+.ps-body { flex: 1 1 auto; overflow-y: auto; -webkit-overflow-scrolling: touch; }
+.ps-line { display: flex; align-items: center; gap: 10px; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.05); }
+.ps-line:last-child { border-bottom: 0; }
+.psl-main { flex: 1 1 auto; min-width: 0; }
+.psl-name { font-size: 14px; font-weight: 650; }
+.psl-price { font-size: 11px; color: var(--a-muted); margin-top: 2px; }
+.psl-price b { color: var(--a-gold); }
+.psl-qty { flex: 0 0 auto; display: flex; align-items: center; gap: 10px; }
+.ps-total {
+  display: flex; align-items: baseline; justify-content: space-between;
+  padding: 12px 2px; margin-top: 4px;
+  border-top: 1px solid var(--a-line);
+  font-size: 12px; letter-spacing: 1px; color: var(--a-muted);
+}
+.ps-total b { font-size: 22px; color: var(--a-gold); letter-spacing: 0; }
+.ps-fields { display: grid; gap: 8px; }
+.ps-fields .a-input { padding: 12px 13px; font-size: 14px; }
+.ps-check {
+  display: flex; align-items: center; gap: 8px;
+  margin: 12px 0 8px; font-size: 11.5px; color: var(--a-muted);
+}
+.ps-clear { margin-top: 10px; width: 100%; text-align: center; padding: 9px 0; }
+
+/* 待进单统计 */
+.pos-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 4px; }
+.pos-stats .dash-card { padding: 11px 10px; }
+.pos-stats .dc-value { font-size: 17px; }
+.pos-count {
+  font-size: 10px; letter-spacing: 1px; color: var(--a-gold);
+  border: 1px solid rgba(229,183,105,.35); border-radius: 999px;
+  padding: 2px 8px; background: rgba(229,183,105,.08);
+}
+
+/* 待进单卡片 */
+.ticket {
+  border: 1px solid var(--a-line); border-radius: 16px;
+  background: linear-gradient(165deg, #171717, #121212);
+  padding: 13px 13px 11px; margin-bottom: 10px;
+}
+.ticket.picked { border-color: rgba(229,183,105,.55); background: rgba(229,183,105,.06); }
+.tk-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.tk-num { font-size: 15px; font-weight: 750; letter-spacing: 1.2px; }
+.tk-amt { font-size: 20px; font-weight: 780; color: var(--a-gold); letter-spacing: -.3px; }
+.tk-meta { font-size: 10px; letter-spacing: .8px; color: var(--a-muted); margin-top: 5px; }
+.tk-note { font-size: 11px; color: var(--a-gold); margin-top: 6px;
+  border-left: 2px solid var(--a-gold); padding-left: 8px; }
+.tk-actions { display: flex; gap: 8px; margin-top: 11px; align-items: stretch; }
+.tk-actions .big-action { margin-top: 0; padding: 14px; font-size: 12px; }
+.tk-actions .chip { flex: 0 0 auto; display: flex; align-items: center; padding: 0 12px; }
+
+/* 扫码框 */
+.pos-scan { position: relative; border: 1px solid var(--a-line); border-radius: 14px;
+  overflow: hidden; background: #000; margin-top: 12px; }
+.pos-scan video { width: 100%; display: block; }
+.pos-scan .scan-frame {
+  position: absolute; left: 12%; right: 12%; top: 22%; bottom: 22%;
+  border: 2px solid var(--a-gold); border-radius: 12px; pointer-events: none;
+}
+
+/* 确认 / 结果 */
+.panel { border: 1px solid var(--a-line); border-radius: 14px; padding: 12px; margin-top: 12px; }
+.pos-row { display: flex; justify-content: space-between; align-items: center;
+  padding: 7px 0; border-bottom: 1px solid rgba(255,255,255,.06); font-size: 13px; }
+.pos-row:last-child { border-bottom: 0; }
+.pos-k { color: var(--a-muted); letter-spacing: .8px; font-size: 11px; }
+.pos-v { font-weight: 700; }
+.pos-big { font-size: 30px; font-weight: 800; color: var(--a-gold); letter-spacing: 1px; }
+
+/* 点餐台也会用到会员端的分类 / 风味条 */
+.kiosk-cats.cat-strip { display: flex; gap: 8px; overflow-x: auto; }
+.kiosk-cats .cat-chip {
+  flex: 0 0 auto; padding: 7px 14px; border-radius: 999px; cursor: pointer;
+  border: 1px solid var(--a-line); background: rgba(255,255,255,.02);
+  color: var(--a-muted); font-size: 12px;
+}
+.kiosk-cats .cat-chip.active { color: var(--a-gold); border-color: rgba(229,183,105,.5); background: rgba(229,183,105,.1); }
+
+/* =============================================================
+   员工首页（admin/index.html）：四个入口砖
+   -------------------------------------------------------------
+   跟会员端首页同一套视觉语言：砖块 + 徽章 + 中英标签。
+   ============================================================= */
+.pos-top { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+
+.a-tiles { display: grid; grid-template-columns: repeat(2, 1fr); gap: 10px; }
+.a-tile {
+  display: flex; flex-direction: column; gap: 4px;
+  min-height: 104px; padding: 14px;
+  border: 1px solid var(--a-line); border-radius: 18px;
+  background: linear-gradient(165deg, #1A1A1A, #121212);
+  text-decoration: none; color: var(--a-text);
+}
+.a-tile:active { transform: scale(.98); border-color: rgba(229,183,105,.4); }
+.a-tile.primary {
+  grid-column: span 2; min-height: 92px;
+  border-color: rgba(229,183,105,.45);
+  background: linear-gradient(165deg, #221E16, #17140F);
+}
+.a-tile .at-badge { font-size: 20px; line-height: 1.1; }
+.a-tile.primary .at-badge { font-size: 24px; }
+.a-tile .at-zh { font-size: 15px; font-weight: 700; letter-spacing: .5px; margin-top: auto; }
+.a-tile .at-en { font-size: 8.5px; letter-spacing: 1.4px; color: var(--a-muted); }
+.a-tile.primary .at-zh { color: var(--a-gold); }
+
+/* 顶栏登出（每一页都有） */
+.admin-header .ah-out {
+  border: 1px solid var(--a-line); background: none; color: var(--a-muted);
+  border-radius: 999px; padding: 5px 10px; font-size: 10px; letter-spacing: .8px;
+  cursor: pointer; display: inline-flex; align-items: baseline; gap: 4px;
+}
+.admin-header .ah-out:active { border-color: rgba(226,105,107,.5); color: var(--a-danger); }
+.admin-header .ah-out span { font-size: 7.5px; letter-spacing: 1.2px; opacity: .7; }
+
+/* =============================================================
+   POS 点餐台补充：搜寻 / 商品图 / 格子上的 − / 规格表 / 金额键盘
+   ============================================================= */
+.kiosk-search { margin-bottom: 10px; }
+.kiosk-search .a-input { padding: 12px 13px; font-size: 14px; }
+
+.k-tile .kt-img {
+  width: 100%; height: 34px; object-fit: cover;
+  border-radius: 8px; margin-bottom: 4px; background: rgba(255,255,255,.03);
+}
+.k-tile .kt-emoji {
+  display: flex; align-items: center; justify-content: center;
+  font-size: 20px; color: var(--a-gold); background: rgba(229,183,105,.07);
+}
+.k-tile .kt-price i { font-style: normal; font-size: 8px; letter-spacing: 1px; color: var(--a-muted); }
+.k-tile .kt-minus {
+  position: absolute; left: 7px; bottom: 7px;
+  width: 22px; height: 22px; border-radius: 999px;
+  background: rgba(226,105,107,.18); color: var(--a-danger);
+  font-size: 15px; font-weight: 800; line-height: 22px; text-align: center;
+}
+.psl-opt { font-size: 10.5px; color: var(--a-gold); margin-top: 2px; }
+.psl-x {
+  margin-left: 4px; width: 26px; height: 26px; border-radius: 8px;
+  border: 1px solid var(--a-line); background: none; color: var(--a-muted);
+  cursor: pointer; font-size: 11px;
+}
+.ps-quick { display: flex; gap: 6px; margin-top: 8px; }
+.ps-quick .pq {
+  flex: 1; padding: 9px 0; border-radius: 10px; cursor: pointer;
+  border: 1px solid var(--a-line); background: rgba(255,255,255,.02);
+  color: var(--a-muted); font-size: 10.5px; font-weight: 600;
+}
+.ps-pad { margin: 10px 0 4px; }
+.ps-pad .pad-amount {
+  display: flex; align-items: baseline; gap: 6px;
+  padding: 10px 12px; margin-bottom: 8px;
+  border: 1px solid var(--a-line); border-radius: 14px; background: #0E0E0E;
+}
+.ps-pad .pa-cur { font-size: 12px; letter-spacing: 1.6px; color: var(--a-muted); }
+.ps-pad .pa-val { font-size: 30px; font-weight: 800; margin-left: auto; letter-spacing: -.5px; }
+.pad-clr {
+  margin-left: 10px; align-self: center;
+  border: 1px solid rgba(226,105,107,.3); background: none;
+  color: var(--a-danger); border-radius: 999px;
+  padding: 5px 11px; font-size: 10px; letter-spacing: 1px; cursor: pointer;
+}
+.pad-keys { display: grid; grid-template-columns: repeat(3, 1fr); gap: 7px; }
+.pad-keys .pk {
+  height: 50px; border-radius: 13px; cursor: pointer;
+  border: 1px solid var(--a-line); background: #191919; color: var(--a-text);
+  font-size: 20px; font-weight: 650;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+}
+.pad-keys .pk:active { background: rgba(229,183,105,.14); border-color: rgba(229,183,105,.4); }
+.pad-keys .pk .pk-sub { font-size: 7px; letter-spacing: 1px; color: var(--a-muted); }
+.pad-keys .pk.back { color: var(--a-muted); font-size: 17px; }
+
+/* 规格表 */
+.opt-group-head {
+  display: flex; align-items: baseline; gap: 6px;
+  margin: 14px 0 6px; padding-bottom: 6px; border-bottom: 1px solid var(--a-line);
+}
+.opt-group-head:first-child { margin-top: 0; }
+.opt-foot { display: flex; align-items: center; gap: 12px; margin-top: 10px; }
+.opt-foot .big-action { flex: 1 1 auto; }
+#optionBody .option-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 12px 2px; border-bottom: 1px solid rgba(255,255,255,.05); cursor: pointer;
+}
+#optionBody .option-row:last-child { border-bottom: 0; }
+#optionBody .option-radio {
+  width: 18px; height: 18px; border-radius: 50%; flex: 0 0 18px;
+  border: 1px solid var(--a-line);
+}
+#optionBody .option-row.selected .option-radio {
+  border-color: var(--a-gold); background: var(--a-gold);
+  box-shadow: inset 0 0 0 4px #141414;
+}
+#optionBody .option-name { flex: 1 1 auto; font-size: 14px; }
+#optionBody .option-price { color: var(--a-gold); font-size: 12px; }
+.required-mark {
+  font-size: 8px; letter-spacing: 1px; color: var(--a-danger);
+  border: 1px solid rgba(226,105,107,.4); border-radius: 999px; padding: 1px 6px;
+}
+.option-group-title { font-size: 12px; letter-spacing: 1px; color: var(--a-gold); }
+.option-group-sub { font-size: 11px; color: var(--a-muted); }
+#optionBody, #ticketLines { max-height: 46vh; }
+
+/* =============================================================
+   2.1.7 · POS 结账 + 连线提示 + 手动找会员
+   ============================================================= */
+
+/* 底部「结账 CHECKOUT」要是最显眼的那一颗 */
+.kb-go.primary {
+  background: var(--a-gold); color: #101010; font-weight: 750;
+  border-color: var(--a-gold);
+}
+.kb-go.primary:active { transform: scale(.97); }
+
+/* 连线不稳的小提示（订单看板 / 顾客订单页 / POS 都用这个） */
+.net-pill {
+  margin-left: auto; align-self: center;
+  font-size: 10px; letter-spacing: .3px;
+  color: #E5B769; border: 1px solid rgba(229,183,105,.45);
+  border-radius: 999px; padding: 3px 8px; white-space: nowrap;
+}
+
+/* 「付款方式」与「备注」的快捷按钮：选中的那颗要看得出来 */
+.ps-quick .pq.on {
+  background: var(--a-gold); color: #101010; border-color: var(--a-gold); font-weight: 700;
+}
+
+/* 手动找会员的结果列 */
+.mh-row {
+  display: flex; align-items: center; gap: 10px;
+  padding: 9px 10px; margin-top: 8px;
+  border: 1px solid var(--a-line); border-radius: 10px;
+}
+.mh-main { flex: 1 1 auto; min-width: 0; }
+.mh-name { font-size: 14px; font-weight: 650; }
+.mh-row .chip { flex: 0 0 auto; }
+
+/* =============================================================
+   2.1.8 · 点餐台的「结账」列被底部导览挡住了
+   -------------------------------------------------------------
+   .kiosk-bar 原本 z-index 55 / bottom 0，
+   .admin-nav 是 z-index 60 / bottom 0（不透明）→ 整条结账列
+   躲在导览后面，员工只看得到「加商品」，看不到「明细 / 结账」。
+   这里把结账列抬到导览之上（bottom 让开导览高度）。
+   ============================================================= */
+body.admin.has-admin-nav .kiosk-bar {
+  bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+  z-index: 61;
+  padding-bottom: 10px;            /* safe-area 已经由导览负责，不要加两次 */
+  box-shadow: 0 -10px 22px rgba(0,0,0,.45);
+}
+/* 结账列浮起来之后，点餐台最后一行商品要留出空间，别被挡住 */
+body.admin.has-admin-nav .pos-page { padding-bottom: 132px; }
+
+/* =============================================================
+   2.1.9 · 菜单管理：商品编辑
+   -------------------------------------------------------------
+   1) 表单打开时员工一定看得到（配合 js scrollIntoView）
+   2) 编辑中的那一列highlight，知道自己在改哪一个
+   3) 规格（SIZE / ICE）可以在表单里直接改价、下架、新增
+   ============================================================= */
+#productForm { box-shadow: 0 12px 30px rgba(0,0,0,.45); }
+.a-list.editing {
+  background: rgba(229,183,105,.07);
+  border-left: 2px solid var(--a-gold);
+  border-radius: 10px;
+  padding-left: 10px;
+}
+.oi-row {
+  display: grid; gap: 6px;
+  grid-template-columns: 1fr;              /* 手机：一行一栏，好按 */
+  padding: 10px; margin-top: 8px;
+  border: 1px solid var(--a-line); border-radius: 12px;
+  background: rgba(255,255,255,.02);
+}
+.oi-row.is-off { opacity: .55; }
+.oi-row.is-new { border-color: rgba(229,183,105,.45); }
+.oi-group { font-size: 10px; letter-spacing: 1.2px; color: var(--a-gold); text-transform: uppercase; }
+.oi-row .a-input { width: 100%; }
+.oi-adj { display: flex; align-items: center; gap: 6px; }
+.oi-adj .oi-num { flex: 1 1 auto; }
+.oi-btns { display: flex; gap: 8px; }
+.oi-btns .chip { flex: 1 1 auto; text-align: center; }
+@media (min-width: 520px) {
+  .oi-row { grid-template-columns: 90px 1fr 1fr 110px auto; align-items: center; }
+  .oi-row.is-new { grid-template-columns: 1fr 1fr 1fr 110px auto; }
+  .oi-btns { flex: 0 0 auto; }
+  .oi-btns .chip { flex: 0 0 auto; }
+}
+
+/* =============================================================
+   2.1.10 · 新订单语音提示 + 状态切换立刻反应
+   ============================================================= */
+
+/* 大字横幅：新订单来的时候整页看得到（3.5 秒后自己收） */
+.voice-banner {
+  position: fixed; left: 0; right: 0; top: 0; z-index: 200;
+  display: none; justify-content: center;
+  padding: 14px 12px calc(14px + env(safe-area-inset-top, 0px));
+  background: linear-gradient(180deg, rgba(229,183,105,.97), rgba(229,183,105,.86));
+  color: #14100A; text-align: center;
+  box-shadow: 0 12px 30px rgba(0,0,0,.5);
+  animation: vb-drop .22s cubic-bezier(.2,.9,.3,1);
+  pointer-events: none;
+}
+.voice-banner.on { display: flex; }
+.voice-banner .vb-text {
+  font-size: 24px; font-weight: 800; letter-spacing: 2px;
+  animation: vb-pulse .7s ease-in-out infinite alternate;
+}
+@keyframes vb-drop { from { transform: translateY(-100%); } to { transform: none; } }
+@keyframes vb-pulse { from { transform: scale(1); } to { transform: scale(1.045); } }
+
+/* 正在送状态的那张卡：看得出来在忙，但位置已经先移好了 */
+.board-card.is-busy { opacity: .62; }                 /* 收款 / 取消：真的锁住 */
+.board-card.is-pending { opacity: .88; }               /* 状态推进：只是还在跑 */
+/* 状态推进：按钮只是轻轻呼吸一下（不再换文字、不再锁住） */
+.board-card[data-pending="1"] .big-action { animation: bc-wait 1.4s ease-in-out infinite alternate; }
+.board-card.is-busy .big-action { animation: bc-wait .9s ease-in-out infinite alternate; }
+@keyframes bc-wait { from { opacity: .7; } to { opacity: 1; } }

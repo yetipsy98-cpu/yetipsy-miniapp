@@ -1,9 +1,10 @@
 /* =============================================================
-   demo/load-backend.js
+   tools/load-backend.js
    -------------------------------------------------------------
    把 apps-script/*.gs 载入 Node 的 sandbox 并执行。
-   测试与 demo server 都用这一份「真正的生产后端」，
-   避免出现「测试通过但线上行为不同」的两套程式码。
+   2.1.6 起后端是「唯一一个档案」apps-script/Code.gs
+   （就是你贴到 Google Apps Script 的那一份），
+   所以这里跑的 = 线上跑的，不会出现「测试过但线上不同」。
    ============================================================= */
 
 'use strict';
@@ -15,36 +16,23 @@ const { createShim } = require('./google-shim');
 
 const BACKEND_DIR = path.join(__dirname, '..', 'apps-script');
 
-/* 载入顺序（只是让 var 初始化有固定顺序；函数宣告本来就会 hoist） */
-const FILE_ORDER = [
-  'Config.gs',
-  'Utils.gs',
-  'Database.gs',
-  'Security.gs',
-  'Audit.gs',
-  'Points.gs',
-  'Rewards.gs',
-  'Wallet.gs',
-  'Customers.gs',
-  'Orders.gs',
-  'Menu.gs',
-  'Checkout.gs',
-  'AppOrders.gs',
-  'OrderBoard.gs',
-  'Analytics.gs',
-  'Claims.gs',
-  'Promotions.gs',
-  'Admin.gs',
-  'Auth.gs',
-  'Code.gs'
-];
+/* -------------------------------------------------------------
+   后端档案：正常情况只有一个 apps-script/Code.gs。
+   万一以后又拆成多个档案，这里也接受 —— 依 Config 先、Code 后的
+   顺序串起来（跟 Apps Script 专案里的档案顺序概念一样）。
+   ------------------------------------------------------------- */
+function gsFiles() {
+  const files = fs.readdirSync(BACKEND_DIR).filter((f) => f.endsWith('.gs'));
+  const rank = (f) => (f === 'Config.gs' ? 0 : f === 'Code.gs' ? 2 : 1);
+  return files.sort((a, b) => (rank(a) - rank(b)) || a.localeCompare(b));
+}
 
 function backendSource() {
-  const missing = FILE_ORDER.filter((f) => !fs.existsSync(path.join(BACKEND_DIR, f)));
-  if (missing.length) {
-    throw new Error('apps-script 缺少档案: ' + missing.join(', '));
+  const files = gsFiles();
+  if (!files.length) {
+    throw new Error('apps-script/ 里没有任何 .gs 档案（应该有 Code.gs）');
   }
-  return FILE_ORDER
+  return files
     .map((f) => '/* ---- ' + f + ' ---- */\n' + fs.readFileSync(path.join(BACKEND_DIR, f), 'utf8'))
     .join('\n;\n');
 }
@@ -115,4 +103,4 @@ function callDoPost(sandbox, payload) {
   return JSON.parse(out.getContent());
 }
 
-module.exports = { loadBackend, backendSource, FILE_ORDER, BACKEND_DIR };
+module.exports = { loadBackend, backendSource, gsFiles, BACKEND_DIR };

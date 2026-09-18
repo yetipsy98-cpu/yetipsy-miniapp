@@ -8,7 +8,7 @@
 <link rel="manifest" href="manifest.json">
 <link rel="icon" type="image/png" href="assets/icons/icon-192.png">
 <link rel="apple-touch-icon" href="assets/icons/icon-192.png">
-<link rel="stylesheet" href="css/app.css">
+<link rel="stylesheet" href="css/app.css?v=2.1.17">
 </head>
 <body>
 
@@ -98,6 +98,29 @@
     </a>
   </div>
 
+  <!-- WALLET / ACTIVITY（首页只留四个入口，钱包与记录收在这里） -->
+  <div class="section">
+    <div class="section-title">
+      <span class="st-zh">钱包与记录</span><span class="st-en">WALLET &amp; HISTORY</span>
+    </div>
+    <div class="list">
+      <a class="list-item" href="wallet.html">
+        <div class="li-main">
+          <div class="li-title">我的钱包</div>
+          <div class="li-sub">Wallet · 奖励回馈会存进这里</div>
+        </div>
+        <div class="li-right"><div class="li-value gold" id="walletRowValue">RM 0.00</div></div>
+      </a>
+      <a class="list-item" href="activity.html">
+        <div class="li-main">
+          <div class="li-title">消费记录</div>
+          <div class="li-sub">Activity · 积分与钱包每一笔</div>
+        </div>
+        <div class="li-right"><div class="li-meta">›</div></div>
+      </a>
+    </div>
+  </div>
+
   <!-- PASSWORD -->
   <div class="section">
     <div class="section-title">
@@ -156,16 +179,15 @@
     <a href="admin/login.html" class="tiny muted-2" style="letter-spacing:1.4px">STAFF LOGIN 员工登录</a>
   </div>
 
-  <div class="footnote">YETIPSY MINI APP 1.6 · ORDERING EDITION</div>
+  <div class="footnote">YETIPSY MINI APP 2.1.17 · FOODCOURT POS EDITION</div>
 </div>
 
-<script src="js/config.js"></script>
-<script src="js/api.js"></script>
-<script src="js/auth.js"></script>
-<script src="js/ui.js"></script>
-<script src="js/profile.js"></script>
+<script src="js/config.js?v=2.1.17"></script>
+<script src="js/api.js?v=2.1.17"></script>
+<script src="js/auth.js?v=2.1.17"></script>
+<script src="js/ui.js?v=2.1.17"></script>
+<script src="js/profile.js?v=2.1.17"></script>
 <script>
-  UI.renderBottomNav('profile.html');
   PROFILE.init();
 </script>
 

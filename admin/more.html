@@ -6,8 +6,8 @@
 <meta name="theme-color" content="#0B0B0B">
 <title>YETIPSY STAFF — More</title>
 <link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
-<link rel="stylesheet" href="../css/app.css">
-<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/app.css?v=2.1.17">
+<link rel="stylesheet" href="../css/admin.css?v=2.1.17">
 </head>
 <body class="admin">
 
@@ -21,6 +21,11 @@
 
   <div class="a-section-title">Operations 运营</div>
   <div class="a-list">
+    <a class="a-item" href="pos.html">
+      <div class="a-main"><div class="a-title">POS 进单</div><div class="a-sub">Foodcourt 单据 · 扫会员码进分</div></div>
+      <div class="a-right"><span class="chip gold">GO</span></div>
+    </a>
+
     <a class="a-item" href="redeem.html">
       <div>
         <div class="ai-zh">扫码抵扣</div>
@@ -30,7 +35,7 @@
     </a>
 
     <a class="a-item" href="claim.html">
-      <div class="a-main"><div class="a-title">Create Claim</div><div class="a-sub">建立认领 · QR / Code</div></div>
+      <div class="a-main"><div class="a-title">Create Claim</div><div class="a-sub">备用路径 · 生成 QR 给顾客自己扫（经理以上）</div></div>
       <div class="a-right"><span class="chip gold">GO</span></div>
     </a>
     <a class="a-item" href="customers.html">
@@ -79,15 +84,21 @@
     <a href="../index.html" class="tiny muted-2">CUSTOMER APP 会员端</a>
   </div>
 
-  <div class="footnote">YETIPSY MINI APP 1.6 · ORDERING EDITION</div>
+  <!-- 后端版本：贴完 Apps Script 之后看这里，就知道是不是最新版 -->
+  <div class="center mt-16">
+    <span id="backendVersion" class="tiny muted-2">后端版本检查中…</span>
+    <button class="chip" id="recheckVersionBtn" style="margin-left:8px">重新检查 RECHECK</button>
+  </div>
+
+  <div class="footnote">YETIPSY MINI APP 2.1.17 · FOODCOURT POS EDITION</div>
 
 </div>
 
-<script src="../js/config.js"></script>
-<script src="../js/api.js"></script>
-<script src="../js/auth.js"></script>
-<script src="../js/ui.js"></script>
-<script src="../js/admin.js"></script>
+<script src="../js/config.js?v=2.1.17"></script>
+<script src="../js/api.js?v=2.1.17"></script>
+<script src="../js/auth.js?v=2.1.17"></script>
+<script src="../js/ui.js?v=2.1.17"></script>
+<script src="../js/admin.js?v=2.1.17"></script>
 <script>
 (function () {
   if (!ADMIN.requireAuth()) return;
@@ -99,6 +110,45 @@
   document.getElementById('staffUser').textContent  = '@' + (s.username || '');
 
   document.getElementById('logoutBtn').addEventListener('click', ADMIN.logout);
+
+  /* -------------------------------------------------------------
+     后端版本：贴完 Apps Script 后可以在这里确认有没有贴到最新版
+     ------------------------------------------------------------- */
+  var want = YETIPSY_CONFIG.APP_VERSION || '';
+  var badge = document.getElementById('backendVersion');
+
+  function checkVersion() {
+    badge.textContent = '后端版本检查中…';
+    badge.style.color = '';
+    /* 一定要问后端本人，所以指定 cache:false（不要拿快取） */
+    API.system.ping().then(function (res) {
+      var got = (res && res.success && res.data && res.data.version) ? String(res.data.version) : '';
+      if (!got) {
+        badge.textContent = '⚠ 连不上后端 · 请检查 js/config.js 的 API_URL';
+        badge.style.color = '#E2696B';
+        return;
+      }
+      if (got === want) {
+        badge.textContent = '✓ 后端 v' + got + ' · 已是最新版';
+        badge.style.color = '#5DD39E';
+        return;
+      }
+      /* 分两种：后端旧（要贴 Apps Script）／前端旧（这页要重新载入清快取） */
+      var cmp = 0;
+      try { cmp = got.localeCompare(want, undefined, { numeric: true }); } catch (e) { cmp = got < want ? -1 : 1; }
+      if (cmp < 0) {
+        badge.textContent = '⚠ 后端 v' + got + ' ≠ 前端 v' + want + ' · 后端是旧版，请重新贴 Apps Script';
+      } else {
+        badge.textContent = '⚠ 后端 v' + got + ' 比前端 v' + want +
+          ' 新 · 这页还是旧版，请重新载入（或清快取）';
+      }
+      badge.style.color = '#E2696B';
+    });
+  }
+
+  checkVersion();
+  var recheck = document.getElementById('recheckVersionBtn');
+  if (recheck) recheck.addEventListener('click', checkVersion);
 })();
 </script>
 </body>

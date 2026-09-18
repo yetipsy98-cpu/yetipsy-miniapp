@@ -5,6 +5,11 @@
 
    权限（§32）：
    · MANAGER / OWNER：新增 / 编辑商品、价格、图片、分类、排序、促销、规格
+   ·
+   · 2.1.15：新增 / 编辑商品的表单改成「小抽屉」从下面滑上来。
+   ·   以前表单是页面最上面的一块（#productForm），手机按「编辑」时
+   ·   表单在萤幕外，看起来就像「按了没反应」。另外「+ 商品 / 编辑」
+   ·   改成事件委派绑定，列表重画也不会变装饰按钮。
    · 普通员工：只能切换 售罄 / 有货
 
    §33：图片只存 ImageURL，图片档放 GitHub /assets/menu/*.webp，
@@ -44,6 +49,78 @@ var ADMIN_MENU = (function () {
       if (state.canEdit) add.addEventListener('click', function () { openForm(null); });
       else add.style.display = 'none';            // §32 员工不能新增
     }
+
+    /* 分类也一样走小抽屉（以前是页面最上面的那块表单） */
+    var cat = document.getElementById('addCategoryBtn');
+    if (cat) {
+      if (state.canEdit) cat.addEventListener('click', addCategory);
+      else cat.style.display = 'none';
+    }
+
+    bindSheet();
+    bindRowDelegates();
+  }
+
+  /* ---------------------------------------------------------
+     小抽屉（2.1.15）
+     --------------------------------------------------------- */
+
+  function bindSheet() {
+    if (document.body.getAttribute('data-menu-sheet') === '1') return;
+    document.body.setAttribute('data-menu-sheet', '1');
+
+    var close = document.getElementById('menuSheetClose');
+    if (close) close.addEventListener('click', closeForm);
+    var back = document.getElementById('menuSheetBackdrop');
+    if (back) back.addEventListener('click', closeForm);
+    document.addEventListener('keydown', function (e) {
+      if (e.key !== 'Escape') return;
+      var sheet = document.getElementById('menuSheet');
+      if (sheet && sheet.style.display !== 'none') closeForm();
+    });
+  }
+
+  function openSheet() {
+    var sheet = document.getElementById('menuSheet');
+    if (!sheet) return;
+    sheet.style.display = '';
+    document.body.classList.add('sheet-open');
+  }
+
+  function closeSheet() {
+    var sheet = document.getElementById('menuSheet');
+    if (sheet) sheet.style.display = 'none';
+    document.body.classList.remove('sheet-open');
+  }
+
+  function isSheetOpen() {
+    var sheet = document.getElementById('menuSheet');
+    return !!sheet && sheet.style.display !== 'none';
+  }
+
+  /**
+   * 列表的「编辑 EDIT」用委派绑定在 #menuAdminBody 上：
+   * 商品列表每次筛选 / 重抓都会整块重画，直接绑在按钮上的话，
+   * 重画之后就会变成没反应的装饰按钮。
+   */
+  function bindRowDelegates() {
+    var box = document.getElementById('menuAdminBody');
+    if (!box || box.getAttribute('data-row-bound') === '1') return;
+    box.setAttribute('data-row-bound', '1');
+    box.addEventListener('click', function (e) {
+      var btn = marked(e.target, 'data-edit');
+      var pid = btn ? btn.getAttribute('data-edit') : null;
+      if (!pid) {
+        /* 手机上好按：点整张卡片也能编辑；但 chip 按钮（售罄 / 上下架）照旧 */
+        if (!state.canEdit) return;
+        if (e.target && e.target.closest && e.target.closest('button')) return;
+        var row = marked(e.target, 'data-row');
+        pid = row ? row.getAttribute('data-row') : null;
+      }
+      if (!pid) return;
+      var prod = state.products.filter(function (p) { return p.productId === pid; })[0];
+      if (prod) openForm(prod);
+    });
   }
 
   /* ---------------------------------------------------------
@@ -57,7 +134,13 @@ var ADMIN_MENU = (function () {
    *   而且它只回 status = ACTIVE 的商品，管理页会看不到已下架的。
    */
   function fetchAll() {
-    state.loading = true;
+    /* 2.1.17：先用预载好的快取画出来（0 毫秒），后端回来再更新。
+       以前这里一定先画「载入中…」—— 打开菜单管理就是先看到一个空的页面。 */
+    if (!state.products.length) {
+      var cached = API.cache && API.cache.peek ? API.cache.peek('getAdminMenu', {}) : null;
+      if (cached && cached.products) applyMenu(cached);
+    }
+    state.loading = !state.products.length;
     render();
     return API.call('getAdminMenu', {}, { sessionType: 'staff' }).then(function (res) {
       if (!res.success) {
@@ -67,12 +150,17 @@ var ADMIN_MENU = (function () {
         return;
       }
       state.errorCode = null;
-      state.categories = res.data.categories || [];
-      state.products = res.data.products || [];
-      state.optionsByProduct = res.data.optionsByProduct || {};
+      applyMenu(res.data);
       state.loading = false;
       render();
     });
+  }
+
+  /** 把 getAdminMenu 的资料放进 state（快取与后端都是同一份形状） */
+  function applyMenu(data) {
+    state.categories = data.categories || [];
+    state.products = data.products || [];
+    state.optionsByProduct = data.optionsByProduct || {};
   }
 
   /* ---------------------------------------------------------
@@ -142,7 +230,8 @@ var ADMIN_MENU = (function () {
     /* getAdminMenu 才回传 status（顾客端的 getMenu 只有 ACTIVE 的商品） */
     var archived = String(p.status || 'ACTIVE').toUpperCase() !== 'ACTIVE';
     var opts = state.optionsByProduct[p.productId] || [];
-    return '<div class="a-list" data-row="' + UI.esc(p.productId) + '">' +
+    var editing = state.editing && state.editing.productId === p.productId;
+    return '<div class="a-list' + (editing ? ' editing' : '') + '" data-row="' + UI.esc(p.productId) + '">' +
       '<div class="a-main">' +
         '<div class="a-title">' + UI.esc(p.nameEN) +
           (p.nameZH ? ' <span class="a-sub">' + UI.esc(p.nameZH) + '</span>' : '') +
@@ -189,12 +278,7 @@ var ADMIN_MENU = (function () {
       });
     });
 
-    Array.prototype.forEach.call(box.querySelectorAll('[data-edit]'), function (el) {
-      el.addEventListener('click', function () {
-        var pid = el.getAttribute('data-edit');
-        openForm(state.products.filter(function (p) { return p.productId === pid; })[0]);
-      });
-    });
+    /* [data-edit] 由 bindRowDelegates() 委派处理（列表重画也不会失效） */
 
     /* ★ 上下架：任何员工都能做（§32 状态类操作） */
     Array.prototype.forEach.call(box.querySelectorAll('[data-status]'), function (el) {
@@ -226,13 +310,9 @@ var ADMIN_MENU = (function () {
 
     var panel = document.getElementById('productForm');
     if (!panel) return;
-    panel.style.display = '';
+    var foot = document.getElementById('menuSheetFoot');
 
     var isEdit = !!product;
-    /* ★ 标题由下面的 innerHTML 一并写入。
-       之前这里多了一句 document.getElementById('formTitle').textContent = …，
-       但 #formTitle 那时还不存在（它正是这段 innerHTML 建立的），
-       所以第一次打开表单必定抛 TypeError，表单永远开不起来。 */
 
     var catOptions = state.categories.map(function (c) {
       return '<option value="' + UI.esc(c.categoryId) + '"' +
@@ -241,9 +321,6 @@ var ADMIN_MENU = (function () {
     }).join('');
 
     panel.innerHTML =
-      '<div class="a-section-title" id="formTitle">' +
-        (isEdit ? '编辑商品 EDIT PRODUCT' : '新增商品 ADD PRODUCT') + '</div>' +
-
       field('商品名称（英） NAME (EN)', 'fNameEN', product ? product.nameEN : '', 'Mojito') +
       field('商品名称（中） NAME (ZH)', 'fNameZH', product ? product.nameZH : '', '经典莫希托') +
 
@@ -252,12 +329,15 @@ var ADMIN_MENU = (function () {
 
       field('价格（RM） PRICE', 'fPrice',
         product ? (product.price / 100).toFixed(2) : '', '22.00', 'number') +
+      /* 常见的填错：RM 22 写成 22 → 变成 RM 0.22（Sheet 存的是「分」） */
+      '<div class="tiny muted-2" style="margin:-6px 2px 10px">' +
+        '这里填 RM（22 = RM 22.00）。若直接在 Google Sheets 改，栏位 PriceSen 是「分」：RM 22 要填 2200' +
+      '</div>' +
       field('排序 SORT ORDER', 'fSort', product ? (product.sortOrder || 0) : '0', '0', 'number') +
 
       '<div class="a-divider"></div>' +
-      '<div class="a-sub">促销（§40）—— 后端自己判断时间窗，前端不能指定「现在的价格」</div>' +
-      field('原价（RM） ORIGINAL', 'fOriginal',
-        product && product.originalPrice ? (product.originalPrice / 100).toFixed(2) : '', '25.00', 'number') +
+      '<div class="a-sub">促销（§40）—— 后端自己判断时间窗，前端不能指定「现在的价格」。' +
+        '原价 = 上面填的价格，这里只填促销价和日期。</div>' +
       field('促销价（RM） PROMO', 'fPromo',
         product && product.promoPrice ? (product.promoPrice / 100).toFixed(2) : '', '18.00', 'number') +
       field('开始日期 START', 'fPromoStart', product ? (product.promoStart || '') : '',
@@ -285,11 +365,26 @@ var ADMIN_MENU = (function () {
       field('图片 URL（§33 放 GitHub /assets/menu/*.webp）', 'fImage',
         product ? product.imageURL : '', '/assets/menu/mojito.webp') +
 
-      '<button class="btn btn-primary mt-16" id="saveProductBtn" style="width:100%">' +
-        (isEdit ? '保存变更 SAVE' : '建立商品 CREATE') + '</button>' +
-      '<button class="btn btn-ghost mt-8" id="cancelFormBtn" style="width:100%">取消 CANCEL</button>' +
-      (isEdit ? '<button class="btn btn-ghost mt-8" id="archiveBtn" style="width:100%;color:#E2696B">' +
-        '下架商品 ARCHIVE</button>' : '');
+      (isEdit ? optionsHtml(product) : '');
+
+    /* 标题在抽屉顶端（固定看得到），按钮在抽屉底部（固定按得到） */
+    var sheetTitle = document.getElementById('sheetFormTitle');
+    if (sheetTitle) sheetTitle.textContent = isEdit
+      ? '编辑商品 · ' + (product.nameZH || product.nameEN || '')
+      : '新增商品 ADD PRODUCT';
+    var sheetSub = document.getElementById('sheetFormSub');
+    if (sheetSub) sheetSub.textContent = isEdit
+      ? 'EDIT PRODUCT' + (product.nameEN ? ' · ' + product.nameEN : '')
+      : 'NEW PRODUCT';
+
+    if (foot) {
+      foot.innerHTML =
+        '<button class="btn btn-primary" id="saveProductBtn" style="width:100%">' +
+          (isEdit ? '保存变更 SAVE' : '建立商品 CREATE') + '</button>' +
+        '<button class="btn btn-ghost mt-8" id="cancelFormBtn" style="width:100%">取消 CANCEL</button>' +
+        (isEdit ? '<button class="btn btn-ghost mt-8" id="archiveBtn" style="width:100%;color:#E2696B">' +
+          '下架商品 ARCHIVE</button>' : '');
+    }
 
     var save = document.getElementById('saveProductBtn');
     if (save) save.addEventListener('click', onSave);
@@ -297,6 +392,174 @@ var ADMIN_MENU = (function () {
     if (cancel) cancel.addEventListener('click', closeForm);
     var archive = document.getElementById('archiveBtn');
     if (archive) archive.addEventListener('click', onArchive);
+
+    bindFormDelegates();
+    openSheet();
+  }
+
+  /* ---------------------------------------------------------
+     规格（Options）：SIZE / ICE …
+     点餐台遇到有规格的商品会先开规格表，所以这里要能维护。
+     --------------------------------------------------------- */
+
+  /** 已经用过的规格群组（新规格的输入建议用） */
+  function knownGroups() {
+    var groups = [];
+    Object.keys(state.optionsByProduct || {}).forEach(function (pid) {
+      (state.optionsByProduct[pid] || []).forEach(function (o) {
+        if (o.optionGroup && groups.indexOf(o.optionGroup) === -1) groups.push(o.optionGroup);
+      });
+    });
+    ['SIZE', 'ICE', 'STRENGTH'].forEach(function (g) {
+      if (groups.indexOf(g) === -1) groups.push(g);
+    });
+    return groups;
+  }
+
+  function groupLabel(o) {
+    var zh = o.optionGroupNameZH || '';
+    return o.optionGroup + (zh ? ' · ' + zh : '');
+  }
+
+  function optionsHtml(product) {
+    var pid = product.productId;
+    var list = (state.optionsByProduct[pid] || []).slice().sort(function (a, b) {
+      if (a.optionGroup !== b.optionGroup) return a.optionGroup < b.optionGroup ? -1 : 1;
+      return (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0);
+    });
+
+    var rows = list.map(function (o) {
+      var off = String(o.status || 'ACTIVE').toUpperCase() !== 'ACTIVE';
+      return '<div class="oi-row' + (off ? ' is-off' : '') + '" data-opt="' + UI.esc(o.optionId) + '">' +
+        '<div class="oi-group">' + UI.esc(groupLabel(o)) +
+          (off ? ' <span class="chip chip-warn">已下架</span>' : '') + '</div>' +
+        '<input class="a-input oi-in" data-ozh value="' + UI.esc(o.nameZH || '') + '" placeholder="中文名 例 大杯">' +
+        '<input class="a-input oi-in" data-oen value="' + UI.esc(o.nameEN || '') + '" placeholder="English, e.g. Large">' +
+        '<div class="oi-adj"><span class="tiny muted-2">+RM</span>' +
+          '<input class="a-input oi-num" type="number" min="0" step="0.50" data-oadj value="' +
+            ((Number(o.priceAdjustment) || 0) / 100).toFixed(2) + '"></div>' +
+        '<div class="oi-btns">' +
+          '<button class="chip" data-osave="' + UI.esc(o.optionId) + '">保存</button>' +
+          '<button class="chip' + (off ? ' chip-on' : ' chip-warn') + '" data-ostatus="' + UI.esc(o.optionId) +
+            '" data-next="' + (off ? 'ACTIVE' : 'INACTIVE') + '">' + (off ? '上架' : '下架') + '</button>' +
+        '</div>' +
+      '</div>';
+    }).join('');
+
+    if (!rows) {
+      rows = '<div class="a-sub" style="padding:4px 0">这个商品还没有规格 —— 点餐台点一下就加入，不会问规格。</div>';
+    }
+
+    var dl = '<datalist id="optGroupList">' + knownGroups().map(function (g) {
+      return '<option value="' + UI.esc(g) + '"></option>';
+    }).join('') + '</datalist>';
+
+    return '<div class="a-divider"></div>' +
+      '<div class="a-section-title" style="margin-top:0">规格 OPTIONS（例：尺寸 / 冰）</div>' +
+      '<div id="optRows">' + rows + '</div>' +
+      '<div class="a-sub mt-8">＋ 新增规格（群组同名 = 同一组规格，点餐台会一组一组问）</div>' +
+      '<div class="oi-row is-new">' +
+        '<input class="a-input oi-in" id="optNewGroup" list="optGroupList" placeholder="群组 例 SIZE">' + dl +
+        '<input class="a-input oi-in" id="optNewZH" placeholder="中文名 例 大杯">' +
+        '<input class="a-input oi-in" id="optNewEN" placeholder="English, e.g. Large">' +
+        '<div class="oi-adj"><span class="tiny muted-2">+RM</span>' +
+          '<input class="a-input oi-num" id="optNewAdj" type="number" min="0" step="0.50" value="0"></div>' +
+        '<button class="chip chip-on" id="optAddBtn">＋ 新增 ADD</button>' +
+      '</div>';
+  }
+
+  /** 从 e.target 往上找带某属性的节点（区间只到表单为止） */
+  function marked(node, attr) {
+    while (node && node.nodeType === 1) {
+      if (node.getAttribute && node.getAttribute(attr)) return node;
+      node = node.parentNode;
+    }
+    return null;
+  }
+
+  function bindFormDelegates() {
+    var panel = document.getElementById('productForm');
+    if (!panel || panel.getAttribute('data-form-bound') === '1') return;
+    panel.setAttribute('data-form-bound', '1');
+    panel.addEventListener('click', function (e) {
+      var add = document.getElementById('optAddBtn');
+      if (add && (e.target === add || (e.target.parentNode === add))) { addOption(); return; }
+
+      var save = marked(e.target, 'data-osave');
+      if (save) { saveOption(save.getAttribute('data-osave')); return; }
+
+      var st = marked(e.target, 'data-ostatus');
+      if (st) { toggleOptionStatus(st.getAttribute('data-ostatus'), st.getAttribute('data-next')); return; }
+    });
+  }
+
+  /** RM 文字 → 分 */
+  function senOf(value) {
+    var n = Math.round(Number(String(value == null ? '' : value).trim() || '0') * 100);
+    return isFinite(n) && n >= 0 ? n : 0;
+  }
+
+  function saveOption(optionId) {
+    var row = document.querySelector('[data-opt="' + optionId + '"]');
+    if (!row) return;
+    var body = {
+      optionId: optionId,
+      nameZH: String(row.querySelector('[data-ozh]').value || '').trim(),
+      nameEN: String(row.querySelector('[data-oen]').value || '').trim(),
+      priceAdjustment: senOf(row.querySelector('[data-oadj]').value)
+    };
+    if (!body.nameZH && !body.nameEN) { UI.toast('请输入规格名称', 'error'); return; }
+    var btn = row.querySelector('[data-osave]');
+    if (btn) btn.disabled = true;
+    API.staff.updateProductOption(body).then(function (res) {
+      if (btn) btn.disabled = false;
+      if (!res.success) { UI.toast(res.error.message, 'error', 3500); return; }
+      UI.toast('规格已更新', 'success', 1600);
+      refreshForm();
+    });
+  }
+
+  function toggleOptionStatus(optionId, next) {
+    API.staff.updateProductOption({ optionId: optionId, status: next }).then(function (res) {
+      if (!res.success) { UI.toast(res.error.message, 'error', 3500); return; }
+      UI.toast(next === 'ACTIVE' ? '规格已上架' : '规格已下架（点餐台不再显示）', 'success', 1800);
+      refreshForm();
+    });
+  }
+
+  function addOption() {
+    var product = state.editing;
+    if (!product) return;
+    var group = String(txt('optNewGroup') || '').trim().toUpperCase();
+    var zh = txt('optNewZH');
+    var en = txt('optNewEN');
+    if (!group) { UI.toast('请填规格群组（例 SIZE / ICE）', 'error'); return; }
+    if (!zh && !en) { UI.toast('请输入规格名称', 'error'); return; }
+
+    var btn = document.getElementById('optAddBtn');
+    if (btn) btn.disabled = true;
+    API.staff.createProductOption({
+      productId: product.productId,
+      optionGroup: group,
+      nameZH: zh,
+      nameEN: en,
+      priceAdjustment: senOf(document.getElementById('optNewAdj').value)
+    }).then(function (res) {
+      if (btn) btn.disabled = false;
+      if (!res.success) { UI.toast(res.error.message, 'error', 3500); return; }
+      UI.toast('规格已新增', 'success', 1600);
+      refreshForm();
+    });
+  }
+
+  /** 改完规格：重抓资料，然后把同一个商品的表单再打开（员工不用重新找） */
+  function refreshForm() {
+    var pid = state.editing && state.editing.productId;
+    return fetchAll().then(function () {
+      if (!pid) return;
+      var p = state.products.filter(function (x) { return x.productId === pid; })[0];
+      if (p) openForm(p);
+    });
   }
 
   function field(label, id, value, placeholder, type) {
@@ -308,8 +571,13 @@ var ADMIN_MENU = (function () {
 
   function closeForm() {
     var panel = document.getElementById('productForm');
-    if (panel) { panel.style.display = 'none'; panel.innerHTML = ''; }
+    /* 只清内容，不要移除 data-form-bound —— 那个委派监听挂在 panel 本体上，
+       移除标记会让下次开启再绑一次，规格就会被存两次。 */
+    if (panel) panel.innerHTML = '';
+    var foot = document.getElementById('menuSheetFoot');
+    if (foot) foot.innerHTML = '';
     state.editing = null;
+    closeSheet();
   }
 
   /** RM → sen；空白回 null 表示「不改这个栏位」 */
@@ -362,8 +630,14 @@ var ADMIN_MENU = (function () {
       if (btn) { btn.disabled = false; UI.setLoading(btn, false); }
       if (!res.success) { UI.toast(res.error.message, 'error', 3500); return; }
       UI.toast(isEdit ? '已保存 SAVED' : '已建立 CREATED', 'success');
+      var backId = isEdit ? state.editing.productId : '';
       closeForm();
-      fetchAll();
+      fetchAll().then(function () {
+        if (!backId) return;
+        var rowNode = document.querySelector('[data-row="' + backId + '"]');
+        try { if (rowNode) rowNode.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+        catch (e) { try { if (rowNode) rowNode.scrollIntoView(); } catch (e2) {} }
+      });
     });
   }
 
@@ -390,15 +664,24 @@ var ADMIN_MENU = (function () {
     if (!state.canEdit) { UI.toast('需要经理权限', 'error'); return; }
     var panel = document.getElementById('productForm');
     if (!panel) return;
+    var foot = document.getElementById('menuSheetFoot');
     state.editing = null;
-    panel.style.display = '';
     panel.innerHTML =
-      '<div class="a-section-title">新增分类 ADD CATEGORY</div>' +
       field('名称（英） NAME (EN)', 'cNameEN', '', 'SIGNATURE') +
       field('名称（中） NAME (ZH)', 'cNameZH', '', '招牌特调') +
-      field('排序 SORT ORDER', 'cSort', '0', '0', 'number') +
-      '<button class="btn btn-primary mt-16" id="saveCatBtn" style="width:100%">建立 CREATE</button>' +
-      '<button class="btn btn-ghost mt-8" id="cancelFormBtn" style="width:100%">取消 CANCEL</button>';
+      field('排序 SORT ORDER', 'cSort', '0', '0', 'number');
+
+    var sheetTitle = document.getElementById('sheetFormTitle');
+    if (sheetTitle) sheetTitle.textContent = '新增分类 ADD CATEGORY';
+    var sheetSub = document.getElementById('sheetFormSub');
+    if (sheetSub) sheetSub.textContent = 'NEW CATEGORY';
+
+    if (foot) {
+      foot.innerHTML =
+        '<button class="btn btn-primary" id="saveCatBtn" style="width:100%">建立 CREATE</button>' +
+        '<button class="btn btn-ghost mt-8" id="cancelFormBtn" style="width:100%">取消 CANCEL</button>';
+    }
+    openSheet();
 
     document.getElementById('saveCatBtn').addEventListener('click', function () {
       var body = { nameEN: txt('cNameEN'), nameZH: txt('cNameZH'),
@@ -423,16 +706,21 @@ var ADMIN_MENU = (function () {
       products: state.products.length,
       filter: state.filter,
       search: state.search,
-      editing: state.editing ? state.editing.productId : null
+      editing: state.editing ? state.editing.productId : null,
+      sheetOpen: isSheetOpen(),
+      canEdit: state.canEdit
     };
   }
 
   return {
     init: function () { init(); fetchAll(); },
     reload: fetchAll,
+    refreshForm: refreshForm,
     openForm: openForm,
     addCategory: addCategory,
     closeForm: closeForm,
+    openSheet: openSheet,
+    isSheetOpen: isSheetOpen,
     debugState: debugState
   };
 

@@ -77,7 +77,7 @@ var ADMIN_REDEEM = (function () {
 
   /* ---------------- 扫描 ----------------
      相机与条码辨识全部交给 MEMBER_SCANNER（js/scanner.js）。
-     这里只负责画面上的显示切换 —— 与 admin-grant.js 用同一套。
+     这里只负责画面上的显示切换 —— 与 admin-pos.js 用同一套。
      ---------------------------------------------------------- */
 
   function startScan() {

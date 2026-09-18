@@ -1,6 +1,3 @@
-# DEMO 资料（本机试用产生）
-demo/demo-data.json
-
 # clasp 本机设定（含专案 ID；GitHub Actions 用 Secrets 注入）
 apps-script/.clasp.json
 .clasprc.json
@@ -11,3 +8,9 @@ node_modules/
 # 系统
 .DS_Store
 Thumbs.db
+
+# 旧的本机测试资料夹（已搬到 tools/tests/，跟着版本走）
+tools/local/
+
+# npm 安装时产生的 lock（这个专案不带 lock）
+package-lock.json

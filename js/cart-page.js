@@ -10,23 +10,47 @@
 
 var CARTPAGE = (function () {
 
+  var prefetchTimer = null;
+
   function init() {
     if (!AUTH.isCustomerLoggedIn()) { AUTH.requireCustomer(); return; }
     bindEvents();
     render();
   }
 
+  /**
+   * 购物车一有变动就（延后 400ms）请 CHECKOUT 先在背景算好报价。
+   * 顾客改完数量、还在犹豫的时候，后端已经把金额算完了 →
+   * 按「结帐」打开抽屉时是「已经有金额」的状态。
+   */
+  function schedulePrefetch() {
+    if (typeof CHECKOUT === 'undefined' || !CHECKOUT.prefetch) return;
+    /* 不在这里 invalidate：报价本身带着「购物车指纹」，
+       购物车没变（例如刚从酒单页带过来的预载报价）就该直接沿用。
+       真的变了的话，prefetch() 会自己重算。 */
+    if (CHECKOUT.prefetchSoon) CHECKOUT.prefetchSoon();
+    else CHECKOUT.prefetch();
+  }
+
   function bindEvents() {
     var clearBtn = document.getElementById('clearCartBtn');
     if (clearBtn) clearBtn.addEventListener('click', function () {
       CART.clear();
+      if (typeof CHECKOUT !== 'undefined' && CHECKOUT.invalidate) CHECKOUT.invalidate();
       render();
       UI.toast('已清空 / Cart cleared', 'success');
     });
 
+    /* ★ 按「结帐」开小抽屉，不换页（2.1.13）。
+       抽屉不存在时（万一）才退回旧结帐页。 */
     var checkout = document.getElementById('checkoutBtn');
     if (checkout) checkout.addEventListener('click', function () {
       if (!CART.items().length) return;
+      if (typeof CHECKOUT !== 'undefined' && CHECKOUT.openSheet &&
+          document.getElementById('checkoutSheet')) {
+        CHECKOUT.openSheet();
+        return;
+      }
       UI.go('checkout.html');
     });
   }
@@ -71,6 +95,7 @@ var CARTPAGE = (function () {
     });
 
     updateCta();
+    schedulePrefetch();
   }
 
   function row(item) {
@@ -133,6 +158,6 @@ var CARTPAGE = (function () {
     };
   }
 
-  return { init: init, render: render, debugState: debugState };
+  return { init: init, render: render, prefetch: schedulePrefetch, debugState: debugState };
 
 })();

@@ -6,14 +6,14 @@
 <meta name="theme-color" content="#0B0B0B">
 <title>YETIPSY STAFF — Home</title>
 <link rel="icon" type="image/png" href="../assets/icons/icon-192.png">
-<link rel="stylesheet" href="../css/app.css">
-<link rel="stylesheet" href="../css/admin.css">
+<link rel="stylesheet" href="../css/app.css?v=2.1.17">
+<link rel="stylesheet" href="../css/admin.css?v=2.1.17">
 </head>
 <body class="admin">
 
 <div class="a-page">
 
-  <div class="row-between" style="margin-bottom:14px">
+  <div class="pos-top">
     <div>
       <div class="tiny muted-2" style="letter-spacing:2px" id="todayLabel">TONIGHT</div>
       <div style="font-size:15px;font-weight:650" id="dateLabel">—</div>
@@ -21,37 +21,37 @@
     <button id="logoutBtn" class="btn btn-ghost btn-sm" style="width:auto;padding:0 14px">SIGN OUT</button>
   </div>
 
-  <!-- ★ 2.0 主流程：点单后扫会员码进分（任何员工都能做） -->
-  <a class="big-action" href="grant.html">
-    ⌁ SCAN &amp; GRANT
-    <span class="ba-sub">扫会员码进分 · 输金额即可</span>
-  </a>
-
-  <a class="big-action" href="orderboard.html"
-     style="background:#1A1A1A;border-color:#3A3A3A">
-    🍸 ORDER BOARD
-    <span class="ba-sub">点单看板 · 接单 / 制作 / 完成</span>
-  </a>
-
   <!--
-    ★ 「建立 Claim（生成 QR）」已从首页移除。
-    2.0 的主流程是「点单后扫会员码进分」（上面的 SCAN & GRANT），
-    生成 QR 给顾客自己认领已经不需要摆在员工每天看的首页上。
-    它没有被删除 —— 仍在 MORE → FOODCOURT CLAIM（§85 不能断掉 1.x），
-    后端 createClaim 也保留，只是收紧到 MANAGER / OWNER。
+    员工动线（2.1）：
+      · foodcourt 单 → POS 进单台（pos.html）录入单据 → 扫顾客会员码进分
+      · mini app 单 → 订单看板（orderboard.html）完成时自动进分
+      · 「建立 Claim（生成 QR）」是备用路径：入口在 MORE，MANAGER / OWNER
   -->
+  <div class="a-tiles">
+    <a class="a-tile primary" href="pos.html">
+      <span class="at-badge">🧾</span>
+      <span class="at-zh">POS 进单</span>
+      <span class="at-en">FOODCOURT 单据 → 扫会员码进分</span>
+    </a>
 
-  <!-- ★ 菜单状态：所有员工都能上下架 / 标售罄（改价与新增仍限经理以上） -->
-  <a class="big-action" href="menu.html"
-     style="background:#1A1A1A;border-color:#3A3A3A">
-    📋 MENU STATUS
-    <span class="ba-sub">酒单状态 · 上下架 / 售罄（所有员工）</span>
-  </a>
+    <a class="a-tile" href="orderboard.html">
+      <span class="at-badge">🍸</span>
+      <span class="at-zh">订单看板</span>
+      <span class="at-en">APP ORDERS · 完成自动进分</span>
+    </a>
 
-  <a class="big-action" href="redeem.html" style="background:#1A1A1A;border-color:#3A3A3A">
-    ⌁ SCAN &amp; REDEEM
-    <span class="ba-sub">扫会员条码抵扣钱包</span>
-  </a>
+    <a class="a-tile" href="menu.html">
+      <span class="at-badge">📋</span>
+      <span class="at-zh">酒单状态</span>
+      <span class="at-en">MENU · 上下架 / 售罄</span>
+    </a>
+
+    <a class="a-tile" href="redeem.html">
+      <span class="at-badge">⌁</span>
+      <span class="at-zh">扫码抵扣</span>
+      <span class="at-en">SCAN &amp; REDEEM · 钱包</span>
+    </a>
+  </div>
 
   <div class="a-section-title">Tonight 今晚</div>
 
@@ -85,33 +85,26 @@
       <div class="dc-sub" id="statRewardsSub">budget RM 50.00</div>
     </div>
 
-    <div class="dash-card wide">
+    <div class="dash-card">
       <div class="dc-label">Wallet Redeemed 钱包抵扣</div>
       <div class="dc-value" id="statWalletRedeemed">RM 0.00</div>
     </div>
   </div>
 
   <div class="a-section-title">Recent Claims 最近认领</div>
-  <div id="recentClaims">
-    <div class="skeleton" style="height:56px;margin-bottom:8px"></div>
-    <div class="skeleton" style="height:56px"></div>
-  </div>
-
-  <div class="center mt-16">
-    <a href="orders.html" class="tiny muted-2" style="letter-spacing:1.4px">VIEW ALL ORDERS 查看全部订单</a>
-  </div>
+  <div id="recentClaims"><div class="a-empty">Loading…</div></div>
 
 </div>
 
-<script src="../js/config.js"></script>
-<script src="../js/api.js"></script>
-<script src="../js/auth.js"></script>
-<script src="../js/ui.js"></script>
-<script src="../js/admin.js"></script>
-<script src="../js/admin-dashboard.js"></script>
+<script src="../js/config.js?v=2.1.17"></script>
+<script src="../js/api.js?v=2.1.17"></script>
+<script src="../js/auth.js?v=2.1.17"></script>
+<script src="../js/ui.js?v=2.1.17"></script>
+<script src="../js/admin.js?v=2.1.17"></script>
+<script src="../js/admin-dashboard.js?v=2.1.17"></script>
 <script>
   if (ADMIN.requireAuth()) {
-    ADMIN.renderShell({ title: '' });
+    ADMIN.renderShell({ title: 'STAFF HOME' });
     ADMIN_DASH.init();
   }
 </script>

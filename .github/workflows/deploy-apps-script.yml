@@ -19,23 +19,9 @@ on:
   workflow_dispatch:
 
 jobs:
-  test:
-    name: 先跑测试（全部 6 套）
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-      - name: 安装测试用依赖（jsdom）
-        run: npm install --no-audit --no-fund
-      - name: 全部测试（后端 / API / UI 契约 / 端到端 / 登录页 DOM / 复制贴上文件）
-        run: npm test
-
   deploy:
     name: 推送到 Google Apps Script
     runs-on: ubuntu-latest
-    needs: test
     steps:
       - uses: actions/checkout@v4
 

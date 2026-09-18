@@ -12,17 +12,24 @@
 
 var ORDER = (function () {
 
+  /* 2.1.13：中间不再有「已确认」这一步 —— 员工按一下就是制作中。
+     后端如果还停在 CONFIRMED，对顾客来说就是「制作中」。 */
   var STEPS = [
     { key: 'SUBMITTED', zh: '已收到订单', en: 'ORDER RECEIVED' },
-    { key: 'CONFIRMED', zh: '已确认',       en: 'CONFIRMED' },
     { key: 'PREPARING', zh: '制作中',       en: 'PREPARING' },
     { key: 'READY',     zh: '可以取酒',     en: 'READY' },
     { key: 'COMPLETED', zh: '已完成',       en: 'COMPLETED' }
   ];
 
+  /** 后端状态 → 进度条上的那一步（CONFIRMED 并进 PREPARING） */
+  var STEP_OF_STATUS = {
+    SUBMITTED: 'SUBMITTED', CONFIRMED: 'PREPARING', PREPARING: 'PREPARING',
+    READY: 'READY', COMPLETED: 'COMPLETED'
+  };
+
   var STATUS_LABEL = {
     SUBMITTED: { zh: '已提交', en: 'SUBMITTED' },
-    CONFIRMED: { zh: '已确认', en: 'CONFIRMED' },
+    CONFIRMED: { zh: '制作中', en: 'PREPARING' },
     PREPARING: { zh: '制作中', en: 'PREPARING' },
     READY:     { zh: '可以取酒', en: 'READY' },
     COMPLETED: { zh: '已完成', en: 'COMPLETED' },
@@ -41,12 +48,13 @@ var ORDER = (function () {
     appOrderId: '',
     order: null,
     error: null,
-    pollSeconds: 12,
+    loadFailed: false,
+    pollSeconds: 3,
     ticking: 0,
     lastNotifiedStatus: null
   };
 
-  var pollTimer = null;
+  var poller = null;
   var tickTimer = null;
 
   function init() {
@@ -57,8 +65,15 @@ var ORDER = (function () {
       return;
     }
     bindEvents();
+    /* 连线提示 = 这一页自己的载入结果 + 全局网络状态（见 UI.netPill） */
+    API.onNetwork(function (st) { UI.netPill(state.loadFailed, st); });
+
     renderSkeleton();
     load(true);
+
+    /* 手动重新载入（连线恢复后不用重开页面） */
+    var retry = document.getElementById('retryBtn');
+    if (retry) retry.addEventListener('click', function () { load(true); });
   }
 
   function bindEvents() {
@@ -76,42 +91,68 @@ var ORDER = (function () {
     return status === 'COMPLETED' || status === 'CANCELLED';
   }
 
-  function load(first) {
-    API.customer.getAppOrder(state.appOrderId).then(function (res) {
-      if (!res.success) {
-        state.error = res.error;
-        if (!AUTH.handleSessionError(res.error)) renderError();
-        stopPolling();
-        return;
-      }
-      state.error = null;
-      state.order = res.data.order;
+  /** 2.1.17：订单页一打开先用「我的订单」快取画一次（有的话），不用等后端 */
+  function paintFromCache() {
+    try {
+      if (state.order) return;
+      var peek = API.cache && API.cache.peek;
+      if (!peek) return;
+      var mine = API.cache.peek('getMyOrders', { limit: 30 });
+      var hit = null;
+      ((mine && mine.orders) || []).forEach(function (o) {
+        if (!hit && o.appOrderId === state.appOrderId) hit = o;
+      });
+      if (!hit) return;
+      state.order = hit;
       render();
+    } catch (e) {}
+  }
 
-      if (isFinal(state.order.orderStatus)) stopPolling();
-      else startPolling();
-    });
+  function load(first) {
+    if (first) paintFromCache();
+    return API.customer.getAppOrder(state.appOrderId, { force: !!first || first === true })
+      .then(function (res) {
+        if (!res.success) {
+          state.error = res.error;
+          /* 已经有资料：留著画面继续显示，只提示连线不稳（不要跳错误页） */
+          if (state.order) { state.loadFailed = true; UI.netPill(true); return res; }
+          if (!AUTH.handleSessionError(res.error)) renderError();
+          stopPolling();
+          return res;
+        }
+        state.error = null;
+        state.loadFailed = false;
+        UI.netPill(false, 'ok');
+        state.order = res.data.order;
+        render();
+        startPolling();                    // 由 API.poll 自己判断要不要继续
+        if (isFinal(state.order.orderStatus)) stopPolling();
+        return res;
+      });
   }
 
   /* §47 轮询：预设 12 秒，只在页面开着、订单未结案时跑 */
   function startPolling() {
-    stopPolling();
-    state.pollSeconds = Number(YETIPSY_CONFIG.CUSTOMER_ORDER_POLL_SECONDS || 12);
-    pollTimer = setInterval(function () {
-      if (document.hidden) return;
-      load(false);
-    }, Math.max(5, state.pollSeconds) * 1000);
+    if (poller) return;                    // 已经在跑就不要重复挂
+    /* 2.1.14：取餐状态要更快看到 → 预设 3 秒（以前 12 秒），最低不低于 3 秒 */
+    state.pollSeconds = Number(YETIPSY_CONFIG.CUSTOMER_ORDER_POLL_SECONDS || 3);
+    poller = API.poll(Math.max(3, state.pollSeconds), function () {
+      if (isFinal(state.order && state.order.orderStatus)) { stopPolling(); return Promise.resolve({ success: true }); }
+      return load(false);
+    });
 
     /* 等待秒数每秒 +1（§49：由 CreatedAt 算出来的基准，不在本地重算时间） */
-    tickTimer = setInterval(function () {
-      state.ticking += 1;
-      var el = document.getElementById('waitingTimer');
-      if (el && state.order) el.textContent = fmtWait(state.order.waitingSeconds + state.ticking);
-    }, 1000);
+    if (!tickTimer) {
+      tickTimer = setInterval(function () {
+        state.ticking += 1;
+        var el = document.getElementById('waitingTimer');
+        if (el && state.order) el.textContent = fmtWait(state.order.waitingSeconds + state.ticking);
+      }, 1000);
+    }
   }
 
   function stopPolling() {
-    if (pollTimer) { clearInterval(pollTimer); pollTimer = null; }
+    if (poller) { poller.stop(); poller = null; }
     if (tickTimer) { clearInterval(tickTimer); tickTimer = null; }
   }
 
@@ -191,7 +232,8 @@ var ORDER = (function () {
     /* 进度（§17） */
     var progress = '';
     if (o.orderStatus !== 'CANCELLED') {
-      var reached = STEPS.map(function (s) { return s.key; }).indexOf(o.orderStatus);
+      var reached = STEPS.map(function (s) { return s.key; })
+        .indexOf(STEP_OF_STATUS[o.orderStatus] || o.orderStatus);
       progress = '<div class="card">' + STEPS.map(function (s, i) {
         var done = i < reached;
         var active = i === reached;
@@ -298,7 +340,7 @@ var ORDER = (function () {
       finalAmount: state.order ? state.order.finalAmount : 0,
       walletUsed: state.order ? state.order.walletUsed : 0,
       pointsEarned: state.order ? state.order.pointsEarned : 0,
-      polling: !!pollTimer,
+      polling: !!poller,
       pollSeconds: state.pollSeconds,
       waiting: state.order ? state.order.waitingSeconds : 0
     };
