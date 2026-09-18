@@ -64,6 +64,10 @@ var CODE = (function () {
       /* 保留旧条码，只加一行小字 —— 不用全屏遮罩盖住画面 */
       setHint('更新中… UPDATING');
     } else {
+      /* 2.1.17：条码一定要问后端（一次性密语，不能快取），
+         但上面的会员资料可以先吃快取 → 一打开就有名字 / 等级 / 积分，
+         不用整页等条码。 */
+      paintFromCache();
       renderPending();
     }
 
@@ -79,6 +83,35 @@ var CODE = (function () {
   }
 
   /* ---------------- 画面 ---------------- */
+
+  /**
+   * 先用快取把会员资料画出来（等级 / 名字 / 积分 / 钱包）。
+   * 资料来自预载清单里的 getProfile / getPoints / getWallet，
+   * 所以通常一打开就是现成的。
+   */
+  function paintFromCache() {
+    try {
+      var peek = API.cache && API.cache.peek;
+      if (!peek) return;
+      var prof = API.cache.peek('getProfile', {});
+      var pts  = API.cache.peek('getPoints', {});
+      var wall = API.cache.peek('getWallet', {});
+      var c = (prof && prof.customer) || null;
+      var m = (pts && pts.membership) || (prof && prof.membership) || null;
+      if (!c && !pts && !wall) return;
+      setText('memberName', c ? (c.name || 'MEMBER') : null);
+      setText('memberId', c ? c.customerId : null);
+      setText('memberMeta',
+        UI.points((pts && pts.currentPoints) || (c && c.currentPoints) || 0) + ' PTS · ' +
+        UI.money((wall && wall.balance) || (c && c.walletBalance) || 0) + ' WALLET');
+      setText('codeHint', '条码产生中… GENERATING CODE');
+    } catch (e) {}
+  }
+
+  function setText(id, value) {
+    var el = document.getElementById(id);
+    if (el && value !== undefined && value !== null) el.textContent = value;
+  }
 
   /** 第一次载入：只在条码区放占位骨架，不动其他东西 */
   function renderPending() {

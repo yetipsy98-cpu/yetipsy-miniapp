@@ -9,7 +9,7 @@ node_modules/
 .DS_Store
 Thumbs.db
 
-# 本机测试工具（不放上 GitHub）
+# 旧的本机测试资料夹（已搬到 tools/tests/，跟着版本走）
 tools/local/
 
 # npm 安装时产生的 lock（这个专案不带 lock）

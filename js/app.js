@@ -115,9 +115,30 @@ var APP = (function () {
    * API 层的 live call 会回两次，所以这里每个 .then 都要是幂等的。
    */
   function load() {
-    var pending = { profile: false, reward: false, promo: false, failed: false };
+    /* 2.1.17：不再等三支都回来才画。
+       任何一支先到就先画一次（快取通常 0 毫秒），后面的到了再补一次，
+       所以顾客打开首页是「马上有画面」而不是「先看骨架」。 */
+    var painted = false;
+    function paint() {
+      try {
+        if (!state.profile && !state.slides.length) return;   // 什么都还没有 → 再等一下
+        renderBanner();
+        startRotate();
+        painted = true;
+      } catch (e) {}
+    }
 
-    function ready() { return pending.profile && pending.reward && pending.promo; }
+    /* 先用快取画的（有的话） */
+    var cachedProfile = API.cache && API.cache.peek ? API.cache.peek('getProfile', {}) : null;
+    if (cachedProfile && cachedProfile.customer) {
+      state.profile = cachedProfile.customer;
+      state.membership = cachedProfile.membership;
+    }
+    var cachedReward = API.cache && API.cache.peek ? API.cache.peek('getPendingReward', { rewardId: '' }) : null;
+    if (cachedReward && cachedReward.reward) state.pendingReward = cachedReward.reward;
+    var cachedPromo = API.cache && API.cache.peek ? API.cache.peek('getPromotions', {}) : null;
+    if (cachedPromo) state.slides = buildSlides(cachedPromo.promotions || []);
+    paint();
 
     API.customer.getProfile().then(function (res) {
       if (!res.success) {
@@ -129,14 +150,12 @@ var APP = (function () {
       }
       state.profile = res.data.customer;
       state.membership = res.data.membership;
-      pending.profile = true;
-      if (ready()) { renderBanner(); startRotate(); }
+      paint();
     });
 
     API.customer.getPendingReward().then(function (res) {
       state.pendingReward = (res.success && res.data && res.data.reward) ? res.data.reward : null;
-      pending.reward = true;
-      if (ready()) { renderBanner(); startRotate(); }
+      paint();
     });
 
     /* ★ 成功但清单是空的 ≠ 请求失败。
@@ -155,8 +174,8 @@ var APP = (function () {
             (state.promoError.code || '') + ' · ' + (state.promoError.message || ''));
         }
       }
-      pending.promo = true;
-      if (ready()) { renderBanner(); startRotate(); }
+      if (painted && !state.profile) return;      // 还没有会员资料 → 上面那支回来才画
+      paint();
     });
   }
 
@@ -169,9 +188,10 @@ var APP = (function () {
     try {
       var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 400); };
       idle(function () {
-        if (API.cache && API.cache.prefetch) {
-          API.cache.prefetch(['getMenu', 'getMyOrders', 'getWallet']);
-        }
+        /* 2.1.17：整个会员端要用的资料一次预载好（酒单 / 订单 / 钱包 /
+           记录 / 待领奖励 / 会员资料 / 活动），点任何一页都不用等 */
+        if (API.cache && API.cache.autoWarm) API.cache.autoWarm();
+        else if (API.cache && API.cache.prefetch) API.cache.prefetch();
       });
     } catch (e) {}
   }

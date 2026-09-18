@@ -134,7 +134,13 @@ var ADMIN_MENU = (function () {
    *   而且它只回 status = ACTIVE 的商品，管理页会看不到已下架的。
    */
   function fetchAll() {
-    state.loading = true;
+    /* 2.1.17：先用预载好的快取画出来（0 毫秒），后端回来再更新。
+       以前这里一定先画「载入中…」—— 打开菜单管理就是先看到一个空的页面。 */
+    if (!state.products.length) {
+      var cached = API.cache && API.cache.peek ? API.cache.peek('getAdminMenu', {}) : null;
+      if (cached && cached.products) applyMenu(cached);
+    }
+    state.loading = !state.products.length;
     render();
     return API.call('getAdminMenu', {}, { sessionType: 'staff' }).then(function (res) {
       if (!res.success) {
@@ -144,12 +150,17 @@ var ADMIN_MENU = (function () {
         return;
       }
       state.errorCode = null;
-      state.categories = res.data.categories || [];
-      state.products = res.data.products || [];
-      state.optionsByProduct = res.data.optionsByProduct || {};
+      applyMenu(res.data);
       state.loading = false;
       render();
     });
+  }
+
+  /** 把 getAdminMenu 的资料放进 state（快取与后端都是同一份形状） */
+  function applyMenu(data) {
+    state.categories = data.categories || [];
+    state.products = data.products || [];
+    state.optionsByProduct = data.optionsByProduct || {};
   }
 
   /* ---------------------------------------------------------

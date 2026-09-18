@@ -81,7 +81,11 @@ var API = (function () {
     listStaff:           5 * 60 * 1000,
     getSalesAnalytics:   90 * 1000,
     getProductAnalytics: 90 * 1000,
-    getMemberAnalytics:  90 * 1000
+    getMemberAnalytics:  90 * 1000,
+    getCustomer:         30 * 1000,
+    getCustomerHistory:  30 * 1000,
+    getPoints:           60 * 1000,
+    getPublicSettings:    5 * 60 * 1000
   };
 
   var memCache = {};
@@ -568,7 +572,7 @@ var API = (function () {
       return call('getMembership', {}, { sessionType: 'customer', cache: true });
     },
     getPoints: function () {
-      return call('getPoints', {}, { sessionType: 'customer' });
+      return call('getPoints', {}, { sessionType: 'customer', cache: true });
     },
     getPointHistory: function (limit) {
       return call('getPointHistory', { limit: limit || 50 }, { sessionType: 'customer', cache: true });
@@ -713,10 +717,10 @@ var API = (function () {
       return call('searchCustomer', { keyword: keyword }, { sessionType: 'staff' });
     },
     getCustomer: function (customerId) {
-      return call('getCustomer', { customerId: customerId }, { sessionType: 'staff' });
+      return call('getCustomer', { customerId: customerId }, { sessionType: 'staff', cache: true });
     },
     getCustomerHistory: function (customerId) {
-      return call('getCustomerHistory', { customerId: customerId }, { sessionType: 'staff' });
+      return call('getCustomerHistory', { customerId: customerId }, { sessionType: 'staff', cache: true });
     },
     /** 扫顾客的会员条码 → 回传顾客资料 + verifyToken（抵扣时必须带回） */
     scanMemberCode: function (payload) {
@@ -748,7 +752,7 @@ var API = (function () {
         if (filters.to) d.to = filters.to;
         if (filters.keyword) d.keyword = filters.keyword;
       }
-      return call('getOrders', d, { sessionType: 'staff' });
+      return call('getOrders', d, { sessionType: 'staff', cache: true });
     },
     cancelOrder: function (orderId, reason) {
       return call('cancelOrder', { orderId: orderId, reason: reason || '' }, { sessionType: 'staff' });
@@ -832,7 +836,7 @@ var API = (function () {
 
     /* ============ 2.0 点单：员工订单看板（Phase 7，§19 §20 §61）============ */
     getIncomingOrders: function () {
-      return call('getIncomingOrders', {}, { sessionType: 'staff' });
+      return call('getIncomingOrders', {}, { sessionType: 'staff', cache: true });
     },
     getActiveOrders: function () {
       return call('getActiveOrders', {}, { sessionType: 'staff', cache: true });
@@ -898,13 +902,13 @@ var API = (function () {
       }, { sessionType: 'staff' });
     },
     getSettings: function () {
-      return call('getSettings', {}, { sessionType: 'staff' });
+      return call('getSettings', {}, { sessionType: 'staff', cache: true });
     },
     updateSetting: function (key, value) {
       return call('updateSetting', { key: key, value: value }, { sessionType: 'staff' });
     },
     getPromotionsAdmin: function () {
-      return call('getPromotionsAdmin', {}, { sessionType: 'staff' });
+      return call('getPromotionsAdmin', {}, { sessionType: 'staff', cache: true });
     },
     createPromotion: function (promo) {
       return call('createPromotion', promo, { sessionType: 'staff' });
@@ -919,10 +923,10 @@ var API = (function () {
         if (filters.action) d.action = filters.action;
         if (filters.userId) d.userId = filters.userId;
       }
-      return call('getAuditLogs', d, { sessionType: 'staff' });
+      return call('getAuditLogs', d, { sessionType: 'staff', cache: true });
     },
     listStaff: function () {
-      return call('listStaff', {}, { sessionType: 'staff' });
+      return call('listStaff', {}, { sessionType: 'staff', cache: true });
     },
     createStaff: function (username, password, role) {
       return call('createStaff', {
@@ -939,14 +943,14 @@ var API = (function () {
     },
     /* ============ 2.0 业绩分析（Phase 11，§50 §51 §52 §62）============ */
     getSalesAnalytics: function (days) {
-      return call('getSalesAnalytics', { days: days || 7 }, { sessionType: 'staff' });
+      return call('getSalesAnalytics', { days: days || 7 }, { sessionType: 'staff', cache: true });
     },
     getProductAnalytics: function (days, limit) {
       return call('getProductAnalytics',
-        { days: days || 7, limit: limit || 10 }, { sessionType: 'staff' });
+        { days: days || 7, limit: limit || 10 }, { sessionType: 'staff', cache: true });
     },
     getMemberAnalytics: function (days) {
-      return call('getMemberAnalytics', { days: days || 30 }, { sessionType: 'staff' });
+      return call('getMemberAnalytics', { days: days || 30 }, { sessionType: 'staff', cache: true });
     },
 
     /* 会员忘记密码 / 号码被抢注 → Manager+ 在这里重设 */
@@ -969,7 +973,7 @@ var API = (function () {
       return call('ping', {}, opts);
     },
     getPublicSettings: function () {
-      return call('getPublicSettings', {}, { sessionType: null });
+      return call('getPublicSettings', {}, { sessionType: null, cache: true });
     }
   };
 
@@ -977,32 +981,52 @@ var API = (function () {
      预载：会员端首页一有空就把最常用的资料先抓好，
      这样点进酒单 / 我的订单是「立刻」出来，不是「等一次」
      -------------------------------------------------------- */
-  /* 会员端「打开就能用」的清单：酒单 / 订单 / 钱包 / 记录 / 待领奖励 / 会员资料 */
+  /**
+   * 预载清单（2.1.17「全部预载」）
+   * ---------------------------------------------------------
+   * 规则：**每一个页面打开时会读的只读资料，都要在清单里**，
+   * 而且参数要跟页面一模一样（快取键 = action + 参数）。
+   * 有新增页面 / 换了参数，就同步改这里 —— tools/local/warm-check.js
+   * 会逐页检查「打开时是不是 0 个请求就画好」。
+   */
   var CUSTOMER_WARM = [
-    ['getMenu',          function () { return {}; }],
-    ['getMyOrders',      function () { return { limit: 30 }; }],
-    ['getWallet',        function () { return {}; }],
-    ['getWalletHistory', function () { return { limit: 50 }; }],
-    ['getOrderHistory',  function () { return { limit: 50 }; }],
-    ['getPointHistory',  function () { return { limit: 50 }; }],
-    ['getPendingReward', function () { return { rewardId: '' }; }],
-    ['getProfile',       function () { return {}; }]
+    ['getMenu',           function () { return {}; }],
+    ['getMyOrders',       function () { return { limit: 30 }; }],
+    ['getWallet',         function () { return {}; }],
+    ['getWalletHistory',  function () { return { limit: 50 }; }],
+    ['getOrderHistory',   function () { return { limit: 50 }; }],
+    ['getPointHistory',   function () { return { limit: 50 }; }],
+    ['getPendingReward',  function () { return { rewardId: '' }; }],
+    ['getProfile',        function () { return {}; }],
+    ['getPromotions',     function () { return {}; }],
+    ['getPublicSettings', function () { return {}; }]
   ];
 
-  /* 员工端：点餐台酒单 / 待进单 / 今日看板 / 订单看板 */
+  /**
+   * 员工端：现场最常用的四页 + 其他所有员工页会读的资料
+   * （点餐台 / 待进单 / 首页看板 / 订单看板 / 订单 / 稽核 / 员工 /
+   *   设定 / 促销 / 待进单队列 / 分析报表 / 认领）
+   */
   var STAFF_WARM = [
-    /* 现场最常用的四页：点餐台 / 待进单 / 首页看板 / 订单看板 */
     ['getAdminMenu',    function () { return {}; }],
     ['getPosQueue',     function () { return {}; }],
     ['getDashboard',    function () { return { date: '' }; }],
     ['getActiveOrders', function () { return {}; }],
-    /* 其他员工页（参数要跟页面一致，不然快取对不上） */
     ['getOrders',          function () { return { limit: 60 }; }],
-    ['listClaims',         function () { return { limit: 12 }; }],
     ['getAuditLogs',       function () { return { limit: 150 }; }],
     ['listStaff',          function () { return {}; }],
+    ['getSettings',        function () { return {}; }],
     ['getPromotionsAdmin', function () { return {}; }],
-    ['getSettings',        function () { return {}; }]
+    ['getIncomingOrders',  function () { return {}; }],
+    ['getSalesAnalytics',  function () { return { days: 7 }; }],
+    ['getProductAnalytics', function () { return { days: 7, limit: 10 }; }],
+    ['getMemberAnalytics', function () { return { days: 30 }; }],
+    ['listClaims',         function () { return { limit: 12 }; }]
+  ];
+
+  /** 还没登入时也能先抓的公开资料（登入页 / 首页都要用） */
+  var PUBLIC_WARM = [
+    ['getPublicSettings', function () { return {}; }]
   ];
 
   /**
@@ -1042,6 +1066,46 @@ var API = (function () {
     lastWarm = now;
     prefetchJobs(STAFF_WARM, 'staff', !force);
   }
+
+  /** 公开资料（未登入也能抓）：登入页一打开就先抓好，登入后直接就能用 */
+  function prefetchPublic() {
+    prefetchJobs(PUBLIC_WARM, null, true);
+  }
+
+  /**
+   * 自动预载（2.1.17）
+   * ---------------------------------------------------------
+   * 以前只有会员首页（app.js）与员工外壳（admin.js）会叫预载，
+   * 其他页打开时完全没有背景预载 → 换页还是要等。
+   * 现在**所有页面**载入后都会自己叫一次：
+   *   员工 → STAFF_WARM ｜ 会员 → CUSTOMER_WARM ｜ 都没登入 → 公开资料
+   * （已在快取里的不会重抓，所以重复叫很便宜。）
+   */
+  var autoWarmed = false;
+  function autoWarm() {
+    if (autoWarmed) return;
+    autoWarmed = true;
+    try {
+      if (AUTH.isStaffLoggedIn && AUTH.isStaffLoggedIn()) prefetchStaff();
+      else if (AUTH.isCustomerLoggedIn && AUTH.isCustomerLoggedIn()) prefetchCustomer();
+      else prefetchPublic();
+    } catch (e) {}
+  }
+
+  function bindAutoWarm() {
+    if (typeof document === 'undefined') return;
+    var run = function () {
+      var idle = window.requestIdleCallback || function (fn) { return setTimeout(fn, 250); };
+      idle(function () { autoWarm(); });
+    };
+    if (document.readyState === 'complete' || document.readyState === 'interactive') run();
+    else document.addEventListener('DOMContentLoaded', run);
+    /* 从别的 App / 锁屏回来 → 再温一次（20 秒内不会重复打后端） */
+    document.addEventListener('visibilitychange', function () {
+      if (!document.hidden) autoWarm();
+    });
+  }
+  bindAutoWarm();
 
   /* ----------------------------------------------------------
      轮询：上一次跑完才排下一次（绝不重叠），失败自动退避，
@@ -1097,6 +1161,14 @@ var API = (function () {
       clear: cacheClear,
       prefetch: prefetchCustomer,
       prefetchStaff: prefetchStaff,
+      prefetchPublic: prefetchPublic,
+      autoWarm: autoWarm,
+      warmList: function () {
+        return {
+          customer: CUSTOMER_WARM.map(function (j) { return j[0]; }),
+          staff: STAFF_WARM.map(function (j) { return j[0]; })
+        };
+      },
       write: cachePut,
       TTL: READ_TTL
     },

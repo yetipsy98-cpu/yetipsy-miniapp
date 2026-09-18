@@ -91,7 +91,25 @@ var ORDER = (function () {
     return status === 'COMPLETED' || status === 'CANCELLED';
   }
 
+  /** 2.1.17：订单页一打开先用「我的订单」快取画一次（有的话），不用等后端 */
+  function paintFromCache() {
+    try {
+      if (state.order) return;
+      var peek = API.cache && API.cache.peek;
+      if (!peek) return;
+      var mine = API.cache.peek('getMyOrders', { limit: 30 });
+      var hit = null;
+      ((mine && mine.orders) || []).forEach(function (o) {
+        if (!hit && o.appOrderId === state.appOrderId) hit = o;
+      });
+      if (!hit) return;
+      state.order = hit;
+      render();
+    } catch (e) {}
+  }
+
   function load(first) {
+    if (first) paintFromCache();
     return API.customer.getAppOrder(state.appOrderId, { force: !!first || first === true })
       .then(function (res) {
         if (!res.success) {

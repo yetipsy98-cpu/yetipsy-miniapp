@@ -49,7 +49,9 @@ var ADMIN_POS = (function () {
     hits: [],                // 搜到的会员（顾客没有会员码时用）
     knownTickets: null,      // 待进单看过的单据（新的才播报「您有新订单」）
     muted: false,
-    signature: ''
+    signature: '',
+    menuLoaded: false,       // 2.1.17：酒单是否已经拿到「后端最新」
+    queuePainted: false      // 2.1.17：待进单是否已用快取先画过一次
   };
 
   var el = {};
@@ -218,7 +220,13 @@ var ADMIN_POS = (function () {
 
   function loadMenu(verbose) {
     var status = document.getElementById('kioskStatus');
-    if (status && !state.menu) status.textContent = '载入酒单…';
+
+    /* 2.1.17：先用预载好的酒单画一次（点餐台格子立刻出现，不用看「载入酒单…」） */
+    if (!state.menu) {
+      var cached = API.cache && API.cache.peek ? API.cache.peek('getAdminMenu', {}) : null;
+      if (cached && cached.products) { applyMenu(cached); return refreshMenu(true); }
+      if (status) status.textContent = '载入酒单…';
+    }
 
     API.staff.getAdminMenu().then(function (res) {
       if (!res.success) {
@@ -226,23 +234,9 @@ var ADMIN_POS = (function () {
         if (!ADMIN.handleError(res.error) && verbose) UI.toast(res.error.message, 'error');
         return;
       }
-      var allProducts = res.data.products || [];
-      state.menu = {
-        categories: (res.data.categories || []).filter(function (c) {
-          return String(c.status || 'ACTIVE').toUpperCase() === 'ACTIVE';
-        }),
-        products: allProducts.filter(function (p) {
-          return String(p.status || 'ACTIVE').toUpperCase() === 'ACTIVE';
-        }),
-        /* ★ 规格也要留着：点商品才知道要不要先选 Size / ICE */
-        optionsByProduct: res.data.optionsByProduct || {},
-        /* 已下架的商品数（商品格看不到，菜单管理可以重新上架） */
-        hiddenCount: allProducts.filter(function (p) {
-          return String(p.status || 'ACTIVE').toUpperCase() !== 'ACTIVE';
-        }).length
-      };
-      renderCats();
-      renderGrid();
+      applyMenu(res.data);
+      state.menuLoaded = true;
+      refreshMenu(false);
     });
   }
 
@@ -290,6 +284,36 @@ var ADMIN_POS = (function () {
   function optionGroupsOf(productId) {
     var all = (state.menu && state.menu.optionsByProduct && state.menu.optionsByProduct[productId]) || [];
     return UI.optionGroups(all);
+  }
+
+  /** getAdminMenu 的资料 → state.menu（快取与后端同一份形状） */
+  function applyMenu(data) {
+    var allProducts = (data && data.products) || [];
+    state.menu = {
+      categories: ((data && data.categories) || []).filter(function (c) {
+        return String(c.status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+      }),
+      products: allProducts.filter(function (p) {
+        return String(p.status || 'ACTIVE').toUpperCase() === 'ACTIVE';
+      }),
+      /* ★ 规格也要留着：点商品才知道要不要先选 Size / ICE */
+      optionsByProduct: (data && data.optionsByProduct) || {},
+      /* 已下架的商品数（商品格看不到，菜单管理可以重新上架） */
+      hiddenCount: allProducts.filter(function (p) {
+        return String(p.status || 'ACTIVE').toUpperCase() !== 'ACTIVE';
+      }).length
+    };
+  }
+
+  /** 画分类列 + 商品格（快取先画一次，后端回来再画一次） */
+  function refreshMenu(silent) {
+    renderCats();
+    renderGrid();
+    if (silent) {
+      /* 后端还在路上：状态列先写「先显示上次的酒单」，回来会盖掉 */
+      var status = document.getElementById('kioskStatus');
+      if (status) status.textContent = '显示上次的酒单 · 正在更新…';
+    }
   }
 
   function renderGrid() {
@@ -827,6 +851,16 @@ var ADMIN_POS = (function () {
 
   function loadQueue(verbose) {
     if (!API.staff.getPosQueue) { UI.toast('API 未更新 / API out of date', 'error'); return; }
+    /* 2.1.17：第一次打开先用预载好的队列画一次（后端回来会盖掉） */
+    if (!state.tickets.length && !state.queuePainted) {
+      var cachedQ = API.cache && API.cache.peek ? API.cache.peek('getPosQueue', {}) : null;
+      if (cachedQ && cachedQ.pending) {
+        state.queuePainted = true;
+        state.tickets = cachedQ.pending;
+        state.knownTickets = cachedQ.pending.map(function (t) { return t.orderId; });
+        renderQueue(false);
+      }
+    }
     return API.staff.getPosQueue().then(function (res) {
       if (!res.success) {
         state.errorCode = res.error.code;

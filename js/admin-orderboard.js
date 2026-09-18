@@ -109,8 +109,33 @@ var ADMIN_ORDERBOARD = (function () {
      载入
      --------------------------------------------------------- */
 
+  /**
+   * 2.1.17：第一次打开先用预载好的快照画一次（0 毫秒）。
+   * 为什么现在可以：2.1.11 起「旧资料不许把卡片搬回去」的防护是
+   *   mutationAt（按下去之前发出的读取一律丢掉）+ expect（我们刚放的
+   *   位置有 25 秒保护）—— 那些保护都在「员工操作」之后才生效，
+   *   而这里是页面刚打开、还没人按，画一次旧快照是安全的；
+   *   后端回应一到就会盖掉（getActiveOrders 本身不吃快取）。
+   */
+  function paintFromCache() {
+    if (state.loading === false) return false;
+    var snap = null;
+    try {
+      snap = API.cache && API.cache.peek ? API.cache.peek('getActiveOrders', {}, 24 * 60 * 60 * 1000) : null;
+    } catch (e) { snap = null; }
+    if (!snap || !snap.lanes) return false;
+    state.lanes = snap.lanes;
+    state.today = snap.today;
+    state.ordering = snap.ordering;
+    state.loading = false;
+    state.knownIds = allIds();          // 开机就存在的单不算「新订单」，不要吵
+    render();                           // render() 里面也会带上今天的数字
+    return true;
+  }
+
   function load(first) {
     var startedAt = Date.now();
+    if (first) paintFromCache();
     return API.staff.getActiveOrders().then(function (res) {
       /* 这个请求是在员工按下去之前发出的 → 它带回来的是旧状态，
          直接丢掉，不要用它把卡片搬回原本那一栏。 */
